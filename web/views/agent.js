@@ -31,7 +31,7 @@ export async function renderAgent() {
       <div>
         <div class="eyebrow">DSH · AGENT API · SKILLS</div>
         <h1 style="font-size:42px;letter-spacing:-.03em;margin:8px 0 8px">让智能体维护知识，而不是消费片段。</h1>
-        <p class="muted" style="max-width:680px">DSH 通过 API Key 接入：先检索已有知识，再决定更新或新建页面；写入后索引与图谱即时生效。引擎不依赖 LLM，技能负责工作流，模型只在需要时做合成。</p>
+        <p class="muted" style="max-width:680px">后台默认用本机 DSH headless 做语义编译、检索重排与知识合成；DSH 不可用时自动回退到规则编译器与本地检索。外部智能体通过 API Key 维护知识。</p>
         <div class="btn-row" style="margin-top:18px">
           <button class="btn btn-primary" id="agent-new-key">${icon('key', 15)} 创建 API 密钥</button>
           <a class="btn" href="/api/agent/skill" target="_blank">${icon('file', 15)} 下载 SKILL.md</a>
@@ -70,7 +70,7 @@ export async function renderAgent() {
     <div class="panel" style="margin-top:20px">
       <div class="panel-head"><h3>设计边界</h3></div>
       <div class="panel-body grid grid-3">
-        <div><h4 style="margin-bottom:6px">引擎不做推断</h4><p class="small muted">解析、索引、图、权限由确定性代码完成；LLM 只作为可选的编译增强或答案合成。</p></div>
+        <div><h4 style="margin-bottom:6px">本机 DSH 语义层</h4><p class="small muted">解析、索引、图、权限由确定性代码完成；语义编译/重排/合成调用本机 DSH，失败时回退。</p></div>
         <div><h4 style="margin-bottom:6px">知识先于检索</h4><p class="small muted">页面是事实源，FTS 与图是派生索引；检索不做查询期向量切块。</p></div>
         <div><h4 style="margin-bottom:6px">权限先于结果</h4><p class="small muted">所有查询先做库级权限过滤，再进入检索；私有库对无权限成员返回 404。</p></div>
       </div>

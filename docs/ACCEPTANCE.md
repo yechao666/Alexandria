@@ -19,7 +19,7 @@
 | 账户体系 | 本地密码、Cookie 会话、API Key、管理员、WeCom 身份映射 | `schema.sql`、`routes/auth.ts`、`tests/wecom.test.ts` |
 | 企业微信打通 | OAuth 登录、通讯录同步、离职停用、加密 XML 回调、JSON 机器人问答、应用消息通知 | `routes/wecom.ts`、`domain/wecom.ts`、`tests/wecom*.test.ts` |
 | 核心上传/处理/索引/检索 | 上传 → 解析/OCR → 编译 → FTS5/图谱索引 → 检索/知识合成 | `tests/formats.test.ts`、`tests/knowledge.test.ts`、`tests/api.test.ts` |
-| 不使用 RAG | 默认 FTS5 BM25 + 类型化图扩展 + 元数据/时效重排；无查询期向量切块；LLM 仅可选合成 | `knowledge/search.ts`、`docs/DESIGN.md` §7 |
+| 不使用 RAG | 本地候选（FTS5 BM25 + 类型化图扩展）+ 本机 DSH 语义重排/合成；无查询期向量切块 | `knowledge/search.ts`、`dsh-query.ts`、`docs/DESIGN.md` §7 |
 | DSH 智能体 | Agent API（search/ask/read/graph/compile/ingest/page/lint/export）+ SKILL.md | `routes/agent.ts`、`skills/alexandria/SKILL.md`、`tests/api.test.ts` |
 
 ## 2. 自动化验证
