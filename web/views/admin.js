@@ -21,16 +21,18 @@ const TABS = [
   { key: 'people', label: '成员目录' },
   { key: 'wecom', label: '企业微信' },
   { key: 'keys', label: 'API 密钥' },
+  { key: 'security', label: '安全审计' },
 ];
 
 export async function renderAdmin(tab = 'teams') {
   const isAdmin = Boolean(state.me?.person?.isAdmin);
-  const [teamsData, peopleData, wecom, keysData, syncRunsData] = await Promise.all([
+  const [teamsData, peopleData, wecom, keysData, syncRunsData, securityData] = await Promise.all([
     api('/api/teams'),
     api('/api/people'),
     api('/api/integrations/wecom').catch(() => null),
     api('/api/api-keys').catch(() => ({ keys: [] })),
     api('/api/integrations/wecom/sync-runs').catch(() => ({ runs: [] })),
+    api('/api/admin/security?limit=80').catch(() => ({ events: [], counts: [] })),
   ]);
   const teams = teamsData.teams ?? [];
   const people = peopleData.people ?? [];
@@ -51,6 +53,11 @@ export async function renderAdmin(tab = 'teams') {
     .slice(0, 5)
     .map((run) => `<tr><td>${timeAgo(run.created_at)}</td><td>${run.dry_run ? '预览' : '执行'}</td><td>${run.departments} / ${run.users}</td><td>${run.applied_departments} / ${run.applied_users} / ${run.deactivated}</td></tr>`)
     .join('');
+  const securityEvents = securityData.events ?? [];
+  const securityRows = securityEvents.map((event) => {
+    const tone = event.severity === 'critical' ? 'clay' : event.severity === 'warning' ? 'ochre' : 'outline';
+    return `<tr><td class="mono" style="font-size:10px">${esc(new Date(event.created_at).toLocaleString('zh-CN'))}</td><td><span class="badge ${tone}">${esc(event.severity)}</span></td><td><code>${esc(event.kind)}</code></td><td>${esc(event.actor_name ?? '—')}</td><td>${esc(event.subject ?? '—')}</td><td class="mono" style="font-size:10px">${esc(event.ip ?? '—')}</td></tr>`;
+  }).join('');
   const wecomBody = wecom
     ? `<div class="grid grid-2">
         <div class="panel wecom-card">
@@ -98,6 +105,7 @@ export async function renderAdmin(tab = 'teams') {
     people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>企微 ID</th><th>角色</th><th></th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
     wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
+    security: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">安全审计</h2><div class="sub muted">登录、API Key、授权/访问策略变更与限流事件；仅组织管理员可见。</div></div><span class="badge ${securityData?.counts?.some((item) => item.severity === 'critical') ? 'clay' : 'jade'}">最近 7 天</span></div><div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>时间</th><th>级别</th><th>事件</th><th>操作者</th><th>对象</th><th>IP</th></tr></thead><tbody>${securityRows || '<tr><td colspan="6" class="muted" style="padding:18px">暂无安全事件</td></tr>'}</tbody></table></div></div>`,
     keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>名称</th><th>前缀</th><th>范围</th><th>最近使用</th><th></th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" class="muted" style="padding:18px">还没有 API 密钥</td></tr>'}</tbody></table></div></div>
       <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>智能体接入</h3><a class="link small" href="#/agent">查看接入指南 ${icon('arrow', 13)}</a></div><div class="panel-body"><div class="endpoint"><span class="method">POST</span><code>/api/agent/search</code><span class="desc">检索知识页与文献</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/ask</code><span class="desc">带引用的知识合成</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/page</code><span class="desc">创建或更新知识页</span></div></div></div>`,

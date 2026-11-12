@@ -315,6 +315,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/search/facets` | 库/类型/标签分面（权限过滤） |
 | GET | `/api/search/suggest` | 标题自动补全 |
 | GET | `/api/search/history` | 当前成员检索历史 |
+| GET | `/api/admin/security` | 安全事件（管理员） |
 | GET/POST/DELETE | `/api/search/saved` | 保存检索 |
 | GET | `/api/pages/:id/access` | 页面访问策略 |
 | GET | `/api/libraries/:id/merge-suggestions` | 重复页合并建议 |

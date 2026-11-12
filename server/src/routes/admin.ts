@@ -5,6 +5,7 @@ import { hashPassword } from '../lib/password.ts';
 import { newId, nowIso, slugify } from '../lib/ids.ts';
 import { teamTree } from './helpers.ts';
 import { audit } from '../domain/audit.ts';
+import { securityEvent, requestIp } from '../domain/security.ts';
 import type { Person } from '../types.ts';
 import { getWecomConfig, wecomConfigured, wecomAccessToken, wecomDepartments, wecomUsers } from '../domain/wecom.ts';
 
@@ -218,6 +219,7 @@ export function registerAdminRoutes(router: Router): void {
     const scope = body.scope === 'write' || body.scope === 'admin' ? body.scope : 'read';
     const result = createApiKey(rc.app.db, actor.person.id, name, scope);
     audit(rc.app.db, { actor, action: 'api_key.create', targetType: 'api_key', targetId: result.id, detail: { name, scope } });
+    securityEvent(rc.app.db, { kind: 'api_key.create', actorId: actor.person.id, subject: name, ip: requestIp(rc), detail: { scope } });
     rc.json({ id: result.id, token: result.token, name, scope, warning: '密钥只展示一次，请立即保存' }, 201);
   });
 
@@ -227,6 +229,7 @@ export function registerAdminRoutes(router: Router): void {
       .prepare('UPDATE api_keys SET revoked_at = ? WHERE id = ? AND person_id = ?')
       .run(nowIso(), rc.params.id!, actor.person.id);
     if (Number(result.changes) === 0) throw errors.notFound('密钥不存在');
+    securityEvent(rc.app.db, { kind: 'api_key.revoke', severity: 'warning', actorId: actor.person.id, subject: rc.params.id!, ip: requestIp(rc) });
     rc.json({ ok: true });
   });
 
@@ -475,5 +478,18 @@ export function registerAdminRoutes(router: Router): void {
       .all() as unknown as Record<string, unknown>[];
     rc.json({ runs: rows.map((row) => ({ ...row, detail: JSON.parse(String(row.detail ?? '{}')) })) });
   });
+
+  router.get('/api/admin/security', (rc) => {
+    requireAdmin(rc);
+    const limit = Math.max(1, Math.min(200, rc.queryInt('limit', 80)));
+    const rows = rc.app.db
+      .prepare('SELECT s.*, p.name AS actor_name FROM security_events s LEFT JOIN persons p ON p.id = s.actor_id ORDER BY s.created_at DESC LIMIT ?')
+      .all(limit) as unknown as Record<string, unknown>[];
+    const counts = rc.app.db
+      .prepare("SELECT severity, COUNT(*) AS c FROM security_events WHERE created_at > ? GROUP BY severity")
+      .all(new Date(Date.now() - 7 * 86_400_000).toISOString()) as unknown as { severity: string; c: number }[];
+    rc.json({ events: rows.map((row) => ({ ...row, detail: JSON.parse(String(row.detail ?? '{}')) })), counts });
+  });
+
 
 }

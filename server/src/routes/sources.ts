@@ -5,6 +5,8 @@ import type { RequestContext } from '../http/context.ts';
 import { requireActor } from '../http/auth.ts';
 import { requireLibrary, visibleLibraries, effectivePageRole, effectiveSourceRole, resourceGrants } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
+import { securityEvent, requestIp, grantRecipients } from '../domain/security.ts';
+import { notifyPerson } from '../domain/notifications.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { extOf } from '../extract/index.ts';
@@ -331,12 +333,30 @@ export function registerSourceRoutes(router: Router): void {
         : rc.app.db.prepare('SELECT 1 FROM teams WHERE id = ?').get(subjectId);
       if (exists) valid.push({ subjectType, subjectId, role: grantRole });
     }
+    const before = resourceGrants(rc.app.db, 'source', source.id);
     rc.app.db.prepare('UPDATE sources SET visibility = ?, updated_at = ? WHERE id = ?').run(visibility, nowIso(), source.id);
     rc.app.db.prepare("DELETE FROM resource_grants WHERE resource_type = 'source' AND resource_id = ?").run(source.id);
     const insert = rc.app.db.prepare(
       'INSERT INTO resource_grants (id, resource_type, resource_id, subject_type, subject_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     for (const grant of valid) insert.run(newId('rgrant'), 'source', source.id, grant.subjectType, grant.subjectId, grant.role, actor.person.id, nowIso());
+    const beforeKeys = new Set(before.map((grant) => `${grant.subjectType}:${grant.subjectId}:${grant.role}`));
+    for (const grant of valid) {
+      if (beforeKeys.has(`${grant.subjectType}:${grant.subjectId}:${grant.role}`)) continue;
+      for (const personId of grantRecipients(rc.app.db, grant.subjectType, grant.subjectId)) {
+        if (personId === actor.person.id) continue;
+        await notifyPerson(rc.app.db, rc.app.env, {
+          personId,
+          actorId: actor.person.id,
+          kind: 'permission',
+          title: `你获得了文献「${source.title}」的访问权限`,
+          body: `角色：${grant.role}`,
+          link: `/#/library/${encodeURIComponent(library.id)}`,
+          libraryId: library.id,
+        });
+      }
+    }
+    securityEvent(rc.app.db, { kind: 'source.access.update', severity: 'warning', actorId: actor.person.id, subject: source.id, ip: requestIp(rc), detail: { visibility, grants: valid.length } });
     audit(rc.app.db, { actor, action: 'source.access.update', targetType: 'source', targetId: source.id, libraryId: library.id, detail: { visibility, grants: valid.length } });
     rc.json({ ok: true, visibility, grants: resourceGrants(rc.app.db, 'source', source.id) });
   });

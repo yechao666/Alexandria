@@ -2,6 +2,7 @@ import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { authenticate, login, logout, sessionCookie } from '../http/auth.ts';
 import { rateLimit, resetRateLimit, rateLimitKey } from '../domain/rate-limit.ts';
+import { securityEvent, requestIp } from '../domain/security.ts';
 import { requireActor } from '../http/auth.ts';
 import { errors } from '../http/respond.ts';
 import { visibleLibraries } from '../domain/access.ts';
@@ -40,6 +41,7 @@ export function registerAuthRoutes(router: Router): void {
     const limitKey = rateLimitKey(rc, 'login', body.email);
     const limited = rateLimit(limitKey, 8, 15 * 60_000);
     if (!limited.ok) {
+      securityEvent(rc.app.db, { kind: 'login.rate_limited', severity: 'warning', subject: body.email, ip: requestIp(rc) });
       rc.res.setHeader('retry-after', String(limited.retryAfter));
       throw errors.tooManyRequests(`登录尝试过多，请 ${Math.ceil(limited.retryAfter / 60)} 分钟后再试`);
     }
@@ -47,7 +49,9 @@ export function registerAuthRoutes(router: Router): void {
     try {
       result = login(rc, body.email, body.password);
       resetRateLimit(limitKey);
+      securityEvent(rc.app.db, { kind: 'login.success', actorId: result.actor.person.id, subject: body.email, ip: requestIp(rc) });
     } catch (error) {
+      securityEvent(rc.app.db, { kind: 'login.failed', severity: 'warning', subject: body.email, ip: requestIp(rc), detail: { status: (error as { status?: number }).status ?? 500 } });
       throw error;
     }
     rc.json(

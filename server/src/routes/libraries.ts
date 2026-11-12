@@ -3,6 +3,8 @@ import type { RequestContext } from '../http/context.ts';
 import { requireActor, requireAdmin } from '../http/auth.ts';
 import { requireLibrary, visibleLibraries, effectiveRole, effectivePageRole, effectiveSourceRole, parseActorFromPerson } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
+import { securityEvent, requestIp, grantRecipients } from '../domain/security.ts';
+import { notifyPerson } from '../domain/notifications.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson, slugify } from '../lib/ids.ts';
 import { ensureDefaultOntology } from '../knowledge/ontology.ts';
@@ -489,6 +491,19 @@ export function registerLibraryRoutes(router: Router): void {
          ON CONFLICT(library_id, subject_type, subject_id) DO UPDATE SET role = excluded.role`,
       )
       .run(newId('grant'), library.id, subjectType, subjectId, role, actor.person.id, nowIso());
+    securityEvent(rc.app.db, { kind: 'library.grant', severity: 'warning', actorId: actor.person.id, subject: `${subjectType}:${subjectId}`, ip: requestIp(rc), detail: { libraryId: library.id, role } });
+    for (const personId of grantRecipients(rc.app.db, subjectType, subjectId)) {
+      if (personId === actor.person.id) continue;
+      await notifyPerson(rc.app.db, rc.app.env, {
+        personId,
+        actorId: actor.person.id,
+        kind: 'permission',
+        title: `你获得了「${library.name}」的访问权限`,
+        body: `角色：${role}`,
+        link: `/#/library/${encodeURIComponent(library.id)}`,
+        libraryId: library.id,
+      });
+    }
     audit(rc.app.db, {
       actor,
       action: 'library.grant',
@@ -511,6 +526,7 @@ export function registerLibraryRoutes(router: Router): void {
       throw errors.badRequest('不能移除自己的所有者授权');
     }
     rc.app.db.prepare('DELETE FROM library_grants WHERE id = ?').run(grant.id);
+    securityEvent(rc.app.db, { kind: 'library.revoke', severity: 'warning', actorId: actor.person.id, subject: `${grant.subject_type}:${grant.subject_id}`, ip: requestIp(rc), detail: { libraryId: grant.library_id } });
     audit(rc.app.db, { actor, action: 'library.revoke', targetType: 'library', targetId: grant.library_id, libraryId: grant.library_id, detail: { grantId: grant.id } });
     rc.json({ ok: true });
   });

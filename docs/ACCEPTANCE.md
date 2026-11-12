@@ -16,6 +16,7 @@
 | 分库 / 分类组织 | 知识库 → 目录树（书架/分类/主题）→ 知识页/文献；分类号与计数 | `schema.sql`、`routes/libraries.ts`、`web/views/library.js` |
 | 团队与组织架构绑定 | 团队树、成员、团队负责人、库 owner team、个人/团队/组织授权 | `domain/access.ts`、`tests/permissions.test.ts` |
 | 严格权限 | 组织层级（上级读下级/下级不可反查）+ 库/页面/文献 ACL + 定向共享；私有库与受限资源 404 | `domain/access.ts`、`tests/permissions.test.ts`、`tests/enterprise.test.ts` |
+| 安全审计 | 登录/限流/API Key/授权/ACL 事件；权限变更通知 | `domain/security.ts`、`tests/enterprise.test.ts` |
 | 任务可观察 | `job_events` 记录解析/OCR/索引/DSH 编译步骤、耗时；任务中心、重试、取消 | `ingest/pipeline.ts`、`routes/sources.ts`、`tests/enterprise.test.ts` |
 | 实体/事实/图谱 | DSH 抽取概念、实体、事实、上下位关系；重复页合并、手动层级、层级图谱 | `dsh-engine.ts`、`pages.ts`、`tests/enterprise.test.ts` |
 | 账户体系 | 本地密码、Cookie 会话、API Key、管理员、WeCom 身份映射 | `schema.sql`、`routes/auth.ts`、`tests/wecom.test.ts` |
@@ -34,7 +35,7 @@ DSH_PYTHON=/Users/yechao/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pyth
 
 最近结果：
 
-- **76 / 76 测试通过**；
+- **77 / 77 测试通过**；
 - 覆盖：15 类文档格式端到端入库、PDF/扫描 PDF OCR、组织层级/页面 ACL、任务步骤事件、检索分面、本机 DSH 编译/实体/事实/重排/合成、规则回退、矛盾裁决、审核、评论/通知、本体属性、Agent 入库/导出、WeCom OAuth/同步/加密回调/机器人问答；
 - 演示库 lint：**0 孤儿页、0 断链、3 个待校对草稿**；
 - 演示数据：37 个知识页（含 DSH 抽取实体）、5 份文献、5 个处理任务、11 个本体属性、4 个知识库、7 个成员。

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -61,6 +61,12 @@ export function migrate(db: Db): void {
     took_ms INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_search_queries_person ON search_queries(person_id, created_at)');
+  db.exec(`CREATE TABLE IF NOT EXISTS security_events (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, severity TEXT NOT NULL DEFAULT 'info',
+    actor_id TEXT REFERENCES persons(id) ON DELETE SET NULL, subject TEXT NOT NULL DEFAULT '',
+    ip TEXT, detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at)');
 
   db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION));
 }

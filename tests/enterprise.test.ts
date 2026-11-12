@@ -192,3 +192,23 @@ test('检索历史、保存检索与自动补全可用', async () => {
   assert.ok(suggest.suggestions.length > 0);
   await j(`/api/search/saved/${created.saved.id}`, admin.token, { method: 'DELETE' });
 });
+
+test('安全审计与权限变更通知可用', async () => {
+  const security = await j<{ events: { kind: string }[] }>('/api/admin/security?limit=20', admin.token);
+  assert.ok(security.events.some((event) => event.kind === 'login.success' || event.kind === 'library.grant'));
+  const denied = await fetch(`${base}/api/admin/security`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+  const pageRef = encodeURIComponent('concepts/knowledge-compilation');
+  await j(`/api/pages/${pageRef}/access`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'restricted', grants: [{ subjectType: 'person', subjectId: 'usr_guest', role: 'viewer' }] }),
+  });
+  const notes = await j<{ notifications: { kind: string; title: string }[] }>('/api/notifications', guest.token);
+  assert.ok(notes.notifications.some((note) => note.kind === 'permission' && note.title.includes('知识编译')));
+  await j(`/api/pages/${pageRef}/access`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'inherit', grants: [] }),
+  });
+});

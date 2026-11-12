@@ -405,6 +405,18 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_library ON audit_events(library_id, created_at);
 
+CREATE TABLE IF NOT EXISTS security_events (
+  id         TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  severity   TEXT NOT NULL DEFAULT 'info',
+  actor_id   TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  subject    TEXT NOT NULL DEFAULT '',
+  ip         TEXT,
+  detail     TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at);
+
 CREATE TABLE IF NOT EXISTS wecom_auth_states (
   state      TEXT PRIMARY KEY,
   return_to  TEXT NOT NULL DEFAULT '/',
