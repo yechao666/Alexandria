@@ -285,6 +285,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | POST | `/api/agent/ask` | `{query, libraryIds?, mode?}` |
 | POST | `/api/agent/read` | `{pageId | slug, library?}` |
 | POST | `/api/agent/graph` | `{libraryId, classKey?, limit?}` |
+| POST | `/api/agent/ingest` | `{libraryId, filename, text | base64, title?, nodeId?}` |
 | POST | `/api/agent/compile` | `{sourceId}` |
 | POST | `/api/agent/page` | 创建或更新页面 |
 | POST | `/api/agent/lint` | 结构体检 |

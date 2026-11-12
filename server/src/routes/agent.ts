@@ -10,6 +10,7 @@ import { createPage, getPage, pageContext, pageToView, updatePage, attachSource 
 import { searchKnowledge, answerKnowledge, graphForLibrary } from '../knowledge/search.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { pageListDto, parseList } from './helpers.ts';
+import { ingestBuffer } from '../ingest/pipeline.ts';
 import type { PageRow } from '../types.ts';
 
 const MANIFEST = {
@@ -30,6 +31,7 @@ const MANIFEST = {
     { name: 'read', method: 'POST', path: '/api/agent/read', description: '读取页面、主张、来源与关联' },
     { name: 'graph', method: 'POST', path: '/api/agent/graph', description: '读取知识图谱邻域' },
     { name: 'compile', method: 'POST', path: '/api/agent/compile', description: '重新编译一份文献' },
+    { name: 'ingest', method: 'POST', path: '/api/agent/ingest', description: '以文本或 base64 资料入库并编译' },
     { name: 'upsert_page', method: 'POST', path: '/api/agent/page', description: '创建或更新知识页' },
     { name: 'lint', method: 'POST', path: '/api/agent/lint', description: '结构体检：孤儿页、断链、失败文献' },
   ],
@@ -110,6 +112,9 @@ export function registerAgentRoutes(router: Router): void {
     if (!page) throw errors.notFound('知识页不存在');
     const { library, role } = requireLibrary(rc.app.db, actor, page.library_id);
     const view = pageToView(rc.app.db, page);
+    const properties = rc.app.db
+      .prepare('SELECT key, value FROM page_properties WHERE page_id = ?')
+      .all(page.id) as unknown as { key: string; value: string }[];
     const claims = rc.app.db.prepare('SELECT * FROM claims WHERE page_id = ? ORDER BY confidence DESC').all(page.id);
     const sources = rc.app.db
       .prepare(
@@ -134,6 +139,7 @@ export function registerAgentRoutes(router: Router): void {
         ...pageListDto(rc.app.db, page),
         body: view.body,
         metadata: view.metadataObj,
+        properties: properties.map((property) => ({ key: property.key, value: (() => { try { return JSON.parse(property.value); } catch { return property.value; } })() })),
       },
       context: body.includeContext === false ? undefined : pageContext(rc.app.db, page),
       claims,
@@ -152,6 +158,52 @@ export function registerAgentRoutes(router: Router): void {
     if (!ref) throw errors.badRequest('需要 libraryId');
     const { library } = requireLibrary(rc.app.db, actor, ref);
     rc.json(graphForLibrary(rc.app.db, actor, library.id, { classKey: body.classKey, limit: body.limit ?? 300 }));
+  });
+
+  router.post('/api/agent/ingest', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{
+      libraryId?: string;
+      library?: string;
+      filename?: string;
+      title?: string;
+      text?: string;
+      base64?: string;
+      nodeId?: string;
+    }>();
+    const ref = body.libraryId ?? body.library;
+    if (!ref) throw errors.badRequest('需要 libraryId');
+    const { library } = requireLibrary(rc.app.db, actor, ref, 'editor');
+    let buffer: Buffer;
+    if (body.base64) {
+      try {
+        buffer = Buffer.from(body.base64, 'base64');
+      } catch {
+        throw errors.badRequest('base64 内容不合法');
+      }
+    } else if (typeof body.text === 'string') {
+      buffer = Buffer.from(body.text, 'utf8');
+    } else {
+      throw errors.badRequest('需要 text 或 base64 内容');
+    }
+    if (!buffer.length) throw errors.badRequest('入库内容为空');
+    const filename = String(body.filename ?? 'agent-note.md').slice(0, 180);
+    const result = ingestBuffer(rc.app.db, rc.app.env, library.id, {
+      buffer,
+      filename,
+      title: body.title ? String(body.title) : undefined,
+      nodeId: body.nodeId ?? null,
+      actor,
+    });
+    rc.json(
+      {
+        source: { id: result.source.id, title: result.source.title, status: result.source.status },
+        jobId: result.jobId,
+        duplicate: result.duplicate,
+        note: '编译异步执行；轮询 /api/jobs/:id，完成后用 /api/agent/search 验证',
+      },
+      result.duplicate ? 200 : 202,
+    );
   });
 
   router.post('/api/agent/compile', async (rc) => {
@@ -184,6 +236,7 @@ export function registerAgentRoutes(router: Router): void {
       tags?: string[];
       aliases?: string[];
       readWhen?: string[];
+      properties?: Record<string, unknown>;
       sourceId?: string;
       note?: string;
     }>();
@@ -219,6 +272,7 @@ export function registerAgentRoutes(router: Router): void {
           tags: body.tags,
           aliases: body.aliases,
           readWhen: body.readWhen,
+          properties: body.properties,
           note: body.note ?? 'DSH 智能体更新',
         },
         actor,
@@ -240,6 +294,7 @@ export function registerAgentRoutes(router: Router): void {
           aliases: parseList(body.aliases),
           readWhen: parseList(body.readWhen),
           metadata: { createdByAgent: true },
+          properties: body.properties,
         },
         actor,
       );

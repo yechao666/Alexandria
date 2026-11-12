@@ -56,7 +56,9 @@ Alexandria 是一个 **LLM Wiki 式**企业知识库：知识在入库时被编�
 Alexandria 的上传与编译由服务端流水线完成，你通常只需要：
 
 1. 确认目标知识库与目录：`GET /api/agent/overview`，必要时 `GET /api/libraries/:id`。
-2. 请人工在 Web 上传文件（或由具备上传通道的系统调用 `POST /api/libraries/:id/sources`）。
+2. 入库资料：
+   - 智能体可直接调用 `POST /api/agent/ingest`（`text` 或 `base64`，指定 libraryId/filename）；
+   - 也可以请人工在 Web 上传，或调用 `POST /api/libraries/:id/sources` 原始二进制接口。
 3. 轮询 `GET /api/jobs/:id`，直到 `succeeded` / `failed`。
 4. 检查编译结果：
    - `GET /api/libraries/:id/pages?limit=50` 找新页面；
@@ -146,6 +148,7 @@ curl -s $ALEXANDRIA_URL/api/agent/page \
 | 直接问答 | `POST /api/agent/ask` |
 | 读页面与上下文 | `POST /api/agent/read` |
 | 写页面 | `POST /api/agent/page` |
+| 资料入库 | `POST /api/agent/ingest` |
 | 重新编译 | `POST /api/agent/compile` |
 | 图谱邻域 | `POST /api/agent/graph` |
 | 体检 | `POST /api/agent/lint` |
