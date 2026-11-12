@@ -125,6 +125,22 @@ CREATE TABLE IF NOT EXISTS ontology_classes (
   UNIQUE(library_id, key)
 );
 
+CREATE TABLE IF NOT EXISTS ontology_properties (
+  id          TEXT PRIMARY KEY,
+  library_id  TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  class_key   TEXT,
+  key         TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'string',
+  description TEXT NOT NULL DEFAULT '',
+  required    INTEGER NOT NULL DEFAULT 0,
+  options     TEXT NOT NULL DEFAULT '[]',
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  UNIQUE(library_id, class_key, key)
+);
+CREATE INDEX IF NOT EXISTS idx_ontology_properties_library ON ontology_properties(library_id, class_key);
+
 CREATE TABLE IF NOT EXISTS ontology_relations (
   id           TEXT PRIMARY KEY,
   library_id   TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,

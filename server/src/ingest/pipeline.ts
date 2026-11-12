@@ -225,7 +225,8 @@ export function processJob(db: Db, env: Env, jobId: string): void {
       }
       const assetId = persistAsset({ ...asset, ocrText });
       if (ocrText.trim()) {
-        ocrAppend += `\n\n## 图片文字（${asset.filename}）\n${ocrText}`;
+        const alreadyIntegrated = extractedText.includes(ocrText.trim().slice(0, 80));
+        if (!alreadyIntegrated) ocrAppend += `\n\n## 图片文字（${asset.filename}）\n${ocrText}`;
         void assetId;
       }
     }
