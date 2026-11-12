@@ -537,3 +537,61 @@ export function hierarchyForLibrary(
     roots,
   };
 }
+
+/** 最短关联路径：在权限过滤后的知识页图上做 BFS，返回页面与边。 */
+export function graphPath(
+  db: Db,
+  actor: Actor,
+  fromId: string,
+  toId: string,
+): { pages: { id: string; title: string; slug: string; classKey: string }[]; edges: { from: string; to: string; relation: string }[] } | null {
+  const from = db.prepare('SELECT * FROM pages WHERE id = ?').get(fromId) as unknown as PageRow | undefined;
+  const to = db.prepare('SELECT * FROM pages WHERE id = ?').get(toId) as unknown as PageRow | undefined;
+  if (!from || !to || from.library_id !== to.library_id) return null;
+  if (!effectivePageRole(db, actor, from) || !effectivePageRole(db, actor, to)) return null;
+  const pages = (db.prepare('SELECT * FROM pages WHERE library_id = ?').all(from.library_id) as unknown as PageRow[])
+    .filter((page) => Boolean(effectivePageRole(db, actor, page)));
+  const allowed = new Set(pages.map((page) => page.id));
+  const links = (db.prepare('SELECT * FROM links WHERE library_id = ?').all(from.library_id) as unknown as {
+    from_page_id: string;
+    to_page_id: string;
+    relation: string;
+    weight: number;
+  }[]).filter((link) => allowed.has(link.from_page_id) && allowed.has(link.to_page_id));
+  const adjacency = new Map<string, { to: string; relation: string }[]>();
+  for (const link of links) {
+    adjacency.set(link.from_page_id, [...(adjacency.get(link.from_page_id) ?? []), { to: link.to_page_id, relation: link.relation }]);
+    adjacency.set(link.to_page_id, [...(adjacency.get(link.to_page_id) ?? []), { to: link.from_page_id, relation: link.relation }]);
+  }
+  const queue: string[] = [from.id];
+  const previous = new Map<string, { from: string; relation: string } | null>([[from.id, null]]);
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current === to.id) break;
+    for (const edge of adjacency.get(current) ?? []) {
+      if (previous.has(edge.to)) continue;
+      previous.set(edge.to, { from: current, relation: edge.relation });
+      queue.push(edge.to);
+    }
+  }
+  if (!previous.has(to.id)) return null;
+  const pathIds: string[] = [];
+  const pathEdges: { from: string; to: string; relation: string }[] = [];
+  let cursor: string | null = to.id;
+  while (cursor) {
+    pathIds.push(cursor);
+    const prev = previous.get(cursor);
+    if (!prev) break;
+    pathEdges.push({ from: prev.from, to: cursor, relation: prev.relation });
+    cursor = prev.from;
+  }
+  pathIds.reverse();
+  pathEdges.reverse();
+  return {
+    pages: pathIds.map((id) => {
+      const page = pages.find((item) => item.id === id)!;
+      return { id: page.id, title: page.title, slug: page.slug, classKey: page.class_key };
+    }),
+    edges: pathEdges,
+  };
+}

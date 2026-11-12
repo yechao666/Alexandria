@@ -3,7 +3,7 @@ import { requireActor } from '../http/auth.ts';
 import { effectivePageRole } from '../domain/access.ts';
 import { requireLibrary, visibleLibraries } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
-import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes, hierarchyForLibrary } from '../knowledge/search.ts';
+import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes, hierarchyForLibrary, graphPath } from '../knowledge/search.ts';
 import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { getPage, pageToView } from '../knowledge/pages.ts';
@@ -168,6 +168,16 @@ export function registerSearchRoutes(router: Router): void {
       limit: rc.queryInt('limit', 400),
     });
     rc.json({ ...graph, libraryId: library.id });
+  });
+
+  router.get('/api/graph/path', (rc) => {
+    const actor = requireActor(rc);
+    const from = rc.query('from');
+    const to = rc.query('to');
+    if (!from || !to) throw errors.badRequest('需要 from 与 to');
+    const path = graphPath(rc.app.db, actor, from, to);
+    if (!path) throw errors.notFound('两点之间没有可见路径');
+    rc.json(path);
   });
 
   router.get('/api/libraries/:id/hierarchy', (rc) => {

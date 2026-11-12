@@ -257,3 +257,11 @@ test('数据体检接口返回结构与完整性信息', async () => {
   const denied = await fetch(`${base}/api/admin/integrity`, { headers: { authorization: `Bearer ${guest.token}` } });
   assert.equal(denied.status, 403);
 });
+
+test('图谱路径查询返回最短关联路径', async () => {
+  const from = ctx.db.prepare("SELECT id FROM pages WHERE title = '知识编译' AND class_key = 'concept' LIMIT 1").get() as unknown as { id: string };
+  const to = ctx.db.prepare("SELECT id FROM pages WHERE title = '本体论' LIMIT 1").get() as unknown as { id: string };
+  const path = await j<{ pages: { id: string }[]; edges: unknown[] }>(`/api/graph/path?from=${encodeURIComponent(from.id)}&to=${encodeURIComponent(to.id)}`, admin.token);
+  assert.ok(path.pages.length >= 2);
+  assert.equal(path.edges.length, path.pages.length - 1);
+});

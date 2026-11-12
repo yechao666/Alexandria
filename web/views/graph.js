@@ -1,4 +1,4 @@
-import { api, state, icon, escapeHtml as esc, libraryColor, toast, go } from '../assets/core.js';
+import { api, state, icon, escapeHtml as esc, libraryColor, toast, go, openModal } from '../assets/core.js';
 import { mountGraph } from '../assets/graph.js';
 
 export async function renderGraph(libraryRef) {
@@ -16,6 +16,8 @@ export async function renderGraph(libraryRef) {
       </div>
       <div class="btn-row">
         <select class="select" id="graph-library" style="width:auto">${state.libraries.map((item) => `<option value="${esc(item.slug)}" ${library && item.id === library.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select>
+        <select class="select" id="graph-class" style="width:auto"><option value="">全部类型</option>${classes.map((item) => `<option value="${esc(item.key)}">${esc(item.name)}</option>`).join('')}</select>
+        <button class="btn btn-sm" id="graph-path">${icon('graph', 14)} 路径</button>
         <button class="btn btn-sm" id="graph-fit">${icon('refresh', 14)} 重置</button>
       </div>
     </div>
@@ -47,23 +49,54 @@ export function mountGraphView() {
   if (!canvas) return;
   const legend = document.getElementById('graph-legend');
   let handle = null;
+  let current = null;
+  const mountFiltered = () => {
+    if (!current) return;
+    const classKey = document.getElementById('graph-class')?.value ?? '';
+    const nodes = classKey ? current.nodes.filter((node) => node.classKey === classKey) : current.nodes;
+    const ids = new Set(nodes.map((node) => node.id));
+    const edges = current.edges.filter((edge) => (!classKey || (ids.has(edge.source) && ids.has(edge.target))));
+    handle?.destroy?.();
+    handle = mountGraph(canvas, { nodes, edges }, { onSelect: (node) => go(`#/page/${encodeURIComponent(node.id)}`) });
+  };
   const load = async () => {
     const select = document.getElementById('graph-library');
     const library = state.libraries.find((item) => item.slug === select?.value || item.id === select?.value) ?? state.libraries[0];
     const graph = await api(library ? `/api/graph?library=${encodeURIComponent(library.id)}` : '/api/graph');
+    current = graph;
     const classes = [...new Map(graph.nodes.map((node) => [node.classKey, { key: node.classKey, name: node.className, color: node.color }])).values()];
     if (legend) legend.innerHTML = classes.map((item) => `<span class="item"><span class="swatch" style="background:${libraryColor(item.color)}"></span>${esc(item.name)}</span>`).join('') + '<span class="item"><span class="swatch" style="background:var(--ochre)"></span>草稿</span>';
-    handle?.destroy?.();
-    handle = mountGraph(canvas, graph, { onSelect: (node) => go(`#/page/${encodeURIComponent(node.id)}`) });
+    mountFiltered();
   };
   load().catch((error) => toast(error.message, 'error'));
   document.getElementById('graph-library')?.addEventListener('change', () => load().catch((error) => toast(error.message, 'error')));
+  document.getElementById('graph-class')?.addEventListener('change', mountFiltered);
+  document.getElementById('graph-path')?.addEventListener('click', () => {
+    if (!current?.nodes?.length) return;
+    const options = current.nodes.map((node) => `<option value="${esc(node.id)}">${esc(node.title)}</option>`).join('');
+    openModal({
+      title: '知识路径',
+      body: `<p class="small muted">沿着已编译的关联寻找两点之间的最短路径。</p><div class="field" style="margin-top:12px"><label>起点</label><select class="select" id="path-from">${options}</select></div><div class="field" style="margin-top:8px"><label>终点</label><select class="select" id="path-to">${options}</select></div><div id="path-result" style="margin-top:12px"></div>`,
+      footer: `<button class="btn" data-close-modal>关闭</button><button class="btn btn-primary" id="find-path">查找路径</button>`,
+      onMount: (modal) => {
+        modal.querySelector('#find-path')?.addEventListener('click', async () => {
+          const from = modal.querySelector('#path-from')?.value;
+          const to = modal.querySelector('#path-to')?.value;
+          try {
+            const path = await api(`/api/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+            const result = path.pages.map((page, index) => `<div class="rail-item"><span class="dot" style="background:${libraryColor('jade')}"></span><span>${index + 1}. ${esc(page.title)}${path.edges[index - 1] ? ` <span class="faint">—${esc(relationLabel(path.edges[index - 1].relation))}→</span>` : ''}</span></div>`).join('');
+            modal.querySelector('#path-result').innerHTML = result || '<div class="rail-empty">没有路径</div>';
+          } catch (error) { modal.querySelector('#path-result').innerHTML = `<div class="small muted">${esc(error.message)}</div>`; }
+        });
+      },
+    });
+  });
   document.getElementById('graph-fit')?.addEventListener('click', () => handle?.fit?.());
   document.getElementById('graph-refit')?.addEventListener('click', () => handle?.fit?.());
 }
 
 function relationLabel(relation) {
-  return { references: '引用', 'derived-from': '源自', 'depends-on': '依赖', 'related-to': '相关', mentions: '提及', contradicts: '矛盾', supersedes: '取代', 'source-document': '文献入口' }[relation] ?? relation;
+  return { references: '引用', 'derived-from': '源自', 'depends-on': '依赖', 'related-to': '相关', mentions: '提及', contradicts: '矛盾', supersedes: '取代', 'source-document': '文献入口', 'broader-than': '上位', 'parent-of': '父级' }[relation] ?? relation;
 }
 
 function relationCounts(edges) {
