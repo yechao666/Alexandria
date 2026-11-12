@@ -60,7 +60,7 @@ data/
    或应用停机后复制 `data/alexandria.db`；
 2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
 3. 备份文件加密后异地保存，保留 30/90 天；
-4. 定期在隔离环境恢复演练。
+4. 定期在隔离环境恢复演练：`ALEXANDRIA_DATA_DIR=/tmp/restore npm run restore -- <backupDir>`，确认 `PRAGMA integrity_check` 与账号/权限/文件后再切换。
 
 ## 4. 权限上线检查
 

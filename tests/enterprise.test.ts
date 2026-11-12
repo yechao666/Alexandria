@@ -249,3 +249,11 @@ test('运行状态与就绪检查接口可用', async () => {
   const denied = await fetch(`${base}/api/admin/observability`, { headers: { authorization: `Bearer ${guest.token}` } });
   assert.equal(denied.status, 403);
 });
+
+test('数据体检接口返回结构与完整性信息', async () => {
+  const integrity = await j<{ sqlite: string[]; counts: { pages: number }; issues: unknown[] }>('/api/admin/integrity', admin.token);
+  assert.ok(integrity.sqlite.includes('ok'));
+  assert.ok(integrity.counts.pages > 0);
+  const denied = await fetch(`${base}/api/admin/integrity`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+});

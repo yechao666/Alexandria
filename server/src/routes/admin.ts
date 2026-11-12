@@ -545,4 +545,36 @@ export function registerAdminRoutes(router: Router): void {
     });
   });
 
+  router.get('/api/admin/integrity', (rc) => {
+    requireAdmin(rc);
+    const db = rc.app.db;
+    const count = (sql: string, ...params: (string | number)[]) => Number((db.prepare(sql).get(...params) as unknown as { c: number } | undefined)?.c ?? 0);
+    const integrity = db.prepare('PRAGMA integrity_check').all() as unknown as { integrity_check: string }[];
+    const pages = db.prepare('SELECT id, title, slug, library_id FROM pages').all() as unknown as { id: string; title: string; slug: string; library_id: string }[];
+    const links = db.prepare('SELECT from_page_id, to_page_id FROM links').all() as unknown as { from_page_id: string; to_page_id: string }[];
+    const linked = new Set<string>();
+    for (const link of links) { linked.add(link.from_page_id); linked.add(link.to_page_id); }
+    const orphanPages = pages.filter((page) => !linked.has(page.id) && !count('SELECT COUNT(*) AS c FROM page_sources WHERE page_id = ?', page.id));
+    const brokenLinks = links.filter((link) => !pages.some((page) => page.id === link.from_page_id) || !pages.some((page) => page.id === link.to_page_id));
+    const sources = db.prepare('SELECT id, title, storage_path FROM sources').all() as unknown as { id: string; title: string; storage_path: string }[];
+    const missingFiles = sources.filter((source) => !existsSync(source.storage_path));
+    const pageFts = count('SELECT COUNT(*) AS c FROM page_fts');
+    const sourceFts = count('SELECT COUNT(*) AS c FROM source_fts');
+    const staleJobs = count("SELECT COUNT(*) AS c FROM ingest_jobs WHERE status = 'running' AND started_at < ?", new Date(Date.now() - 30 * 60_000).toISOString());
+    const issues = [
+      ...orphanPages.slice(0, 20).map((page) => ({ kind: 'orphan_page', id: page.id, title: page.title, detail: '无来源、无关联的孤儿页' })),
+      ...brokenLinks.slice(0, 20).map((link) => ({ kind: 'broken_link', id: `${link.from_page_id}->${link.to_page_id}`, title: '', detail: '链接目标不存在' })),
+      ...missingFiles.map((source) => ({ kind: 'missing_source_file', id: source.id, title: source.title, detail: source.storage_path })),
+      ...(pageFts !== pages.length ? [{ kind: 'fts_mismatch', id: 'page_fts', title: '', detail: `页面 ${pages.length} / 索引 ${pageFts}` }] : []),
+      ...(sourceFts !== sources.length ? [{ kind: 'fts_mismatch', id: 'source_fts', title: '', detail: `文献 ${sources.length} / 索引 ${sourceFts}` }] : []),
+      ...(staleJobs ? [{ kind: 'stale_jobs', id: 'jobs', title: '', detail: `${staleJobs} 个运行超过 30 分钟的任务` }] : []),
+    ];
+    rc.json({
+      ok: integrity.every((row) => row.integrity_check === 'ok') && issues.length === 0,
+      sqlite: integrity.map((row) => row.integrity_check),
+      counts: { pages: pages.length, sources: sources.length, links: links.length, pageFts, sourceFts, staleJobs },
+      issues,
+    });
+  });
+
 }
