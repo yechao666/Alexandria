@@ -55,7 +55,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **分库** | 每个知识库独立的本体、目录树、权限、检索范围 |
 | **分类组织** | 库内目录树（书架 / 分类 / 主题），类似 BookStack 的 Shelf → Book → Chapter → Page |
 | **知识编译** | 入库时生成文献页、概念页、主张、关联；同来源概念互链 |
-| **本体论** | 类型（概念/文献/实体/比较/方法/决策/笔记）+ 属性 + 关系；可扩展自定义类型 |
+| **本体论** | 类型 + 属性 + 关系；内置类型带属性定义，可扩展类型/属性；页面按类型渲染属性表单 |
 | **检索** | FTS5（中文单字/双字切分）+ BM25 + 图谱一跳扩展 + 元数据/时效/read_when 重排 |
 | **知识合成** | 从已编译页面组织带引用答案；配置 LLM 后可选自然语言合成 |
 | **权限** | 管理员 / 团队负责人 / 团队成员 / 个人授权 / 组织可见 / 私有库；每次查询先过滤 |
@@ -203,6 +203,16 @@ cd ../alexandria && node server/src/main.ts
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
+
+## 本体属性
+
+每个知识库的每个类型可以声明属性（字符串 / 长文本 / 数字 / 日期 / 链接 / 布尔 / 枚举）。页面编辑器按类型动态渲染属性字段，属性值随页面版本保存。
+
+- 管理端：知识库「设置 → 本体属性」新增/删除属性；
+- 页面端：编辑页显示该类型的属性字段；读者侧显示 `本体属性` 卡片；
+- API：`GET /api/libraries/:id/properties`、`POST /api/libraries/:id/properties`、`PATCH/DELETE /api/properties/:id`。
+
+![本体属性表单](docs/screenshots/14-ontology.png)
 
 ## 校对流程
 

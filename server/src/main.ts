@@ -7,6 +7,7 @@ import { createRouter } from './routes/index.ts';
 import { createHttpServer } from './http/server.ts';
 import type { AppContext } from './http/context.ts';
 import { seedDatabase } from './seed/seed.ts';
+import { ensureDefaultOntology } from './knowledge/ontology.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -23,6 +24,11 @@ const personCount = db.prepare('SELECT COUNT(*) AS c FROM persons').get() as unk
 if (Number(personCount.c) === 0) {
   console.log('[alexandria] 空库，正在写入演示数据…');
   seedDatabase(db, env);
+}
+
+// 幂等补齐内置本体属性（老库也会获得缺失的定义）。
+for (const row of db.prepare('SELECT id FROM libraries').all() as unknown as { id: string }[]) {
+  ensureDefaultOntology(db, row.id);
 }
 
 const app: AppContext = { db, env, now: () => new Date().toISOString() };

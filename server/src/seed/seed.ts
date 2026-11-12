@@ -121,6 +121,7 @@ interface PageSeed {
   body: string;
   owner?: string;
   claims?: { text: string; subject: string; predicate: string; object: string; confidence?: number }[];
+  properties?: Record<string, unknown>;
 }
 
 const PAGES: PageSeed[] = [
@@ -137,6 +138,7 @@ const PAGES: PageSeed[] = [
     readWhen: ['设计知识库架构时', '讨论为什么不用查询期 RAG 时', '需要向团队解释知识沉淀机制时'],
     confidence: 0.92,
     owner: 'usr_shen',
+    properties: { domain: '知识管理' },
     body: `## 定义
 知识编译（Knowledge Compilation）是一种把原始资料在**入库时**转化为结构化、可链接知识页的做法。编译器会阅读来源，识别概念、主张与关系，更新已有的概念页，标记矛盾，并保留原始文件作为证据。
 
@@ -206,6 +208,7 @@ const PAGES: PageSeed[] = [
     readWhen: ['新增知识类型时', '设计权限与分类体系时', '需要让智能体按结构写入时'],
     confidence: 0.88,
     owner: 'usr_lin',
+    properties: { domain: '知识管理' },
     body: `## 定义
 本体论（Ontology）在这里指一套显式的领域模型：**类型（Class）**、**属性（Property）** 与 **关系（Relation）**。每个知识页都属于某个类型，携带该类型声明的字段，并可以通过类型化关系连接到其它页面。
 
@@ -275,6 +278,7 @@ const PAGES: PageSeed[] = [
     readWhen: ['准备发起需求评审时', '作为评审主持人时', '检查需求是否可进入开发时'],
     confidence: 0.82,
     owner: 'usr_su',
+    properties: { prerequisites: 'PRD、目标用户、非目标、可验证验收标准' },
     body: `## 前置条件
 - 需求文档包含背景、目标用户、范围与非目标；
 - 至少有一个可验证的验收标准；
@@ -508,6 +512,7 @@ PDF（pypdf + 兜底流解析）、DOCX/PPTX/XLSX（ZIP + XML）、RTF（textuti
     readWhen: ['评估存储方案时', '迁移数据库前'],
     confidence: 0.9,
     owner: 'usr_zhou',
+    properties: { decidedAt: '2026-02-01', status: '已采纳' },
     body: `## 背景
 知识库需要事务、关联查询、全文索引与备份；团队规模在早期不构成分布式数据库的必要条件。
 
@@ -558,6 +563,7 @@ PDF（pypdf + 兜底流解析）、DOCX/PPTX/XLSX（ZIP + XML）、RTF（textuti
     readWhen: ['研究知识库理念时', '设计智能体知识工作流时'],
     confidence: 0.9,
     owner: 'usr_shen',
+    properties: { domain: '知识管理' },
     body: `## 核心论点
 大多数 LLM + 文档工作流是 RAG：查询时取片段、重新生成、然后忘记。LLM Wiki 让模型在入库时阅读来源，更新实体页与概念页，标记矛盾，维护交叉引用；知识因此可以累积。
 
@@ -663,6 +669,7 @@ LLM Wiki 的交叉引用与知识图谱，本质上是在数字环境里实现 M
     readWhen: ['制定季度目标时', '对外介绍公司方向时'],
     confidence: 0.85,
     owner: 'usr_lin',
+    properties: { decidedAt: '2026-01-15', status: '已采纳' },
     body: `## 三条主线
 1. **内部样板**：让研发、产品、市场三个团队在同一套知识治理规则下协作；
 2. **智能体接入**：DSH 智能体通过 API 维护知识，人类负责验收；
@@ -692,6 +699,7 @@ LLM Wiki 的交叉引用与知识图谱，本质上是在数字环境里实现 M
     readWhen: ['设计报价时', '客户询问计费方式时'],
     confidence: 0.72,
     owner: 'usr_lin',
+    properties: { domain: '商业化' },
     body: `## 分层
 - **团队版**：5 个知识库、基础本体、社区支持；
 - **组织版**：不限知识库、团队层级、审计与 SSO；
@@ -855,6 +863,7 @@ function seedPage(db: Db, actor: Actor, seed: PageSeed): PageRow {
       readWhen: seed.readWhen,
       ownerPersonId: seed.owner ?? 'usr_lin',
       metadata: { seeded: true },
+      properties: seed.properties,
     },
     actor,
   );

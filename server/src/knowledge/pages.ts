@@ -22,6 +22,7 @@ export interface PageInput {
   readWhen?: string[];
   ownerPersonId?: string | null;
   metadata?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
   createdBy?: string | null;
 }
 
@@ -206,6 +207,56 @@ function snapshot(page: PageRow): string {
   return JSON.stringify(page);
 }
 
+interface PropertyDefinition {
+  key: string;
+  class_key: string | null;
+  name: string;
+  type: string;
+  required: number;
+  options: string;
+}
+
+export function validatePageProperties(
+  db: Db,
+  libraryId: string,
+  classKey: string,
+  input: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!input) return {};
+  const definitions = db
+    .prepare('SELECT key, class_key, name, type, required, options FROM ontology_properties WHERE library_id = ? AND (class_key = ? OR class_key IS NULL)')
+    .all(libraryId, classKey) as unknown as PropertyDefinition[];
+  const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
+  const result: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(input)) {
+    if (raw === undefined || raw === null || raw === '') continue;
+    const definition = byKey.get(key);
+    if (!definition) throw errors.badRequest(`类型「${classKey}」没有属性「${key}」`);
+    if (definition.type === 'number') {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) throw errors.badRequest(`属性「${definition.name}」必须是数字`);
+      result[key] = value;
+    } else if (definition.type === 'boolean') {
+      result[key] = raw === true || raw === 'true' || raw === '1';
+    } else if (definition.type === 'enum') {
+      const options = parseJson<string[]>(definition.options, []);
+      const value = String(raw);
+      if (options.length && !options.includes(value)) throw errors.badRequest(`属性「${definition.name}」的值不在可选范围内`);
+      result[key] = value;
+    } else {
+      result[key] = String(raw);
+    }
+  }
+  return result;
+}
+
+export function setPageProperties(db: Db, pageId: string, properties: Record<string, unknown>): void {
+  db.prepare('DELETE FROM page_properties WHERE page_id = ?').run(pageId);
+  for (const [key, value] of Object.entries(properties)) {
+    db.prepare('INSERT INTO page_properties (page_id, key, value) VALUES (?, ?, ?)').run(pageId, key, JSON.stringify(value));
+  }
+}
+
 export function createPage(db: Db, input: PageInput, actor?: Actor | null): PageRow {
   const now = nowIso();
   const id = newId('pg');
@@ -222,6 +273,7 @@ export function createPage(db: Db, input: PageInput, actor?: Actor | null): Page
       .get(input.nodeId, input.libraryId);
     if (!node) throw errors.badRequest('目录节点不属于该知识库');
   }
+  const properties = validatePageProperties(db, input.libraryId, classKey, input.properties);
 
   const status = input.status ?? 'active';
   const reviewStatus = input.reviewStatus ?? (status === 'draft' ? 'unreviewed' : 'approved');
@@ -257,6 +309,7 @@ export function createPage(db: Db, input: PageInput, actor?: Actor | null): Page
     now,
     now,
   );
+  setPageProperties(db, id, properties);
   const page = getPage(db, id)!;
   db.prepare(
     'INSERT INTO page_revisions (id, page_id, version, snapshot, editor_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -284,6 +337,7 @@ export interface PagePatch {
   readWhen?: string[];
   ownerPersonId?: string | null;
   metadata?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
   note?: string;
 }
 
@@ -295,6 +349,11 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
       .get(page.library_id, patch.classKey);
     if (!exists) throw errors.badRequest(`本体中不存在类型：${patch.classKey}`);
   }
+  const properties =
+    patch.properties !== undefined
+      ? validatePageProperties(db, page.library_id, patch.classKey ?? page.class_key, patch.properties)
+      : undefined;
+  const classChanged = patch.classKey !== undefined && patch.classKey !== page.class_key;
   const fields: string[] = [];
   const values: (string | number | null)[] = [];
   const set = (column: string, value: string | number | null) => {
@@ -328,6 +387,8 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
   set('updated_at', nowIso());
   values.push(page.id);
   db.prepare(`UPDATE pages SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  if (properties !== undefined) setPageProperties(db, page.id, properties);
+  else if (classChanged) db.prepare('DELETE FROM page_properties WHERE page_id = ?').run(page.id);
   const updated = getPage(db, page.id)!;
   db.prepare(
     'INSERT INTO page_revisions (id, page_id, version, snapshot, editor_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',

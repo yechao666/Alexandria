@@ -147,6 +147,19 @@ export async function mountLibrary(ref, tab = 'catalog') {
   document.getElementById('new-node')?.addEventListener('click', () => openNodeEditor(library, detail));
   document.getElementById('add-grant')?.addEventListener('click', () => openGrantEditor(library, detail));
   document.getElementById('new-class')?.addEventListener('click', () => openClassEditor(library));
+  document.getElementById('new-property')?.addEventListener('click', () => openPropertyEditor(library, detail));
+  document.querySelectorAll('[data-delete-property]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('确认删除该本体属性？已有页面值会保留但不再展示定义。')) return;
+      try {
+        await api(`/api/properties/${encodeURIComponent(button.dataset.deleteProperty)}`, { method: 'DELETE' });
+        toast('属性已删除', 'success');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+  });
   bindCatalogTree(ref, tab);
   bindFilter();
   bindSourceRows();
@@ -293,6 +306,9 @@ function settingsTab(detail, library, color) {
       (klass) => `<tr><td><span class="badge ${klass.color}">${esc(klass.name)}</span></td><td class="mono">${esc(klass.key)}</td><td class="muted">${esc(klass.description)}</td><td>${klass.builtin ? '<span class="badge outline">内置</span>' : ''}</td></tr>`,
     )
     .join('');
+  const propertyRows = (detail.properties ?? [])
+    .map((property) => `<tr><td class="mono">${esc(property.class_key ?? '全部')}</td><td>${esc(property.name)}</td><td class="mono">${esc(property.key)}</td><td><span class="badge outline">${esc(property.type)}</span></td><td>${property.required ? '是' : '—'}</td><td><button class="btn btn-sm btn-ghost" data-delete-property="${esc(property.id)}">删除</button></td></tr>`)
+    .join('');
   return `
     <div class="grid grid-2">
       <div class="panel">
@@ -319,6 +335,10 @@ function settingsTab(detail, library, color) {
       <div class="panel">
         <div class="panel-head"><h3>本体类型</h3><div class="row"><span class="small muted">${detail.classes.length} 个类型</span>${detail.canEdit ? `<button class="btn btn-sm" id="new-class">${icon('plus', 14)} 新建类型</button>` : ''}</div></div>
         <div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>类型</th><th>Key</th><th>说明</th><th></th></tr></thead><tbody>${classes}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>本体属性</h3><div class="row"><span class="small muted">${(detail.properties ?? []).length} 个属性</span>${detail.canEdit ? `<button class="btn btn-sm" id="new-property">${icon('plus', 14)} 新建属性</button>` : ''}</div></div>
+        <div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>类型</th><th>名称</th><th>Key</th><th>字段</th><th>必填</th><th></th></tr></thead><tbody>${propertyRows || '<tr><td colspan="6" class="muted" style="padding:18px">暂无属性</td></tr>'}</tbody></table></div>
       </div>
       <div class="panel">
         <div class="panel-head"><h3>危险区</h3></div>
@@ -386,14 +406,39 @@ function drawGraph(canvas, graph) {
   });
 }
 
-export function openPageEditor(library, detail, page = null) {
+export function openPageEditor(library, detail, page = null, pageProperties = []) {
   const classOptions = (detail.classes ?? []).map((klass) => ({ value: klass.key, label: klass.name }));
+  const definitions = detail.properties ?? [];
+  const currentValues = new Map((pageProperties ?? []).map((item) => [item.key, item.value]));
+  const propertyFields = (classKey) => {
+    const fields = definitions.filter((definition) => !definition.class_key || definition.class_key === classKey);
+    if (!fields.length) return '<div class="rail-empty">该类型暂无自定义属性</div>';
+    return fields
+      .map((definition) => {
+        const value = currentValues.get(definition.key) ?? '';
+        const label = `${definition.name ?? definition.key}${definition.required ? ' *' : ''}`;
+        if (definition.type === 'enum') {
+          const options = (definition.options ?? []).map((option) => `<option value="${esc(option)}" ${String(value) === String(option) ? 'selected' : ''}>${esc(option)}</option>`).join('');
+          return `<div class="field"><label>${esc(label)}</label><select class="select" data-property-key="${esc(definition.key)}"><option value="">未设置</option>${options}</select></div>`;
+        }
+        if (definition.type === 'boolean') {
+          return `<div class="field"><label>${esc(label)}</label><select class="select" data-property-key="${esc(definition.key)}"><option value="">未设置</option><option value="true" ${value === true ? 'selected' : ''}>是</option><option value="false" ${value === false ? 'selected' : ''}>否</option></select></div>`;
+        }
+        if (definition.type === 'text') {
+          return `<div class="field span-2"><label>${esc(label)}</label><textarea class="textarea" rows="2" data-property-key="${esc(definition.key)}">${esc(value)}</textarea></div>`;
+        }
+        const inputType = definition.type === 'number' ? 'number' : definition.type === 'date' ? 'date' : definition.type === 'url' ? 'url' : 'text';
+        return `<div class="field"><label>${esc(label)}</label><input class="input" type="${inputType}" data-property-key="${esc(definition.key)}" value="${esc(value)}"></div>`;
+      })
+      .join('');
+  };
+  const initialClass = page?.classKey ?? 'concept';
   openModal({
     title: page ? '编辑知识页' : '新建知识页',
     wide: true,
     body: `<form id="page-form" class="form-grid">
       ${textField({ label: '标题', name: 'title', value: page?.title ?? '', placeholder: '一个概念、一个决策、一份方法' })}
-      ${selectField({ label: '本体类型', name: 'classKey', options: classOptions, value: page?.classKey ?? 'concept' })}
+      ${selectField({ label: '本体类型', name: 'classKey', options: classOptions, value: initialClass })}
       ${textField({ label: '摘要', name: 'summary', value: page?.summary ?? '', span: true, placeholder: '一句话说明这个页面讲什么' })}
       ${textField({ label: '一句话结论', name: 'tldr', value: page?.tldr ?? '', span: true })}
       ${textField({ label: '标签（逗号分隔）', name: 'tags', value: (page?.tags ?? []).join(', ') })}
@@ -402,17 +447,27 @@ export function openPageEditor(library, detail, page = null) {
         { value: 'draft', label: '草稿' }, { value: 'active', label: '有效' }, { value: 'stale', label: '陈旧' }, { value: 'archived', label: '归档' },
       ] })}
       ${textField({ label: '置信度 0–1', name: 'confidence', value: page?.confidence ?? 0.6, type: 'number' })}
+      <div class="span-2"><div class="small faint" style="margin:6px 0 4px">本体属性</div><div class="form-grid" id="property-fields">${propertyFields(initialClass)}</div></div>
       ${textArea({ label: '正文（Markdown，可用 [[slug]] 链接）', name: 'body', value: page?.body ?? '', rows: 14 })}
     </form>`,
     footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-page">${page ? '保存修改' : '创建页面'}</button>`,
     onMount: (modal) => {
+      modal.querySelector('[name="classKey"]')?.addEventListener('change', (event) => {
+        const container = modal.querySelector('#property-fields');
+        if (container) container.innerHTML = propertyFields(event.currentTarget.value);
+      });
       modal.querySelector('#save-page')?.addEventListener('click', async () => {
         const values = formValues(modal.querySelector('#page-form'));
+        const properties = {};
+        modal.querySelectorAll('[data-property-key]').forEach((input) => {
+          if (input.value !== '') properties[input.dataset.propertyKey] = input.value;
+        });
         const payload = {
           ...values,
           tags: values.tags.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
           aliases: values.aliases.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
           confidence: Number(values.confidence),
+          properties,
         };
         try {
           if (page) await api(`/api/pages/${encodeURIComponent(page.id)}`, { method: 'PATCH', body: payload });
@@ -512,6 +567,48 @@ function openClassEditor(library) {
             body: { ...formValues(modal.querySelector('#class-form')), schema: { fields: [] } },
           });
           toast('本体类型已创建', 'success');
+          closeModal();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openPropertyEditor(library, detail) {
+  const classOptions = [{ value: '', label: '全部类型' }, ...(detail.classes ?? []).map((klass) => ({ value: klass.key, label: klass.name }))];
+  openModal({
+    title: '新建本体属性',
+    body: `<form id="property-form" class="form-grid">
+      ${selectField({ label: '所属类型', name: 'classKey', options: classOptions })}
+      ${textField({ label: '属性名称', name: 'name', placeholder: '例如：领域' })}
+      ${textField({ label: 'Key', name: 'key', placeholder: 'domain' })}
+      ${selectField({ label: '字段类型', name: 'type', options: [
+        { value: 'string', label: '短文本' }, { value: 'text', label: '长文本' }, { value: 'number', label: '数字' },
+        { value: 'date', label: '日期' }, { value: 'url', label: '链接' }, { value: 'boolean', label: '布尔' }, { value: 'enum', label: '枚举' },
+      ] })}
+      ${textField({ label: '枚举选项（逗号分隔，仅 enum）', name: 'options', span: true, placeholder: '组织,人物,产品' })}
+      ${textField({ label: '说明', name: 'description', span: true })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-property">创建属性</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-property')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#property-form'));
+        try {
+          await api(`/api/libraries/${encodeURIComponent(library.id)}/properties`, {
+            method: 'POST',
+            body: {
+              classKey: values.classKey || null,
+              key: values.key,
+              name: values.name,
+              type: values.type,
+              description: values.description,
+              options: values.options ? values.options.split(/[,，]/).map((item) => item.trim()).filter(Boolean) : [],
+            },
+          });
+          toast('本体属性已创建', 'success');
           closeModal();
           window.dispatchEvent(new HashChangeEvent('hashchange'));
         } catch (error) {

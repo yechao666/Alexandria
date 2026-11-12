@@ -89,6 +89,10 @@
 
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
+| GET | `/api/libraries/:id/properties` | viewer | 属性定义 |
+| POST | `/api/libraries/:id/properties` | editor | 新建属性 |
+| PATCH | `/api/properties/:id` | editor | 修改属性 |
+| DELETE | `/api/properties/:id` | editor | 删除属性 |
 | POST | `/api/libraries/:id/classes` | editor | 新建类型 |
 | PATCH | `/api/classes/:id` | editor | 修改类型 |
 | DELETE | `/api/classes/:id` | editor | 删除类型（内置/使用中不可删） |

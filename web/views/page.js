@@ -59,6 +59,9 @@ export async function renderPage(ref) {
   const tagChips = (page.tags ?? []).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('');
   const readWhen = (page.readWhen ?? []).map((item) => `<div class="rail-item"><span class="dot" style="background:var(--ochre)"></span><span>${esc(item)}</span></div>`).join('');
   const sourcesAttached = detail.sources ?? [];
+  const propertyRows = (detail.properties ?? [])
+    .map((property) => `<div class="rail-item"><span class="faint" style="min-width:64px">${esc(property.name ?? property.key)}</span><span>${esc(Array.isArray(property.value) ? property.value.join('、') : (property.value ?? '—'))}</span></div>`)
+    .join('');
 
   return {
     html: `
@@ -84,6 +87,7 @@ export async function renderPage(ref) {
           <div class="rail-card"><div class="title">校对状态 <span>${reviewBadge(page.reviewStatus)}</span></div><div class="small muted">${page.reviewedAt ? `最近审核：${timeAgo(page.reviewedAt)}${page.reviewerName ? ` · ${esc(page.reviewerName)}` : ''}` : '尚未经过人工校对'}</div>${page.reviewNote ? `<div class="review-note">${esc(page.reviewNote)}</div>` : ''}</div>
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
           <div class="rail-card"><div class="title">来源 <span>${sourcesAttached.length}</span></div><div class="rail-list">${sources || '<div class="rail-empty">该页尚未关联文献</div>'}</div></div>
+          ${propertyRows ? `<div class="rail-card"><div class="title">本体属性</div><div class="property-list">${propertyRows}</div></div>` : ''}
           <div class="rail-card"><div class="title">结构化主张 <span>${detail.claims?.length ?? 0}</span></div><div>${claims || '<div class="rail-empty">暂无主张</div>'}</div></div>
           <div class="rail-card"><div class="title">关联 <span>${(detail.links?.outbound?.length ?? 0) + (detail.links?.inbound?.length ?? 0)}</span></div><div class="rail-list">${outbound}${inbound}${!outbound && !inbound ? '<div class="rail-empty">尚未建立关联</div>' : ''}</div></div>
           ${readWhen ? `<div class="rail-card"><div class="title">何时读这一页</div><div class="rail-list">${readWhen}</div></div>` : ''}
@@ -106,7 +110,7 @@ export async function mountPage(ref) {
     node.addEventListener('click', () => openSource(node.dataset.source));
   });
   document.getElementById('edit-page')?.addEventListener('click', () => {
-    openPageEditor({ id: page.libraryId, name: detail.library.name, slug: detail.library.slug }, libraryDetail, page);
+    openPageEditor({ id: page.libraryId, name: detail.library.name, slug: detail.library.slug }, libraryDetail, page, detail.properties ?? []);
   });
   document.getElementById('delete-page')?.addEventListener('click', async () => {
     if (!confirm(`确认删除《${page.title}》？历史版本也会保留在审计中，但页面会从知识库移除。`)) return;

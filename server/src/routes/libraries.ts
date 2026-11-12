@@ -204,6 +204,9 @@ export function registerLibraryRoutes(router: Router): void {
         'SELECT id, title, filename, kind, status, page_count, word_count, excerpt, created_at, updated_at FROM sources WHERE library_id = ? ORDER BY created_at DESC LIMIT 10',
       )
       .all(library.id);
+    const properties = rc.app.db
+      .prepare('SELECT * FROM ontology_properties WHERE library_id = ? ORDER BY class_key, sort_order')
+      .all(library.id) as unknown as Record<string, unknown>[];
     const grantsSummary = rc.app.db
       .prepare('SELECT COUNT(*) AS c FROM library_grants WHERE library_id = ?')
       .get(library.id) as unknown as { c: number };
@@ -214,6 +217,10 @@ export function registerLibraryRoutes(router: Router): void {
       canEdit: canEdit(role),
       nodes,
       classes: classes.map((klass) => ({ ...klass, schema: parseJson<Record<string, unknown>>(klass.schema_json, {}) })),
+      properties: properties.map((property) => ({
+        ...property,
+        options: parseJson<string[]>(String(property.options ?? '[]'), []),
+      })),
       relations,
       grants: grantViews,
       grantsCount: Number(grantsSummary.c),

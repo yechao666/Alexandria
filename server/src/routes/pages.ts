@@ -31,8 +31,19 @@ function pageDetail(rc: RequestContext, page: PageRow) {
     .all(page.id) as unknown as Record<string, unknown>[];
   const relations = relatedPages(rc.app.db, page.id);
   const properties = rc.app.db
-    .prepare('SELECT key, value FROM page_properties WHERE page_id = ?')
-    .all(page.id) as unknown as { key: string; value: string }[];
+    .prepare(
+      `SELECT pp.key, pp.value, op.name, op.type, op.options
+         FROM page_properties pp
+         LEFT JOIN ontology_properties op ON op.library_id = ? AND op.class_key = ? AND op.key = pp.key
+        WHERE pp.page_id = ?`,
+    )
+    .all(page.library_id, page.class_key, page.id) as unknown as {
+    key: string;
+    value: string;
+    name: string | null;
+    type: string | null;
+    options: string | null;
+  }[];
   const revisions = rc.app.db
     .prepare('SELECT id, version, editor_id, note, created_at FROM page_revisions WHERE page_id = ? ORDER BY version DESC LIMIT 20')
     .all(page.id);
@@ -60,7 +71,13 @@ function pageDetail(rc: RequestContext, page: PageRow) {
       confidence: Number(claim.confidence),
     })),
     links: relations,
-    properties: properties.map((property) => ({ key: property.key, value: parseJson<unknown>(property.value, property.value) })),
+    properties: properties.map((property) => ({
+      key: property.key,
+      value: parseJson<unknown>(property.value, property.value),
+      name: property.name ?? property.key,
+      type: property.type ?? 'string',
+      options: parseJson<string[]>(property.options, []),
+    })),
     revisions,
     context: pageContext(rc.app.db, page),
   };
@@ -134,6 +151,7 @@ export function registerPageRoutes(router: Router): void {
         aliases: parseList(body.aliases),
         readWhen: parseList(body.readWhen),
         metadata: (body.metadata as Record<string, unknown>) ?? {},
+        properties: body.properties as Record<string, unknown> | undefined,
       },
       actor,
     );
@@ -175,6 +193,7 @@ export function registerPageRoutes(router: Router): void {
         aliases: body.aliases !== undefined ? parseList(body.aliases) : undefined,
         readWhen: body.readWhen !== undefined ? parseList(body.readWhen) : undefined,
         metadata: body.metadata !== undefined ? (body.metadata as Record<string, unknown>) : undefined,
+        properties: body.properties !== undefined ? (body.properties as Record<string, unknown>) : undefined,
         note: body.note ? String(body.note) : '',
       },
       actor,

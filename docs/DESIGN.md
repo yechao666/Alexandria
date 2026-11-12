@@ -106,7 +106,8 @@
 | `claims` | subject, predicate, object, confidence, status | 结构化主张 |
 | `links` | relation, origin, weight | 类型化图边 |
 | `page_revisions` | version, snapshot, editor_id | 页面历史 |
-| `page_properties` | key, value | 本体属性（预留） |
+| `ontology_properties` | class_key, key, type, options, required | 本体属性定义 |
+| `page_properties` | key, value | 页面属性值 |
 | `audit_events` | action, target, actor, detail | 审计 |
 
 ### 4.4 派生索引

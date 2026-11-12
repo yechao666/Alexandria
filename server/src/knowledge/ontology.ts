@@ -113,8 +113,8 @@ export function ensureDefaultOntology(db: Db, libraryId: string): void {
   const existing = db
     .prepare('SELECT COUNT(*) AS c FROM ontology_classes WHERE library_id = ?')
     .get(libraryId) as unknown as { c: number };
-  if (Number(existing.c) > 0) return;
   const now = nowIso();
+  if (Number(existing.c) === 0) {
   for (const klass of CLASSES) {
     db.prepare(
       `INSERT INTO ontology_classes (id, library_id, key, name, description, icon, color, schema_json, builtin, sort_order, created_at)
@@ -132,9 +132,10 @@ export function ensureDefaultOntology(db: Db, libraryId: string): void {
       now,
     );
   }
+  }
   for (const relation of RELATIONS) {
     db.prepare(
-      `INSERT INTO ontology_relations (id, library_id, key, name, description, source_class, target_class, inverse_name, color, created_at)
+      `INSERT OR IGNORE INTO ontology_relations (id, library_id, key, name, description, source_class, target_class, inverse_name, color, created_at)
        VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
     ).run(
       newId('rel'),
@@ -147,6 +148,37 @@ export function ensureDefaultOntology(db: Db, libraryId: string): void {
       relation.color,
       now,
     );
+  }
+
+  // 内置类型的属性来自 schema.fields；已有库也会补上缺失的属性定义。
+  for (const klass of CLASSES) {
+    const classExists = db
+      .prepare('SELECT 1 FROM ontology_classes WHERE library_id = ? AND key = ?')
+      .get(libraryId, klass.key);
+    if (!classExists) continue;
+    const fields = Array.isArray((klass.schema as { fields?: unknown }).fields)
+      ? ((klass.schema as { fields: { key: string; label: string; type: string; options?: string[] }[] }).fields)
+      : [];
+    for (const [index, field] of fields.entries()) {
+      const exists = db
+        .prepare('SELECT 1 FROM ontology_properties WHERE library_id = ? AND class_key = ? AND key = ?')
+        .get(libraryId, klass.key, field.key);
+      if (exists) continue;
+      db.prepare(
+        `INSERT INTO ontology_properties (id, library_id, class_key, key, name, type, description, required, options, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, '', 0, ?, ?, ?)`,
+      ).run(
+        newId('prop'),
+        libraryId,
+        klass.key,
+        field.key,
+        field.label,
+        field.type,
+        JSON.stringify(field.options ?? []),
+        index * 10,
+        now,
+      );
+    }
   }
 }
 
