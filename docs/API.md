@@ -32,6 +32,10 @@
 
 创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
 
+### GET `/api/auth/oidc/start` / `/api/auth/oidc/callback`
+
+OIDC 授权码登录。需配置 Issuer、Client ID/Secret、Redirect URI；回调仅映射已有本地账号，未映射返回登录错误。
+
 ### GET/POST `/api/wecom/callback`
 
 企业微信官方加密 XML 回调：GET 用于 URL 验证（`echostr` 解密），POST 接收加密消息并返回加密被动回复。需要配置 Callback Token 与 EncodingAESKey；签名不匹配返回 403。

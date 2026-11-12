@@ -7,6 +7,7 @@ import { audit } from '../domain/audit.ts';
 import { getWecomConfig, wecomConfigured, wecomAccessToken, wecomUserInfo } from '../domain/wecom.ts';
 import { newId, nowIso, randomToken } from '../lib/ids.ts';
 import { answerWecomText } from '../domain/wecom-bot.ts';
+import { oidcConfigured } from '../domain/oidc.ts';
 import {
   buildWecomEncryptedReply,
   buildWecomReplyXml,
@@ -35,6 +36,9 @@ export function registerWecomAuthRoutes(router: Router): void {
   router.get('/api/auth/providers', (rc) => {
     const config = getWecomConfig(rc.app.db, rc.app.env);
     rc.json({
+      oidc: rc.app.env.oidc
+        ? { enabled: oidcConfigured(rc.app.env), label: rc.app.env.oidc.label }
+        : { enabled: false, label: '企业 SSO' },
       wecom: {
         enabled: wecomConfigured(config),
         label: config.mock ? '企业微信登录（Mock）' : '企业微信登录',

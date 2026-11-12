@@ -31,6 +31,14 @@ export interface Env {
     publicUrl: string;
     mock: boolean;
   };
+  oidc?: {
+    issuer: string;
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+    scopes: string;
+    label: string;
+  };
   llm?: {
     baseUrl: string;
     apiKey: string;
@@ -84,6 +92,17 @@ export function loadEnv(root: string): Env {
       publicUrl: wecomPublicUrl,
       mock: process.env.ALEXANDRIA_WECOM_MODE === 'mock' || wecomBase.includes('127.0.0.1:4800') || wecomBase.includes('localhost:4800'),
     },
+    oidc:
+      process.env.ALEXANDRIA_OIDC_ISSUER && process.env.ALEXANDRIA_OIDC_CLIENT_ID && process.env.ALEXANDRIA_OIDC_CLIENT_SECRET
+        ? {
+            issuer: process.env.ALEXANDRIA_OIDC_ISSUER.replace(/\/+$/, ''),
+            clientId: process.env.ALEXANDRIA_OIDC_CLIENT_ID,
+            clientSecret: process.env.ALEXANDRIA_OIDC_CLIENT_SECRET,
+            redirectUri: process.env.ALEXANDRIA_OIDC_REDIRECT_URI?.trim() || `${wecomPublicUrl}/api/auth/oidc/callback`,
+            scopes: process.env.ALEXANDRIA_OIDC_SCOPES?.trim() || 'openid email profile',
+            label: process.env.ALEXANDRIA_OIDC_LABEL?.trim() || '企业 SSO',
+          }
+        : undefined,
     llm:
       llmBase && llmKey
         ? {

@@ -405,6 +405,13 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_library ON audit_events(library_id, created_at);
 
+CREATE TABLE IF NOT EXISTS oidc_states (
+  state      TEXT PRIMARY KEY,
+  return_to  TEXT NOT NULL DEFAULT '/',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS security_events (
   id         TEXT PRIMARY KEY,
   kind       TEXT NOT NULL,

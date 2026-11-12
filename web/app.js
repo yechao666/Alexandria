@@ -63,6 +63,11 @@ function showLogin() {
     wecom_denied: '你取消了企业微信授权。',
     wecom_api: '企业微信接口不可用。本地联调请先启动 wecom-mock。',
     wecom_unmapped: '该企业微信账号尚未绑定本地成员，请联系管理员完成绑定。',
+    oidc_unavailable: '企业 SSO 尚未配置。',
+    oidc_state: '企业 SSO 登录状态已过期，请重新发起。',
+    oidc_api: '企业 SSO 接口不可用。',
+    oidc_unmapped: 'SSO 账号尚未映射到本地成员，请联系管理员。',
+    oidc_email: 'SSO 未返回邮箱，无法映射本地账号。',
   };
   const loginError = errorMessages[errorCode] ?? '';
   app.innerHTML = `
@@ -121,8 +126,12 @@ function showLogin() {
     .then((response) => response.json())
     .then((providers) => {
       const slot = document.getElementById('wecom-login-slot');
-      if (!slot || !providers?.wecom?.enabled) return;
-      slot.innerHTML = `<div class="login-divider"><span>或</span></div><a class="btn" href="/api/auth/wecom/start?returnTo=%2F%23%2F" style="width:100%;justify-content:center;padding:10px">${icon('key', 15)} ${esc(providers.wecom.label)}</a><div class="small faint" style="margin-top:8px;text-align:center">Mock 身份将映射到已绑定的本地账号</div>`;
+      if (!slot) return;
+      const alternatives = [];
+      if (providers?.oidc?.enabled) alternatives.push(`<a class="btn" href="/api/auth/oidc/start?returnTo=%2F%23%2F" style="width:100%;justify-content:center;padding:10px">${icon('key', 15)} ${esc(providers.oidc.label)}</a>`);
+      if (providers?.wecom?.enabled) alternatives.push(`<a class="btn" href="/api/auth/wecom/start?returnTo=%2F%23%2F" style="width:100%;justify-content:center;padding:10px">${icon('key', 15)} ${esc(providers.wecom.label)}</a>`);
+      if (!alternatives.length) return;
+      slot.innerHTML = `<div class="login-divider"><span>或</span></div>${alternatives.join('<div style="height:8px"></div>')}<div class="small faint" style="margin-top:8px;text-align:center">SSO / 企业微信身份将映射到已绑定的本地账号</div>`;
     })
     .catch(() => {});
   document.querySelectorAll('.demo-row').forEach((row) => {

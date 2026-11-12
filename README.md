@@ -82,6 +82,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **检索分面** | 库、本体类型、标签分面；权限感知；DSH 语义重排 |
 | **检索服务** | 查询历史、保存检索、自动补全、分页加载；结果先出，DSH 合成异步补入 |
 | **协作与通知** | 页面评论、解决标记、站内通知、企业微信应用消息推送 |
+| **企业 SSO** | OIDC 授权码登录，映射本地账号；登录页按配置出现 SSO 入口 |
 | **企业微信** | 已接 Mock OAuth 登录与通讯录同步；生产可切换 QYAPI/授权域名 |
 
 ### 知识编译 vs 查询期 RAG
@@ -242,7 +243,7 @@ cd ../alexandria && node server/src/main.ts
 - [设计方案](docs/DESIGN.md)：架构、数据模型、编译、实体/事实、组织层级、资源 ACL、任务、企业微信。
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
-- [验收报告](docs/ACCEPTANCE.md)：需求映射、77 项测试证据与已知边界。
+- [验收报告](docs/ACCEPTANCE.md)：需求映射、78 项测试证据与已知边界。
 - [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
 
