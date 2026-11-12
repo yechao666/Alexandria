@@ -1,8 +1,12 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
-import { authenticate, login, logout, sessionCookie } from '../http/auth.ts';
+import { authenticate, hashToken, login, logout, sessionCookie, createSession } from '../http/auth.ts';
 import { rateLimit, resetRateLimit, rateLimitKey } from '../domain/rate-limit.ts';
 import { securityEvent, requestIp } from '../domain/security.ts';
+import { notifyAdmins } from '../domain/notifications.ts';
+import { generateTotpSecret, totpUri, verifyTotp, passwordPolicyError } from '../domain/totp.ts';
+import { randomToken } from '../lib/ids.ts';
+import { hashPassword, verifyPassword } from '../lib/password.ts';
 import { requireActor } from '../http/auth.ts';
 import { errors } from '../http/respond.ts';
 import { visibleLibraries } from '../domain/access.ts';
@@ -42,23 +46,115 @@ export function registerAuthRoutes(router: Router): void {
     const limited = rateLimit(limitKey, 8, 15 * 60_000);
     if (!limited.ok) {
       securityEvent(rc.app.db, { kind: 'login.rate_limited', severity: 'warning', subject: body.email, ip: requestIp(rc) });
+      void notifyAdmins(rc.app.db, rc.app.env, { title: '异常登录告警', body: `账号 ${body.email} 触发登录限流，来源 IP ${requestIp(rc) ?? '未知'}`, kind: 'security' });
       rc.res.setHeader('retry-after', String(limited.retryAfter));
       throw errors.tooManyRequests(`登录尝试过多，请 ${Math.ceil(limited.retryAfter / 60)} 分钟后再试`);
     }
     let result;
     try {
-      result = login(rc, body.email, body.password);
+      result = login(rc, body.email, body.password, { createSession: false });
       resetRateLimit(limitKey);
-      securityEvent(rc.app.db, { kind: 'login.success', actorId: result.actor.person.id, subject: body.email, ip: requestIp(rc) });
     } catch (error) {
       securityEvent(rc.app.db, { kind: 'login.failed', severity: 'warning', subject: body.email, ip: requestIp(rc), detail: { status: (error as { status?: number }).status ?? 500 } });
       throw error;
     }
+    const personRow = rc.app.db.prepare('SELECT totp_enabled FROM persons WHERE id = ?').get(result.actor.person.id) as unknown as { totp_enabled: number };
+    if (Number(personRow.totp_enabled) === 1) {
+      const challengeToken = randomToken(32);
+      rc.app.db.prepare('DELETE FROM login_challenges WHERE expires_at < ?').run(new Date().toISOString());
+      rc.app.db
+        .prepare('INSERT INTO login_challenges (token_hash, person_id, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)')
+        .run(hashToken(challengeToken), result.actor.person.id, new Date(Date.now() + 5 * 60_000).toISOString(), new Date().toISOString());
+      rc.json({ requires2fa: true, challengeToken, person: result.actor.person, teams: result.actor.teamIds });
+      return;
+    }
+    const session = createSession(rc.app.db, result.actor.person.id, rc.app.env.sessionTtlHours, rc);
+    securityEvent(rc.app.db, { kind: 'login.success', actorId: result.actor.person.id, subject: body.email, ip: requestIp(rc) });
     rc.json(
-      { person: result.actor.person, teams: result.actor.teamIds, token: result.token },
+      { person: result.actor.person, teams: result.actor.teamIds, token: session },
       200,
-      { 'set-cookie': sessionCookie(result.token, rc.app.env.sessionTtlHours, rc.app.env.wecom.publicUrl.startsWith('https://')) },
+      { 'set-cookie': sessionCookie(session, rc.app.env.sessionTtlHours, rc.app.env.wecom.publicUrl.startsWith('https://')) },
     );
+  });
+
+  router.post('/api/auth/2fa/verify', async (rc) => {
+    const body = await rc.body<{ challengeToken?: string; code?: string }>();
+    const challengeToken = String(body.challengeToken ?? '');
+    const code = String(body.code ?? '');
+    if (!challengeToken || !code) throw errors.badRequest('需要 challengeToken 与验证码');
+    const limitKey = rateLimitKey(rc, '2fa', challengeToken);
+    const limited = rateLimit(limitKey, 6, 5 * 60_000);
+    if (!limited.ok) throw errors.tooManyRequests('验证码尝试过多，请重新登录');
+    const challenge = rc.app.db.prepare('SELECT * FROM login_challenges WHERE token_hash = ?').get(hashToken(challengeToken)) as unknown as
+      | { person_id: string; expires_at: string; attempts: number }
+      | undefined;
+    if (!challenge || challenge.expires_at <= new Date().toISOString()) throw errors.unauthorized('验证码已过期，请重新登录');
+    const person = rc.app.db.prepare("SELECT * FROM persons WHERE id = ? AND status = 'active'").get(challenge.person_id) as unknown as Record<string, unknown> | undefined;
+    if (!person?.totp_secret) throw errors.unauthorized('该账号未启用 2FA');
+    if (!verifyTotp(String(person.totp_secret), code)) {
+      const attempts = Number(challenge.attempts) + 1;
+      rc.app.db.prepare('UPDATE login_challenges SET attempts = ? WHERE token_hash = ?').run(attempts, hashToken(challengeToken));
+      securityEvent(rc.app.db, { kind: 'login.2fa_failed', severity: 'warning', subject: String(person.email), ip: requestIp(rc), detail: { attempts } });
+      if (attempts >= 6) rc.app.db.prepare('DELETE FROM login_challenges WHERE token_hash = ?').run(hashToken(challengeToken));
+      throw errors.unauthorized('验证码不正确');
+    }
+    rc.app.db.prepare('DELETE FROM login_challenges WHERE token_hash = ?').run(hashToken(challengeToken));
+    const session = createSession(rc.app.db, String(person.id), rc.app.env.sessionTtlHours, rc);
+    securityEvent(rc.app.db, { kind: 'login.success', actorId: String(person.id), subject: String(person.email), ip: requestIp(rc), detail: { twoFactor: true } });
+    rc.json({ person: { id: person.id, email: person.email, name: person.name, title: person.title, isAdmin: Boolean(person.is_admin) }, token: session }, 200, {
+      'set-cookie': sessionCookie(session, rc.app.env.sessionTtlHours, rc.app.env.wecom.publicUrl.startsWith('https://')),
+    });
+  });
+
+  router.get('/api/auth/2fa', (rc) => {
+    const actor = requireActor(rc);
+    const row = rc.app.db.prepare('SELECT totp_enabled FROM persons WHERE id = ?').get(actor.person.id) as unknown as { totp_enabled: number };
+    rc.json({ enabled: Number(row.totp_enabled) === 1 });
+  });
+
+  router.post('/api/auth/2fa/setup', (rc) => {
+    const actor = requireActor(rc);
+    if (actor.viaApiKey) throw errors.forbidden('API Key 不能设置 2FA');
+    const secret = generateTotpSecret();
+    rc.app.db.prepare('UPDATE persons SET totp_secret = ?, totp_enabled = 0 WHERE id = ?').run(secret, actor.person.id);
+    securityEvent(rc.app.db, { kind: '2fa.setup', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ secret, otpauth: totpUri(secret, actor.person.email) });
+  });
+
+  router.post('/api/auth/2fa/enable', async (rc) => {
+    const actor = requireActor(rc);
+    if (actor.viaApiKey) throw errors.forbidden('API Key 不能修改 2FA');
+    const body = await rc.body<{ code?: string }>();
+    const row = rc.app.db.prepare('SELECT totp_secret FROM persons WHERE id = ?').get(actor.person.id) as unknown as { totp_secret: string | null };
+    if (!row.totp_secret) throw errors.badRequest('请先生成 2FA 密钥');
+    if (!verifyTotp(row.totp_secret, String(body.code ?? ''))) throw errors.unauthorized('验证码不正确');
+    rc.app.db.prepare('UPDATE persons SET totp_enabled = 1 WHERE id = ?').run(actor.person.id);
+    securityEvent(rc.app.db, { kind: '2fa.enable', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ ok: true });
+  });
+
+  router.post('/api/auth/2fa/disable', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{ code?: string }>();
+    const row = rc.app.db.prepare('SELECT totp_secret, totp_enabled FROM persons WHERE id = ?').get(actor.person.id) as unknown as { totp_secret: string | null; totp_enabled: number };
+    if (Number(row.totp_enabled) !== 1) throw errors.badRequest('2FA 未启用');
+    if (!row.totp_secret || !verifyTotp(row.totp_secret, String(body.code ?? ''))) throw errors.unauthorized('验证码不正确');
+    rc.app.db.prepare('UPDATE persons SET totp_enabled = 0, totp_secret = NULL WHERE id = ?').run(actor.person.id);
+    securityEvent(rc.app.db, { kind: '2fa.disable', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ ok: true });
+  });
+
+  router.post('/api/auth/password', async (rc) => {
+    const actor = requireActor(rc);
+    if (actor.viaApiKey) throw errors.forbidden('API Key 不能修改密码');
+    const body = await rc.body<{ currentPassword?: string; newPassword?: string }>();
+    const row = rc.app.db.prepare('SELECT password_hash FROM persons WHERE id = ?').get(actor.person.id) as unknown as { password_hash: string };
+    if (!verifyPassword(String(body.currentPassword ?? ''), row.password_hash)) throw errors.unauthorized('当前密码不正确');
+    const error = passwordPolicyError(String(body.newPassword ?? ''));
+    if (error) throw errors.badRequest(error);
+    rc.app.db.prepare('UPDATE persons SET password_hash = ? WHERE id = ?').run(hashPassword(String(body.newPassword)), actor.person.id);
+    securityEvent(rc.app.db, { kind: 'password.change', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ ok: true });
   });
 
   router.post('/api/auth/logout', (rc) => {

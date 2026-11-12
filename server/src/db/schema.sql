@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS persons (
   wecom_userid  TEXT,
   status        TEXT NOT NULL DEFAULT 'active',
   created_at    TEXT NOT NULL,
-  last_seen_at  TEXT
+  last_seen_at  TEXT,
+  totp_secret   TEXT,
+  totp_enabled  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS teams (
@@ -51,6 +53,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL,
   ip         TEXT,
   user_agent TEXT
+);
+
+CREATE TABLE IF NOT EXISTS login_challenges (
+  token_hash TEXT PRIMARY KEY,
+  person_id  TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS api_keys (

@@ -107,13 +107,33 @@ function showLogin() {
       </main>
     </div>`;
   const form = document.getElementById('login-form');
+  let twoFactorMode = false;
   form.addEventListener('submit', async (event) => {
+    if (twoFactorMode) return;
     event.preventDefault();
     const values = Object.fromEntries(new FormData(form).entries());
     const errorNode = document.getElementById('login-error');
     errorNode.textContent = '';
     try {
-      await api('/api/auth/login', { method: 'POST', body: values });
+      const result = await api('/api/auth/login', { method: 'POST', body: values });
+      if (result.requires2fa) {
+        twoFactorMode = true;
+        form.innerHTML = `<div class="field"><label>两步验证码</label><input class="input" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" autofocus required></div><div class="login-error" id="login-error"></div><button class="btn btn-primary" type="submit" style="justify-content:center;padding:11px">${icon('key', 15)} 验证并登录</button><div class="small faint" style="margin-top:8px;text-align:center">打开认证器输入 Alexandria 的 6 位动态码</div>`;
+        form.onsubmit = async (event2) => {
+          event2.preventDefault();
+          const code = String(new FormData(form).get('code') ?? '');
+          try {
+            await api('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ challengeToken: result.challengeToken, code }) });
+            await loadBootstrap();
+            toast('欢迎回来，' + state.me.person.name, 'success');
+            go('#/');
+            route();
+          } catch (error2) {
+            document.getElementById('login-error').textContent = error2.message;
+          }
+        };
+        return;
+      }
       await loadBootstrap();
       toast('欢迎回来，' + state.me.person.name, 'success');
       go('#/');

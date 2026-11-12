@@ -100,3 +100,21 @@ export async function notifyPerson(db: Db, env: Env, input: NotificationInput): 
   void sendWecomText(db, env, input.personId, text);
   return id;
 }
+
+/** 给组织管理员发送安全告警；失败不影响主流程。 */
+export async function notifyAdmins(
+  db: Db,
+  env: Env,
+  input: { title: string; body?: string; link?: string; kind?: string },
+): Promise<void> {
+  const admins = db.prepare("SELECT id FROM persons WHERE is_admin = 1 AND status = 'active'").all() as unknown as { id: string }[];
+  for (const admin of admins) {
+    await notifyPerson(db, env, {
+      personId: admin.id,
+      kind: input.kind ?? 'security',
+      title: input.title,
+      body: input.body,
+      link: input.link,
+    });
+  }
+}

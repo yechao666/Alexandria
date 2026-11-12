@@ -32,6 +32,17 @@
 
 创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
 
+### 2FA / 密码
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/auth/2fa` | 当前账号 2FA 状态 |
+| POST | `/api/auth/2fa/setup` | 生成 TOTP 密钥与 otpauth URI |
+| POST | `/api/auth/2fa/enable` | 用 6 位动态码启用 |
+| POST | `/api/auth/2fa/disable` | 用动态码停用 |
+| POST | `/api/auth/2fa/verify` | 密码登录后的第二步验证 |
+| POST | `/api/auth/password` | 修改密码（长度/大小写/数字/符号） |
+
 ### SCIM 2.0
 
 配置 `ALEXANDRIA_SCIM_TOKEN` 后启用：`GET/POST/PATCH/DELETE /scim/v2/Users`、`GET/POST/PATCH /scim/v2/Groups`。使用 `Authorization: Bearer <token>`；删除用户执行停用（active=false）。

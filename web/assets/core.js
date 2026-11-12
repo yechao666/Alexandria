@@ -258,7 +258,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
         <div class="side-user">
           ${avatar(state.me?.person)}
           <div class="meta"><div class="name">${escapeHtml(state.me?.person?.name ?? '')}</div><div class="title">${escapeHtml(state.me?.person?.title ?? '')}</div></div>
-          <button class="icon-btn" id="logout-btn" title="退出登录" aria-label="退出登录">${icon('logout', 16)}</button>
+          <button class="icon-btn" id="security-btn" title="安全设置" aria-label="安全设置">${icon('lock', 16)}</button><button class="icon-btn" id="logout-btn" title="退出登录" aria-label="退出登录">${icon('logout', 16)}</button>
         </div>
       </aside>
       <div class="main">
@@ -277,6 +277,62 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
       </div>
     </div>
     <div class="scrim" id="scrim"></div>`;
+
+  document.getElementById('security-btn')?.addEventListener('click', async () => {
+    const openSecurity = async () => {
+      try {
+        const status = await api('/api/auth/2fa');
+        const twoFactor = status.enabled
+          ? `<div class="between"><span>两步验证</span><span class="badge jade">已启用</span></div><div class="field" style="margin-top:12px"><label>输入当前验证码以停用</label><input class="input" id="disable-2fa-code" inputmode="numeric" placeholder="6 位验证码"></div><button class="btn btn-sm" id="disable-2fa">停用两步验证</button>`
+          : `<div class="between"><span>两步验证</span><span class="badge outline">未启用</span></div><p class="small muted" style="margin-top:8px">启用后登录需要认证器动态码。</p><button class="btn btn-sm btn-primary" id="setup-2fa">${icon('key', 14)} 启用两步验证</button>`;
+        openModal({
+          title: '安全设置',
+          body: `<div class="panel" style="box-shadow:none"><div class="panel-head"><h3>账户安全</h3></div><div class="panel-body">${twoFactor}</div></div><div class="panel" style="box-shadow:none;margin-top:12px"><div class="panel-head"><h3>修改密码</h3></div><div class="panel-body"><div class="field"><label>当前密码</label><input class="input" id="current-password" type="password"></div><div class="field" style="margin-top:8px"><label>新密码（至少 10 位，含大小写、数字与符号）</label><input class="input" id="new-password" type="password"></div><button class="btn btn-sm" id="change-password" style="margin-top:10px">更新密码</button></div></div>`,
+          footer: `<button class="btn" data-close-modal>关闭</button>`,
+          onMount: (modal) => {
+            modal.querySelector('#setup-2fa')?.addEventListener('click', async () => {
+              try {
+                const setup = await api('/api/auth/2fa/setup', { method: 'POST' });
+                closeModal();
+                openModal({
+                  title: '启用两步验证',
+                  body: `<p class="small muted">把下面的密钥加入认证器（Google Authenticator / 1Password 等），然后输入 6 位验证码。</p><div class="mono" style="font-size:13px;background:var(--paper-2);padding:10px;border-radius:8px;word-break:break-all;margin:12px 0">${escapeHtml(setup.secret)}</div><div class="small faint" style="word-break:break-all">${escapeHtml(setup.otpauth)}</div><div class="field" style="margin-top:12px"><label>验证码</label><input class="input" id="enable-2fa-code" inputmode="numeric" placeholder="6 位验证码"></div>`,
+                  footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="enable-2fa">确认启用</button>`,
+                  onMount: (inner) => {
+                    inner.querySelector('#enable-2fa')?.addEventListener('click', async () => {
+                      try {
+                        await api('/api/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code: inner.querySelector('#enable-2fa-code')?.value ?? '' }) });
+                        toast('两步验证已启用', 'success');
+                        closeModal();
+                        openSecurity();
+                      } catch (error) { toast(error.message, 'error'); }
+                    });
+                  },
+                });
+              } catch (error) { toast(error.message, 'error'); }
+            });
+            modal.querySelector('#disable-2fa')?.addEventListener('click', async () => {
+              try {
+                await api('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code: modal.querySelector('#disable-2fa-code')?.value ?? '' }) });
+                toast('两步验证已停用', 'success');
+                closeModal();
+                openSecurity();
+              } catch (error) { toast(error.message, 'error'); }
+            });
+            modal.querySelector('#change-password')?.addEventListener('click', async () => {
+              try {
+                await api('/api/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword: modal.querySelector('#current-password')?.value ?? '', newPassword: modal.querySelector('#new-password')?.value ?? '' }) });
+                toast('密码已更新', 'success');
+                modal.querySelector('#current-password').value = '';
+                modal.querySelector('#new-password').value = '';
+              } catch (error) { toast(error.message, 'error'); }
+            });
+          },
+        });
+      } catch (error) { toast(error.message, 'error'); }
+    };
+    openSecurity();
+  });
 
   document.getElementById('logout-btn')?.addEventListener('click', async () => {
     try {

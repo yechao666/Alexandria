@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -67,6 +67,13 @@ export function migrate(db: Db): void {
     ip TEXT, detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at)');
+  const personColumns = db.prepare('PRAGMA table_info(persons)').all() as unknown as { name: string }[];
+  if (!personColumns.some((column) => column.name === 'totp_secret')) db.exec('ALTER TABLE persons ADD COLUMN totp_secret TEXT');
+  if (!personColumns.some((column) => column.name === 'totp_enabled')) db.exec('ALTER TABLE persons ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS login_challenges (
+    token_hash TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+  )`);
   db.exec(`CREATE TABLE IF NOT EXISTS oidc_states (
     state TEXT PRIMARY KEY, return_to TEXT NOT NULL DEFAULT '/', created_at TEXT NOT NULL, expires_at TEXT NOT NULL
   )`);

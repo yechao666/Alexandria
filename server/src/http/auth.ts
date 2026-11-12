@@ -114,7 +114,12 @@ export function requireAdmin(rc: RequestContext): Actor {
   return actor;
 }
 
-export function login(rc: RequestContext, email: string, password: string): { token: string; actor: Actor } {
+export function login(
+  rc: RequestContext,
+  email: string,
+  password: string,
+  options: { createSession?: boolean } = {},
+): { token: string; actor: Actor } {
   const row = rc.app.db
     .prepare('SELECT * FROM persons WHERE lower(email) = lower(?) AND status = ?')
     .get(email.trim(), 'active') as unknown as (Record<string, unknown> & { password_hash: string }) | undefined;
@@ -122,7 +127,7 @@ export function login(rc: RequestContext, email: string, password: string): { to
     throw errors.unauthorized('邮箱或密码不正确');
   }
   const person = personRowToPerson(row);
-  const token = createSession(rc.app.db, person.id, rc.app.env.sessionTtlHours, rc);
+  const token = options.createSession === false ? '' : createSession(rc.app.db, person.id, rc.app.env.sessionTtlHours, rc);
   return { token, actor: actorFor(rc.app.db, person) };
 }
 
