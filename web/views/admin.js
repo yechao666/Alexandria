@@ -48,18 +48,23 @@ export async function renderAdmin(tab = 'teams') {
   const wecomBody = wecom
     ? `<div class="grid grid-2">
         <div class="panel wecom-card">
-          <div class="panel-head"><h3>企业微信接入</h3><span class="badge ${wecom.configured ? 'jade' : 'ochre'}">${wecom.configured ? '已配置' : '待配置'}</span></div>
+          <div class="panel-head"><h3>企业微信接入</h3><span class="badge ${wecom.configured ? 'jade' : 'ochre'}">${wecom.configured ? '已配置' : '待配置'}</span><span class="badge ${wecom.mode === 'mock' ? 'outline' : 'plum'}">${wecom.mode === 'mock' ? 'Mock 模式' : '生产模式'}</span></div>
           <div class="panel-body">
             <p class="muted small">账号体系按“组织统一身份优先”设计：生产环境用企业微信 OAuth 登录，本地开发可接 wecom-mock。人员与团队通过 wecom_userid / wecom_dept_id 绑定。</p>
             <div class="kv" style="margin-top:12px">
               <dt>CorpID</dt><dd>${esc(wecom.corpId ?? '未配置')}</dd>
               <dt>AgentID</dt><dd>${esc(wecom.agentId ?? '未配置')}</dd>
+              <dt>回调地址</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.callbackUrl ?? '—')}</dd>
               <dt>能力</dt><dd>${wecom.capabilities.map((item) => `<span class="badge outline">${esc(item)}</span>`).join(' ')}</dd>
             </div>
             ${isAdmin ? `<form id="wecom-form" class="form-grid" style="margin-top:14px">
               ${textField({ label: 'CorpID', name: 'corpId', value: wecom.corpId ?? '' })}
               ${textField({ label: 'AgentID', name: 'agentId', value: wecom.agentId ?? '' })}
               ${textField({ label: 'Secret', name: 'secret', type: 'password', span: true, placeholder: '仅写入 meta，不回显' })}
+              ${textField({ label: 'API Base URL', name: 'baseUrl', value: wecom.baseUrl ?? '' })}
+              ${textField({ label: 'Authorize Base URL', name: 'authorizeBase', value: wecom.authorizeBase ?? '' })}
+              ${textField({ label: 'Public URL', name: 'publicUrl', value: wecom.publicUrl ?? '' })}
+              ${selectField({ label: '模式', name: 'mode', value: wecom.mode ?? 'mock', options: [{ value: 'mock', label: 'Mock（本地联调）' }, { value: 'wecom', label: '生产（企业微信）' }] })}
             </form>
             <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" id="save-wecom">保存配置</button><button class="btn btn-sm" id="sync-wecom">生成同步计划</button></div>` : ''}
           </div>
@@ -78,7 +83,7 @@ export async function renderAdmin(tab = 'teams') {
     teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
     people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>角色</th><th>状态</th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
-    wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知的适配器边界。</div></div><span class="badge outline">分阶段实现</span></div>${wecomBody}`,
+    wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
     keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>名称</th><th>前缀</th><th>范围</th><th>最近使用</th><th></th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" class="muted" style="padding:18px">还没有 API 密钥</td></tr>'}</tbody></table></div></div>
       <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>智能体接入</h3><a class="link small" href="#/agent">查看接入指南 ${icon('arrow', 13)}</a></div><div class="panel-body"><div class="endpoint"><span class="method">POST</span><code>/api/agent/search</code><span class="desc">检索知识页与文献</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/ask</code><span class="desc">带引用的知识合成</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/page</code><span class="desc">创建或更新知识页</span></div></div></div>`,
@@ -134,7 +139,20 @@ export function mountAdmin(tab = 'teams') {
         title: '企业微信同步计划（dry run）',
         wide: true,
         body: `<div class="small muted" style="margin-bottom:12px">${esc(result.note)}</div><div class="json" style="font-family:var(--mono);font-size:11px;white-space:pre-wrap;background:var(--paper-2);padding:14px;border-radius:9px;max-height:400px;overflow:auto">${esc(JSON.stringify(result.plan, null, 2))}</div>`,
-        footer: `<button class="btn btn-primary" data-close-modal>知道了</button>`,
+        footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="apply-wecom-sync">应用计划</button>`,
+        onMount: (modal) => {
+          modal.querySelector('#apply-wecom-sync')?.addEventListener('click', async () => {
+            try {
+              const applied = await api('/api/integrations/wecom/sync', { method: 'POST', body: JSON.stringify({ apply: true }) });
+              toast(`已同步：团队 ${applied.applied?.departments ?? 0}，成员 ${applied.applied?.users ?? 0}`, 'success');
+              closeModal();
+              await loadBootstrap();
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            } catch (error) {
+              toast(error.message, 'error');
+            }
+          });
+        },
       });
     } catch (error) {
       toast(error.message, 'error');

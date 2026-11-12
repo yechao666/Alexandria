@@ -24,6 +24,19 @@
 
 ## 认证
 
+### GET `/api/auth/providers`
+
+登录页探测可用的登录方式，返回 `wecom.enabled`、`mode`、`label`，不含 Secret。
+
+### GET `/api/auth/wecom/start`
+
+创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
+
+### GET `/api/auth/wecom/callback`
+
+接收 `code` / `state`，换取 access_token 与 userinfo，按 `persons.wecom_userid` 映射本地账号，写入会话 Cookie 并跳回 `returnTo`。未绑定账号跳转 `/#/login?error=wecom_unmapped`。
+
+
 ### POST `/api/auth/login`
 
 ```json
@@ -235,7 +248,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | --- | --- | --- | --- |
 | GET | `/api/integrations/wecom` | 登录 | 配置与映射状态 |
 | POST | `/api/integrations/wecom/config` | 管理员 | 保存 CorpID / AgentID / Secret |
-| POST | `/api/integrations/wecom/sync` | 管理员 | 返回 dry-run 同步计划 |
+| POST | `/api/integrations/wecom/sync` | 管理员 | 拉取通讯录；默认 dry-run，`{apply:true}` 执行绑定/建团队 |
 
 ---
 

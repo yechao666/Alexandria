@@ -11,6 +11,16 @@ export interface Env {
   host: string;
   sessionTtlHours: number;
   maxUploadBytes: number;
+  wecom: {
+    enabled: boolean;
+    baseUrl: string;
+    authorizeBase: string;
+    corpId: string;
+    agentId: string;
+    secret: string;
+    publicUrl: string;
+    mock: boolean;
+  };
   llm?: {
     baseUrl: string;
     apiKey: string;
@@ -27,6 +37,11 @@ export function loadEnv(root: string): Env {
   const dataDir = resolve(root, process.env.ALEXANDRIA_DATA_DIR ?? 'data');
   const llmBase = process.env.ALEXANDRIA_LLM_BASE_URL?.trim();
   const llmKey = process.env.ALEXANDRIA_LLM_API_KEY?.trim();
+  const port = Number(process.env.ALEXANDRIA_PORT ?? process.env.PORT ?? 4520);
+  const host = process.env.ALEXANDRIA_HOST ?? '127.0.0.1';
+  const wecomBase = (process.env.ALEXANDRIA_WECOM_BASE_URL?.trim() || 'http://127.0.0.1:4800').replace(/\/+$/, '');
+  const wecomAuthorizeBase = (process.env.ALEXANDRIA_WECOM_AUTHORIZE_BASE?.trim() || wecomBase).replace(/\/+$/, '');
+  const wecomPublicUrl = (process.env.ALEXANDRIA_PUBLIC_URL?.trim() || `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}`).replace(/\/+$/, '');
   return {
     root,
     dataDir,
@@ -34,10 +49,20 @@ export function loadEnv(root: string): Env {
     uploadsDir: process.env.ALEXANDRIA_UPLOADS_DIR?.trim() || join(dataDir, 'uploads'),
     thumbnailsDir: process.env.ALEXANDRIA_THUMBS_DIR?.trim() || join(dataDir, 'thumbnails'),
     webDir: process.env.ALEXANDRIA_WEB_DIR?.trim() || join(root, 'web'),
-    port: Number(process.env.ALEXANDRIA_PORT ?? process.env.PORT ?? 4520),
-    host: process.env.ALEXANDRIA_HOST ?? '127.0.0.1',
+    port,
+    host,
     sessionTtlHours: Number(process.env.ALEXANDRIA_SESSION_TTL_HOURS ?? 24 * 14),
     maxUploadBytes: Number(process.env.ALEXANDRIA_MAX_UPLOAD_MB ?? 80) * 1024 * 1024,
+    wecom: {
+      enabled: bool(process.env.ALEXANDRIA_WECOM_ENABLED ?? 'true'),
+      baseUrl: wecomBase,
+      authorizeBase: wecomAuthorizeBase,
+      corpId: process.env.ALEXANDRIA_WECOM_CORP_ID?.trim() || 'wwmockcorp',
+      agentId: process.env.ALEXANDRIA_WECOM_AGENT_ID?.trim() || '1000002',
+      secret: process.env.ALEXANDRIA_WECOM_SECRET?.trim() || 'mock-secret',
+      publicUrl: wecomPublicUrl,
+      mock: process.env.ALEXANDRIA_WECOM_MODE === 'mock' || wecomBase.includes('127.0.0.1:4800') || wecomBase.includes('localhost:4800'),
+    },
     llm:
       llmBase && llmKey
         ? {

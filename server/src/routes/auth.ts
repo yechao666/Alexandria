@@ -7,6 +7,7 @@ import { visibleLibraries } from '../domain/access.ts';
 import { parseJson } from '../lib/ids.ts';
 import { libraryCounts, nodeTree, serializeLibrary, teamTree } from './helpers.ts';
 import { reviewSummary } from './review.ts';
+import { getWecomConfig, wecomConfigured } from '../domain/wecom.ts';
 import type { LibraryRow, PageRow } from '../types.ts';
 
 export function mePayload(rc: RequestContext) {
@@ -138,7 +139,7 @@ export function registerAuthRoutes(router: Router): void {
       classes: classDistribution,
       features: {
         llm: Boolean(rc.app.env.llm),
-        wecom: Boolean(rc.app.db.prepare("SELECT 1 FROM meta WHERE key = 'wecom_corp_id'").get()),
+        wecom: wecomConfigured(getWecomConfig(rc.app.db, rc.app.env)),
         ocr: true,
       },
     });

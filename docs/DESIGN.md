@@ -283,7 +283,7 @@ queryTokens
 
 ## 10. 企业微信（分阶段）
 
-### 9.1 设计
+### 10.1 设计
 
 ```text
 WeCom OAuth / 通讯录
@@ -293,19 +293,22 @@ WeCom OAuth / 通讯录
   → 登录会话 / 团队同步 / 机器人通知
 ```
 
-### 9.2 当前实现
+### 10.2 当前实现
 
-- `teams.wecom_dept_id`、`persons.wecom_userid` 字段；
-- 管理员配置 CorpID / AgentID / Secret（存 meta，Secret 不回显）；
-- `GET /api/integrations/wecom` 返回映射状态；
-- `POST /api/integrations/wecom/sync` 返回部门/成员的 dry-run 计划（create/update/link/invite）。
+- Mock OAuth 登录：`GET /api/auth/wecom/start` → Mock 授权页 → `GET /api/auth/wecom/callback` → 按 `wecom_userid` 映射 `persons` → 建立会话；
+- 登录页自动探测 `/api/auth/providers`，显示「企业微信登录（Mock）」；
+- `wecom_auth_states` 保存 state 与 returnTo（10 分钟有效）；
+- 管理员配置 CorpID / AgentID / Secret / Base URL / Authorize Base / Public URL（Secret 不回显）；
+- `GET /api/integrations/wecom` 返回映射与回调地址；
+- `POST /api/integrations/wecom/sync` 调 QYAPI 拉取部门与成员，生成 dry-run 计划；`{ apply: true }` 执行绑定/建团队；
+- 本地默认连接 [wecom-mock](../wecom-mock)，生产切换 `ALEXANDRIA_WECOM_MODE=wecom`。
 
-### 9.3 待接入
+### 10.3 待接入
 
-- OAuth 授权码换 token、拉取 userinfo；
-- 通讯录全量/增量同步与冲突处理；
-- 机器人消息 → 知识库入口（检索/编译结果通知）；
-- 本地 `wecom-mock` 联调。
+- 企业微信机器人消息 → 知识库入口（检索/编译结果通知）；
+- 通讯录增量同步、离职停用与冲突处理；
+- 真实组织字段（职位、上级、部门负责人）的细粒度映射；
+- 多组织/多 CorpID 隔离。
 
 ---
 

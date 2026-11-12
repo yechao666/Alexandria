@@ -34,6 +34,9 @@ export const errors = {
   payloadTooLarge(message = '文件超过大小限制'): HttpError {
     return new HttpError(413, 'PAYLOAD_TOO_LARGE', message);
   },
+  serviceUnavailable(message = '服务暂不可用'): HttpError {
+    return new HttpError(503, 'SERVICE_UNAVAILABLE', message);
+  },
   unsupported(message = '不支持的文件格式'): HttpError {
     return new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', message);
   },

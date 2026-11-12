@@ -63,7 +63,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记 |
 | **校对台** | 草稿/退回/矛盾队列；批准、要求修改、撤回校对、逐条裁决主张 |
-| **企业微信** | 组织/人员映射骨架与 dry-run 同步计划，预留真实 OAuth/通讯录接入 |
+| **企业微信** | 已接 Mock OAuth 登录与通讯录同步；生产可切换 QYAPI/授权域名 |
 
 ### 知识编译 vs 查询期 RAG
 
@@ -176,16 +176,26 @@ curl -s http://127.0.0.1:4520/api/agent/search \
 
 完整接口见 [docs/API.md](docs/API.md)，工作流见 [skills/alexandria/SKILL.md](skills/alexandria/SKILL.md)。
 
-## 企业微信（分阶段）
+## 企业微信
 
-当前版本已实现组织映射骨架：
+已实现 Mock OAuth 登录与通讯录同步：
+
+```bash
+# 1. 启动本地企业微信 Mock
+cd ../wecom-mock && npm start        # http://127.0.0.1:4800
+
+# 2. 启动 Alexandria
+cd ../alexandria && node server/src/main.ts
+```
+
+登录页点击「企业微信登录（Mock）」，在 Mock 授权页选择员工，回调后会按 `wecom_userid` 映射到本地账号并建立会话。
 
 - 团队 `wecom_dept_id`、成员 `wecom_userid` 字段；
-- 管理员可保存 CorpID / AgentID / Secret；
-- `POST /api/integrations/wecom/sync` 返回部门/成员的 dry-run 差异计划；
-- 本地可对接同工作区的 [wecom-mock](../wecom-mock)。
+- 管理员可在「团队与权限 → 企业微信」保存 CorpID / AgentID / Secret / API 地址 / 回调地址；
+- `POST /api/integrations/wecom/sync` 拉取部门与成员并生成差异计划，`{ apply: true }` 执行绑定/建团队；
+- 生产环境切换 `ALEXANDRIA_WECOM_MODE=wecom`，把 Base URL 指向 `https://qyapi.weixin.qq.com`、授权地址指向 `https://open.weixin.qq.com`，并把 `ALEXANDRIA_PUBLIC_URL` 配成企业微信可访问的地址。
 
-下一阶段接入真实 OAuth 登录、通讯录同步与机器人通知，复用同一映射结构。设计见 [docs/DESIGN.md](docs/DESIGN.md)。
+机器人通知仍是下一阶段：当前已预留 `capabilities` 与消息接口边界。
 
 ## 设计文档
 

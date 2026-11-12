@@ -6,6 +6,7 @@ import { newId, nowIso, slugify } from '../lib/ids.ts';
 import { teamTree } from './helpers.ts';
 import { audit } from '../domain/audit.ts';
 import type { Person } from '../types.ts';
+import { getWecomConfig, wecomConfigured, wecomAccessToken, wecomDepartments, wecomUsers } from '../domain/wecom.ts';
 
 function personView(person: Record<string, unknown>): Person & { isAdmin: boolean; status: string } {
   return {
@@ -228,11 +229,10 @@ export function registerAdminRoutes(router: Router): void {
     rc.json({ ok: true });
   });
 
-  // 企业微信：当前提供组织映射与同步骨架，真实 corpId/secret 通过环境变量或管理员配置注入。
+  // 企业微信：OAuth 登录、部门/成员同步；本地默认指向 wecom-mock。
   router.get('/api/integrations/wecom', (rc) => {
     requireActor(rc);
-    const get = (key: string) =>
-      (rc.app.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as unknown as { value: string } | undefined)?.value ?? null;
+    const config = getWecomConfig(rc.app.db, rc.app.env);
     const teams = rc.app.db
       .prepare('SELECT id, name, slug, wecom_dept_id FROM teams ORDER BY name')
       .all() as unknown as { id: string; name: string; slug: string; wecom_dept_id: string | null }[];
@@ -240,13 +240,21 @@ export function registerAdminRoutes(router: Router): void {
       .prepare("SELECT id, name, email, wecom_userid FROM persons WHERE status = 'active' ORDER BY name")
       .all();
     rc.json({
-      configured: Boolean(get('wecom_corp_id') && get('wecom_secret')),
-      corpId: get('wecom_corp_id'),
-      agentId: get('wecom_agent_id'),
+      enabled: config.enabled,
+      configured: wecomConfigured(config),
+      mode: config.mock ? 'mock' : 'wecom',
+      corpId: config.corpId,
+      agentId: config.agentId,
+      baseUrl: config.baseUrl,
+      authorizeBase: config.authorizeBase,
+      publicUrl: config.publicUrl,
+      callbackUrl: `${config.publicUrl}/api/auth/wecom/callback`,
       teams,
       persons,
       capabilities: ['oauth-login', 'department-sync', 'user-sync', 'bot-notify'],
-      note: '企业微信接入按适配器设计：本地可用 wecom-mock，生产填入 CorpID/Secret 后同步部门与成员。',
+      note: config.mock
+        ? '当前为本地 Mock 模式：启动 wecom-mock 后可使用企业微信登录与通讯录同步。'
+        : '生产模式：请确保回调地址可从企业微信侧访问。',
     });
   });
 
@@ -259,35 +267,131 @@ export function registerAdminRoutes(router: Router): void {
         .run(key, String(value ?? ''));
     };
     if (body.corpId !== undefined) put('wecom_corp_id', body.corpId);
-    if (body.secret !== undefined) put('wecom_secret', body.secret);
+    if (body.secret !== undefined && String(body.secret).trim()) put('wecom_secret', body.secret);
     if (body.agentId !== undefined) put('wecom_agent_id', body.agentId);
-    audit(rc.app.db, { actor, action: 'wecom.config', targetType: 'integration', targetId: 'wecom', detail: { keys: Object.keys(body) } });
+    if (body.baseUrl !== undefined) put('wecom_base_url', body.baseUrl);
+    if (body.authorizeBase !== undefined) put('wecom_authorize_base', body.authorizeBase);
+    if (body.publicUrl !== undefined) put('wecom_public_url', body.publicUrl);
+    if (body.mode !== undefined) put('wecom_mode', body.mode);
+    if (body.enabled !== undefined) put('wecom_enabled', body.enabled ? '1' : '0');
+    audit(rc.app.db, {
+      actor,
+      action: 'wecom.config',
+      targetType: 'integration',
+      targetId: 'wecom',
+      detail: { keys: Object.keys(body), mode: body.mode ?? null },
+    });
     rc.json({ ok: true });
   });
 
-  router.post('/api/integrations/wecom/sync', (rc) => {
+  router.post('/api/integrations/wecom/sync', async (rc) => {
     const actor = requireAdmin(rc);
-    const teams = rc.app.db
-      .prepare('SELECT id, name, wecom_dept_id FROM teams')
-      .all() as unknown as { id: string; name: string; wecom_dept_id: string | null }[];
+    const body = await rc.body<{ apply?: boolean }>();
+    const apply = body.apply === true;
+    const config = getWecomConfig(rc.app.db, rc.app.env);
+    if (!wecomConfigured(config)) {
+      throw errors.serviceUnavailable('企业微信尚未配置 CorpID / Secret');
+    }
+
+    let token = '';
+    let departments;
+    let users;
+    try {
+      token = await wecomAccessToken(config);
+      departments = await wecomDepartments(config, token);
+      users = await wecomUsers(config, token, departments);
+    } catch (error) {
+      throw errors.serviceUnavailable(`无法读取企业微信通讯录：${(error as Error).message}`);
+    }
+
+    const teams = rc.app.db.prepare('SELECT id, name, wecom_dept_id FROM teams').all() as unknown as {
+      id: string;
+      name: string;
+      wecom_dept_id: string | null;
+    }[];
     const persons = rc.app.db
-      .prepare("SELECT id, name, wecom_userid FROM persons WHERE status = 'active'")
-      .all() as unknown as { id: string; name: string; wecom_userid: string | null }[];
-    const plan = {
-      departments: teams.map((team) => ({
-        teamId: team.id,
-        name: team.name,
-        wecomDeptId: team.wecom_dept_id,
-        action: team.wecom_dept_id ? 'update' : 'create',
-      })),
-      users: persons.map((person) => ({
-        personId: person.id,
-        name: person.name,
-        wecomUserid: person.wecom_userid,
-        action: person.wecom_userid ? 'link' : 'invite',
-      })),
-    };
-    audit(rc.app.db, { actor, action: 'wecom.sync.plan', targetType: 'integration', targetId: 'wecom', detail: { departments: plan.departments.length, users: plan.users.length } });
-    rc.json({ ok: true, dryRun: true, plan, note: '尚未配置真实企业微信凭据；此接口返回可执行的差异计划，接入后复用同一结构执行。' });
+      .prepare("SELECT id, name, email, wecom_userid FROM persons WHERE status = 'active'")
+      .all() as unknown as { id: string; name: string; email: string; wecom_userid: string | null }[];
+
+    const departmentPlan = departments.map((department) => {
+      const matched = teams.find((team) => team.wecom_dept_id === String(department.id));
+      const parent = department.parentid
+        ? departments.find((item) => item.id === department.parentid)
+        : undefined;
+      const localParent = parent ? teams.find((team) => team.wecom_dept_id === String(parent.id)) : undefined;
+      return {
+        wecomDeptId: String(department.id),
+        name: department.name,
+        action: matched ? 'bind' : 'create',
+        teamId: matched?.id ?? null,
+        parentWecomDeptId: parent ? String(parent.id) : null,
+        parentTeamId: localParent?.id ?? null,
+      };
+    });
+
+    const userPlan = users.map((user) => {
+      const byWecom = persons.find((person) => person.wecom_userid?.toLowerCase() === user.userid.toLowerCase());
+      if (byWecom) return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'synced', personId: byWecom.id };
+      const byEmail = user.email
+        ? persons.find((person) => person.email.toLowerCase() === user.email!.toLowerCase())
+        : undefined;
+      if (byEmail) return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'link-by-email', personId: byEmail.id };
+      const byName = persons.find((person) => person.name === user.name);
+      if (byName) return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'link-by-name', personId: byName.id };
+      return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'invite', personId: null };
+    });
+
+    const applied = { departments: 0, users: 0 };
+    if (apply) {
+      for (const item of departmentPlan) {
+        if (item.action === 'bind' && item.teamId) {
+          applied.departments += 1;
+          continue;
+        }
+        const existing = teams.find((team) => team.wecom_dept_id === item.wecomDeptId);
+        if (existing) continue;
+        const id = newId('team');
+        const slug = `wecom-dept-${item.wecomDeptId}`;
+        const collision = rc.app.db.prepare('SELECT 1 FROM teams WHERE slug = ?').get(slug);
+        const finalSlug = collision ? `${slug}-${id.slice(-4)}` : slug;
+        rc.app.db
+          .prepare(
+            'INSERT INTO teams (id, name, slug, parent_id, description, lead_person_id, wecom_dept_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)',
+          )
+          .run(
+            id,
+            item.name,
+            finalSlug,
+            item.parentTeamId ?? null,
+            '由企业微信通讯录同步',
+            item.wecomDeptId,
+            500,
+            nowIso(),
+          );
+        applied.departments += 1;
+      }
+      for (const item of userPlan) {
+        if (!item.personId || item.action === 'synced') continue;
+        rc.app.db.prepare('UPDATE persons SET wecom_userid = ? WHERE id = ?').run(item.wecomUserid, item.personId);
+        applied.users += 1;
+      }
+    }
+
+    audit(rc.app.db, {
+      actor,
+      action: apply ? 'wecom.sync.apply' : 'wecom.sync.plan',
+      targetType: 'integration',
+      targetId: 'wecom',
+      detail: { apply, departments: departmentPlan.length, users: userPlan.length, applied },
+    });
+    rc.json({
+      ok: true,
+      dryRun: !apply,
+      mode: config.mock ? 'mock' : 'wecom',
+      plan: { departments: departmentPlan, users: userPlan },
+      applied,
+      note: apply ? '已按计划写入本地绑定。' : '未写入；传 apply=true 执行绑定/创建。',
+    });
   });
+
 }

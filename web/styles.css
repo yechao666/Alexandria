@@ -610,3 +610,6 @@ p { margin: 0 0 12px; }
   .review-card { grid-template-columns: 1fr; }
   .review-side { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 12px; flex-direction: row; flex-wrap: wrap; align-items: center; }
 }
+
+.login-divider { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 10px; letter-spacing: .14em; margin-bottom: 12px; }
+.login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }

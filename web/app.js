@@ -53,6 +53,16 @@ async function boot() {
 
 function showLogin() {
   state.me = null;
+  const { query } = parseHash();
+  const errorCode = query.get('error') ?? '';
+  const errorMessages = {
+    wecom_unavailable: '企业微信登录未启用或尚未配置。',
+    wecom_state: '企业微信登录状态已过期，请重新发起。',
+    wecom_denied: '你取消了企业微信授权。',
+    wecom_api: '企业微信接口不可用。本地联调请先启动 wecom-mock。',
+    wecom_unmapped: '该企业微信账号尚未绑定本地成员，请联系管理员完成绑定。',
+  };
+  const loginError = errorMessages[errorCode] ?? '';
   app.innerHTML = `
     <div class="login-shell">
       <aside class="login-aside">
@@ -76,9 +86,10 @@ function showLogin() {
           <form class="login-form" id="login-form">
             <div class="field"><label>邮箱</label><input class="input" name="email" type="email" value="lin@alex.dev" autocomplete="username" required></div>
             <div class="field"><label>密码</label><input class="input" name="password" type="password" value="alex-demo" autocomplete="current-password" required></div>
-            <div class="login-error" id="login-error"></div>
+            <div class="login-error" id="login-error">${esc(loginError)}</div>
             <button class="btn btn-primary" type="submit" style="justify-content:center;padding:11px">${icon('arrow', 15)} 登录</button>
           </form>
+          <div id="wecom-login-slot" style="margin-top:18px"></div>
           <div class="demo-users">
             <div class="title">演示账号</div>
             ${DEMO_USERS.map(
@@ -104,6 +115,14 @@ function showLogin() {
       errorNode.textContent = error.message;
     }
   });
+  fetch('/api/auth/providers')
+    .then((response) => response.json())
+    .then((providers) => {
+      const slot = document.getElementById('wecom-login-slot');
+      if (!slot || !providers?.wecom?.enabled) return;
+      slot.innerHTML = `<div class="login-divider"><span>或</span></div><a class="btn" href="/api/auth/wecom/start?returnTo=%2F%23%2F" style="width:100%;justify-content:center;padding:10px">${icon('key', 15)} ${esc(providers.wecom.label)}</a><div class="small faint" style="margin-top:8px;text-align:center">Mock 身份将映射到已绑定的本地账号</div>`;
+    })
+    .catch(() => {});
   document.querySelectorAll('.demo-row').forEach((row) => {
     row.addEventListener('click', () => {
       form.email.value = row.dataset.email;

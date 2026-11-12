@@ -22,13 +22,14 @@ interface PersonSeed {
   title: string;
   color: string;
   admin?: boolean;
+  wecom?: string;
 }
 
 const PERSONS: PersonSeed[] = [
-  { id: 'usr_lin', email: 'lin@alex.dev', name: '林知远', title: '知识运营负责人', color: 'clay', admin: true },
-  { id: 'usr_shen', email: 'shen@alex.dev', name: '沈书言', title: '知识策展人', color: 'jade' },
-  { id: 'usr_zhou', email: 'zhou@alex.dev', name: '周砚', title: '平台工程师', color: 'indigo' },
-  { id: 'usr_su', email: 'su@alex.dev', name: '苏禾', title: '产品经理', color: 'ochre' },
+  { id: 'usr_lin', email: 'lin@alex.dev', name: '林知远', title: '知识运营负责人', color: 'clay', admin: true, wecom: 'LinWei' },
+  { id: 'usr_shen', email: 'shen@alex.dev', name: '沈书言', title: '知识策展人', color: 'jade', wecom: 'SuYan' },
+  { id: 'usr_zhou', email: 'zhou@alex.dev', name: '周砚', title: '平台工程师', color: 'indigo', wecom: 'YeChao' },
+  { id: 'usr_su', email: 'su@alex.dev', name: '苏禾', title: '产品经理', color: 'ochre', wecom: 'ChenHao' },
   { id: 'usr_chen', email: 'chen@alex.dev', name: '陈屿', title: '市场分析师', color: 'plum' },
   { id: 'usr_guest', email: 'guest@alex.dev', name: '访客', title: '只读成员', color: 'slate' },
   { id: 'usr_agent', email: 'agent@alex.dev', name: 'DSH 编译智能体', title: '服务账号', color: 'teal' },
@@ -36,8 +37,8 @@ const PERSONS: PersonSeed[] = [
 
 const TEAMS = [
   { id: 'team_hq', name: '总部', slug: 'hq', parent: null, desc: '组织管理与战略', lead: 'usr_lin' },
-  { id: 'team_eng', name: '研发中心', slug: 'engineering', parent: 'team_hq', desc: '平台、文档流水线与基础设施', lead: 'usr_zhou' },
-  { id: 'team_product', name: '产品设计部', slug: 'product', parent: 'team_hq', desc: '产品策略、用户研究与体验', lead: 'usr_su' },
+  { id: 'team_eng', name: '研发中心', slug: 'engineering', parent: 'team_hq', desc: '平台、文档流水线与基础设施', lead: 'usr_zhou', wecom: '1' },
+  { id: 'team_product', name: '产品设计部', slug: 'product', parent: 'team_hq', desc: '产品策略、用户研究与体验', lead: 'usr_su', wecom: '2' },
   { id: 'team_market', name: '市场部', slug: 'market', parent: 'team_hq', desc: '市场洞察与竞争分析', lead: 'usr_chen' },
   { id: 'team_knowledge', name: '知识运营组', slug: 'knowledge-ops', parent: 'team_eng', desc: '知识治理、编译质量与本体维护', lead: 'usr_shen' },
 ];
@@ -910,16 +911,16 @@ export function seedDatabase(db: Db, env: Env): void {
   const passwordHash = hashPassword(DEMO_PASSWORD);
   for (const person of PERSONS) {
     db.prepare(
-      `INSERT INTO persons (id, email, name, title, avatar_color, is_admin, password_hash, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
-    ).run(person.id, person.email, person.name, person.title, person.color, person.admin ? 1 : 0, passwordHash, now);
+      `INSERT INTO persons (id, email, name, title, avatar_color, is_admin, password_hash, wecom_userid, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+    ).run(person.id, person.email, person.name, person.title, person.color, person.admin ? 1 : 0, passwordHash, person.wecom ?? null, now);
   }
 
   for (const [index, team] of TEAMS.entries()) {
     db.prepare(
       `INSERT INTO teams (id, name, slug, parent_id, description, lead_person_id, wecom_dept_id, sort_order, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(team.id, team.name, team.slug, team.parent, team.desc, team.lead, `ww_${team.slug}`, (index + 1) * 10, now);
+    ).run(team.id, team.name, team.slug, team.parent, team.desc, team.lead, team.wecom ?? null, (index + 1) * 10, now);
   }
 
   const memberships: [string, string, string][] = [
