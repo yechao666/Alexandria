@@ -78,7 +78,7 @@ function showLogin() {
           <p class="caption">在资料入库时阅读、拆页、抽取主张、维护本体关联；查询时沿着已经写好的路径导航。为团队与智能体共同维护的知识而设计。</p>
           <div class="login-meta"><span>分库与目录</span><span>本体类型</span><span>团队权限</span><span>文档 + OCR</span><span>DSH 智能体</span></div>
         </div>
-        <div class="small faint">Alexandria · 0.1 · 本地优先，零外部服务依赖</div>
+        <div class="small faint">Alexandria · 0.1 · 本地优先 · 本机 DSH · 组织级权限</div>
       </aside>
       <main class="login-main">
         <div class="login-card">
