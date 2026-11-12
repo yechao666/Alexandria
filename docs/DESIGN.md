@@ -312,11 +312,12 @@ WeCom OAuth / 通讯录
 - `GET /api/integrations/wecom` 返回映射与回调地址；
 - `POST /api/integrations/wecom/sync` 调 QYAPI 拉取部门与成员，生成 dry-run 计划；`{ apply: true }` 执行绑定/建团队；
 - 本地默认连接 [wecom-mock](../wecom-mock)，生产切换 `ALEXANDRIA_WECOM_MODE=wecom`；
-- 校对与评论通知会通过 `message/send` 推送应用消息（模板文本，失败不阻塞）。
+- 校对与评论通知会通过 `message/send` 推送应用消息（模板文本，失败不阻塞）；
+- JSON 机器人回调 `POST /api/integrations/wecom/im`：按 `senderWecomId` 映射成员，执行 `/ask`、`/search` 或自然语言问答，返回带引用回复；生产需补企微加密 XML 回调。
 
 ### 10.3 待接入
 
-- 企业微信机器人消息 → 知识库入口（检索/编译结果通知）；
+- 企业微信机器人加密 XML 回调（当前 JSON Mock 回调已接入）；
 - 通讯录增量同步、离职停用与冲突处理；
 - 真实组织字段（职位、上级、部门负责人）的细粒度映射；
 - 多组织/多 CorpID 隔离。

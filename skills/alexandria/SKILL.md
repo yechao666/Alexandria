@@ -156,6 +156,7 @@ curl -s $ALEXANDRIA_URL/api/agent/page \
 | 单页 Markdown | `GET /api/pages/:id/markdown` |
 | 整库 Markdown | `GET /api/libraries/:id/export.md` |
 | 工具清单 | `GET /api/agent/manifest` |
+| 企业微信问答 | `POST /api/integrations/wecom/im`（Mock JSON 回调） |
 
 ## 8. 结束条件
 

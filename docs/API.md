@@ -32,6 +32,10 @@
 
 创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
 
+### POST `/api/integrations/wecom/im`
+
+WeCom Mock / 内网 JSON 回调入口：`{senderWecomId, senderName?, text, chatId?}`。按 `wecom_userid` 映射成员，支持 `/ask`、`/search`、`/help`，返回 `{reply, citations?, link?}`。生产环境应使用企微加密 XML 回调。
+
 ### GET `/api/auth/wecom/callback`
 
 接收 `code` / `state`，换取 access_token 与 userinfo，按 `persons.wecom_userid` 映射本地账号，写入会话 Cookie 并跳回 `returnTo`。未绑定账号跳转 `/#/login?error=wecom_unmapped`。

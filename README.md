@@ -200,7 +200,7 @@ cd ../alexandria && node server/src/main.ts
 - `POST /api/integrations/wecom/sync` 拉取部门与成员并生成差异计划，`{ apply: true }` 执行绑定/建团队；
 - 生产环境切换 `ALEXANDRIA_WECOM_MODE=wecom`，把 Base URL 指向 `https://qyapi.weixin.qq.com`、授权地址指向 `https://open.weixin.qq.com`，并把 `ALEXANDRIA_PUBLIC_URL` 配成企业微信可访问的地址。
 
-企业微信应用消息通知已接入；机器人会话入口（向机器人提问并回写知识）仍是下一阶段。
+企业微信应用消息通知已接入；JSON 机器人回调也已接入，可在 Mock 聊天中直接提问知识库。
 
 ## 设计文档
 
@@ -230,6 +230,17 @@ cd ../alexandria && node server/src/main.ts
 
 ![页面评论](docs/screenshots/16-comments.png)
 
+### 企业微信机器人问答（Mock JSON 回调）
+
+1. 在 wecom-mock Dashboard 把回调模式设为 JSON，回调地址填 `http://127.0.0.1:4520/api/integrations/wecom/im`。
+2. 在 Mock 聊天页与「应用机器人」单聊，发送：
+   - `知识编译是什么？`（默认 `/ask`）
+   - `/search 本体论`
+   - `/help`
+3. Alexandria 会按 `senderWecomId` 映射本地成员，按该成员权限检索已编译知识，返回带引用的回答。
+
+> 生产环境应使用企业微信加密 XML 回调；JSON 回调用于本地 Mock 与内网联调。
+
 ## 校对流程
 
 ```text
@@ -254,7 +265,7 @@ cd ../alexandria && node server/src/main.ts
 
 1. 扫描 PDF 页面渲染 OCR、图片版面分析、表格结构恢复。
 2. 附件在线预览、评论 @ 提醒、知识页责任人轮值。
-3. 企业微信机器人会话入口与通讯录增量同步。
+3. 企业微信加密 XML 回调、通讯录增量同步与离职停用。
 4. 跨库受控引用与知识联邦检索。
 5. 编译质量评测集：引用准确率、矛盾关闭率、孤儿页比例。
 6. 可选 LLM 编译增强（需保留来源锚点与人工验收）。

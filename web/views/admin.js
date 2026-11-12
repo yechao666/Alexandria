@@ -54,7 +54,8 @@ export async function renderAdmin(tab = 'teams') {
             <div class="kv" style="margin-top:12px">
               <dt>CorpID</dt><dd>${esc(wecom.corpId ?? '未配置')}</dd>
               <dt>AgentID</dt><dd>${esc(wecom.agentId ?? '未配置')}</dd>
-              <dt>回调地址</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.callbackUrl ?? '—')}</dd>
+              <dt>OAuth 回调</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.callbackUrl ?? '—')}</dd>
+              <dt>机器人回调</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.imCallbackUrl ?? '—')}</dd>
               <dt>能力</dt><dd>${wecom.capabilities.map((item) => `<span class="badge outline">${esc(item)}</span>`).join(' ')}</dd>
             </div>
             ${isAdmin ? `<form id="wecom-form" class="form-grid" style="margin-top:14px">

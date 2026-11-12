@@ -250,6 +250,7 @@ export function registerAdminRoutes(router: Router): void {
       authorizeBase: config.authorizeBase,
       publicUrl: config.publicUrl,
       callbackUrl: `${config.publicUrl}/api/auth/wecom/callback`,
+      imCallbackUrl: `${config.publicUrl}/api/integrations/wecom/im`,
       teams,
       persons,
       capabilities: ['oauth-login', 'department-sync', 'user-sync', 'bot-notify'],
