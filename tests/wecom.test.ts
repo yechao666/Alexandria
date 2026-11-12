@@ -85,4 +85,28 @@ test('管理员可以读取通讯录并生成/应用同步计划', async () => {
   assert.equal(applied.status, 200);
   assert.equal(result.dryRun, false);
   assert.ok(result.applied);
+
+  const runs = await fetch(`${base}/api/integrations/wecom/sync-runs`, { headers: { authorization: `Bearer ${token}` } });
+  const runData = (await runs.json()) as { runs: unknown[] };
+  assert.ok(runData.runs.length >= 1);
+});
+
+test('apply 时可以停用通讯录中不存在的已绑定成员', async () => {
+  const { token } = await login(base, 'lin@alex.dev');
+  ctx.db
+    .prepare(
+      "INSERT INTO persons (id, email, name, title, avatar_color, is_admin, password_hash, wecom_userid, status, created_at) VALUES ('usr_ghost', 'ghost@alex.dev', '离职测试', '', 'slate', 0, 'x', 'Ghost', 'active', ?)",
+    )
+    .run(new Date().toISOString());
+  const response = await fetch(`${base}/api/integrations/wecom/sync`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ apply: true, deactivateMissing: true }),
+  });
+  const data = (await response.json()) as { applied: { deactivated: number }; plan: { deactivate: { action: string }[] } };
+  assert.equal(response.status, 200);
+  assert.ok(data.plan.deactivate.some((item) => item.action === 'deactivate'));
+  assert.ok(data.applied.deactivated >= 1);
+  const ghost = ctx.db.prepare("SELECT status FROM persons WHERE id = 'usr_ghost'").get() as unknown as { status: string };
+  assert.equal(ghost.status, 'inactive');
 });

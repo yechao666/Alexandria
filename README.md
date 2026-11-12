@@ -197,7 +197,8 @@ cd ../alexandria && node server/src/main.ts
 
 - 团队 `wecom_dept_id`、成员 `wecom_userid` 字段；
 - 管理员可在「团队与权限 → 企业微信」保存 CorpID / AgentID / Secret / API 地址 / 回调地址；
-- `POST /api/integrations/wecom/sync` 拉取部门与成员并生成差异计划，`{ apply: true }` 执行绑定/建团队；
+- `POST /api/integrations/wecom/sync` 拉取部门与成员并生成差异计划；`{ apply: true }` 执行绑定/建团队，`deactivateMissing: true` 停用通讯录中不存在的已绑定成员（管理员跳过）；
+- 同步记录写入 `wecom_sync_runs`，管理端展示最近 5 次；部门 leader 映射到本地团队负责人（若企微返回）；
 - 生产环境切换 `ALEXANDRIA_WECOM_MODE=wecom`，把 Base URL 指向 `https://qyapi.weixin.qq.com`、授权地址指向 `https://open.weixin.qq.com`，并把 `ALEXANDRIA_PUBLIC_URL` 配成企业微信可访问的地址。
 
 企业微信应用消息通知已接入；JSON 机器人回调也已接入，可在 Mock 聊天中直接提问知识库。

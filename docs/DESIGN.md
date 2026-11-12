@@ -110,6 +110,7 @@
 | `page_properties` | key, value | 页面属性值 |
 | `comments` | page_id, author_id, body, status, resolved_by | 页面评论与解决状态 |
 | `notifications` | person_id, kind, title, link, read_at | 站内通知 |
+| `wecom_sync_runs` | mode, dry_run, counts, applied, detail | 企微同步历史 |
 | `audit_events` | action, target, actor, detail | 审计 |
 
 ### 4.4 派生索引
@@ -310,7 +311,8 @@ WeCom OAuth / 通讯录
 - `wecom_auth_states` 保存 state 与 returnTo（10 分钟有效）；
 - 管理员配置 CorpID / AgentID / Secret / Base URL / Authorize Base / Public URL（Secret 不回显）；
 - `GET /api/integrations/wecom` 返回映射与回调地址；
-- `POST /api/integrations/wecom/sync` 调 QYAPI 拉取部门与成员，生成 dry-run 计划；`{ apply: true }` 执行绑定/建团队；
+- `POST /api/integrations/wecom/sync` 调 QYAPI 拉取部门与成员，生成 dry-run 计划；`{ apply: true }` 执行绑定/建团队；`deactivateMissing: true` 停用已离职成员，部门 leader 可映射团队负责人；
+- 每次同步写入 `wecom_sync_runs`，管理端展示历史；
 - 本地默认连接 [wecom-mock](../wecom-mock)，生产切换 `ALEXANDRIA_WECOM_MODE=wecom`；
 - 校对与评论通知会通过 `message/send` 推送应用消息（模板文本，失败不阻塞）；
 - JSON 机器人回调 `POST /api/integrations/wecom/im`：按 `senderWecomId` 映射成员，执行 `/ask`、`/search` 或自然语言问答，返回带引用回复；
@@ -320,7 +322,7 @@ WeCom OAuth / 通讯录
 ### 10.3 待接入
 
 - 通讯录增量同步、离职停用与部门负责人映射；
-- 通讯录增量同步、离职停用与冲突处理；
+- 通讯录增量同步、离职停用与部门负责人映射（`deactivateMissing` 已支持，管理员账号跳过）；
 - 真实组织字段（职位、上级、部门负责人）的细粒度映射；
 - 多组织/多 CorpID 隔离。
 

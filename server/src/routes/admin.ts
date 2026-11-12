@@ -293,8 +293,9 @@ export function registerAdminRoutes(router: Router): void {
 
   router.post('/api/integrations/wecom/sync', async (rc) => {
     const actor = requireAdmin(rc);
-    const body = await rc.body<{ apply?: boolean }>();
+    const body = await rc.body<{ apply?: boolean; deactivateMissing?: boolean }>();
     const apply = body.apply === true;
+    const deactivateMissing = body.deactivateMissing === true;
     const config = getWecomConfig(rc.app.db, rc.app.env);
     if (!wecomConfigured(config)) {
       throw errors.serviceUnavailable('企业微信尚未配置 CorpID / Secret');
@@ -317,8 +318,15 @@ export function registerAdminRoutes(router: Router): void {
       wecom_dept_id: string | null;
     }[];
     const persons = rc.app.db
-      .prepare("SELECT id, name, email, wecom_userid FROM persons WHERE status = 'active'")
-      .all() as unknown as { id: string; name: string; email: string; wecom_userid: string | null }[];
+      .prepare('SELECT id, name, email, wecom_userid, status, is_admin FROM persons')
+      .all() as unknown as {
+      id: string;
+      name: string;
+      email: string;
+      wecom_userid: string | null;
+      status: string;
+      is_admin: number;
+    }[];
 
     const departmentPlan = departments.map((department) => {
       const matched = teams.find((team) => team.wecom_dept_id === String(department.id));
@@ -326,6 +334,10 @@ export function registerAdminRoutes(router: Router): void {
         ? departments.find((item) => item.id === department.parentid)
         : undefined;
       const localParent = parent ? teams.find((team) => team.wecom_dept_id === String(parent.id)) : undefined;
+      const leaderUserids = department.leaders ?? [];
+      const leader = leaderUserids.length
+        ? persons.find((person) => person.wecom_userid && leaderUserids.some((id) => person.wecom_userid?.toLowerCase() === id.toLowerCase()))
+        : undefined;
       return {
         wecomDeptId: String(department.id),
         name: department.name,
@@ -333,12 +345,15 @@ export function registerAdminRoutes(router: Router): void {
         teamId: matched?.id ?? null,
         parentWecomDeptId: parent ? String(parent.id) : null,
         parentTeamId: localParent?.id ?? null,
+        leaderUserids,
+        leaderPersonId: leader?.id ?? null,
+        leaderName: leader?.name ?? null,
       };
     });
 
     const userPlan = users.map((user) => {
       const byWecom = persons.find((person) => person.wecom_userid?.toLowerCase() === user.userid.toLowerCase());
-      if (byWecom) return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'synced', personId: byWecom.id };
+      if (byWecom) return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: byWecom.status === 'active' ? 'synced' : 'reactivate', personId: byWecom.id };
       const byEmail = user.email
         ? persons.find((person) => person.email.toLowerCase() === user.email!.toLowerCase())
         : undefined;
@@ -348,11 +363,24 @@ export function registerAdminRoutes(router: Router): void {
       return { wecomUserid: user.userid, name: user.name, email: user.email ?? '', action: 'invite', personId: null };
     });
 
-    const applied = { departments: 0, users: 0 };
+    const directoryUserids = new Set(users.map((user) => user.userid.toLowerCase()));
+    const deactivatePlan = persons
+      .filter((person) => person.wecom_userid && !directoryUserids.has(person.wecom_userid.toLowerCase()) && person.status === 'active')
+      .map((person) => ({ personId: person.id, name: person.name, wecomUserid: person.wecom_userid, action: person.is_admin ? 'skip-admin' : 'deactivate' }));
+    const applied = { departments: 0, users: 0, deactivated: 0, reactivated: 0, leaders: 0 };
     if (apply) {
       for (const item of departmentPlan) {
         if (item.action === 'bind' && item.teamId) {
           applied.departments += 1;
+          if (item.leaderPersonId) {
+            rc.app.db.prepare('UPDATE teams SET lead_person_id = ? WHERE id = ?').run(item.leaderPersonId, item.teamId);
+            rc.app.db
+              .prepare(
+                "INSERT INTO team_members (team_id, person_id, role, created_at) VALUES (?, ?, 'lead', ?) ON CONFLICT(team_id, person_id) DO UPDATE SET role = 'lead'",
+              )
+              .run(item.teamId, item.leaderPersonId, nowIso());
+            applied.leaders += 1;
+          }
           continue;
         }
         const existing = teams.find((team) => team.wecom_dept_id === item.wecomDeptId);
@@ -375,15 +403,51 @@ export function registerAdminRoutes(router: Router): void {
             500,
             nowIso(),
           );
+        if (item.leaderPersonId) {
+          rc.app.db.prepare('UPDATE teams SET lead_person_id = ? WHERE id = ?').run(item.leaderPersonId, id);
+          rc.app.db
+            .prepare(
+              "INSERT INTO team_members (team_id, person_id, role, created_at) VALUES (?, ?, 'lead', ?) ON CONFLICT(team_id, person_id) DO UPDATE SET role = 'lead'",
+            )
+            .run(id, item.leaderPersonId, nowIso());
+          applied.leaders += 1;
+        }
         applied.departments += 1;
       }
       for (const item of userPlan) {
         if (!item.personId || item.action === 'synced') continue;
-        rc.app.db.prepare('UPDATE persons SET wecom_userid = ? WHERE id = ?').run(item.wecomUserid, item.personId);
-        applied.users += 1;
+        rc.app.db.prepare("UPDATE persons SET wecom_userid = ?, status = 'active' WHERE id = ?").run(item.wecomUserid, item.personId);
+        if (item.action === 'reactivate') applied.reactivated += 1;
+        else applied.users += 1;
+      }
+      if (deactivateMissing) {
+        for (const item of deactivatePlan) {
+          if (item.action !== 'deactivate') continue;
+          rc.app.db.prepare("UPDATE persons SET status = 'inactive' WHERE id = ?").run(item.personId);
+          applied.deactivated += 1;
+        }
       }
     }
 
+    const runId = newId('wsync');
+    rc.app.db
+      .prepare(
+        `INSERT INTO wecom_sync_runs (id, actor_id, mode, dry_run, departments, users, applied_departments, applied_users, deactivated, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        runId,
+        actor.person.id,
+        config.mock ? 'mock' : 'wecom',
+        apply ? 0 : 1,
+        departmentPlan.length,
+        userPlan.length,
+        applied.departments,
+        applied.users,
+        applied.deactivated,
+        JSON.stringify({ deactivateMissing, applied, deactivatePlan }),
+        nowIso(),
+      );
     audit(rc.app.db, {
       actor,
       action: apply ? 'wecom.sync.apply' : 'wecom.sync.plan',
@@ -395,10 +459,21 @@ export function registerAdminRoutes(router: Router): void {
       ok: true,
       dryRun: !apply,
       mode: config.mock ? 'mock' : 'wecom',
-      plan: { departments: departmentPlan, users: userPlan },
+      runId,
+      plan: { departments: departmentPlan, users: userPlan, deactivate: deactivatePlan },
       applied,
-      note: apply ? '已按计划写入本地绑定。' : '未写入；传 apply=true 执行绑定/创建。',
+      note: apply
+        ? `已按计划写入：团队 ${applied.departments}、成员 ${applied.users}、恢复 ${applied.reactivated}、停用 ${applied.deactivated}。`
+        : '未写入；传 apply=true 执行绑定/创建，deactivateMissing=true 停用已离职成员。',
     });
+  });
+
+  router.get('/api/integrations/wecom/sync-runs', (rc) => {
+    requireAdmin(rc);
+    const rows = rc.app.db
+      .prepare('SELECT * FROM wecom_sync_runs ORDER BY created_at DESC LIMIT 20')
+      .all() as unknown as Record<string, unknown>[];
+    rc.json({ runs: rows.map((row) => ({ ...row, detail: JSON.parse(String(row.detail ?? '{}')) })) });
   });
 
 }

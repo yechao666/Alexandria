@@ -361,6 +361,21 @@ CREATE TABLE IF NOT EXISTS wecom_auth_states (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS wecom_sync_runs (
+  id                  TEXT PRIMARY KEY,
+  actor_id            TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  mode                TEXT NOT NULL DEFAULT 'mock',
+  dry_run             INTEGER NOT NULL DEFAULT 1,
+  departments         INTEGER NOT NULL DEFAULT 0,
+  users               INTEGER NOT NULL DEFAULT 0,
+  applied_departments INTEGER NOT NULL DEFAULT 0,
+  applied_users       INTEGER NOT NULL DEFAULT 0,
+  deactivated         INTEGER NOT NULL DEFAULT 0,
+  detail              TEXT NOT NULL DEFAULT '{}',
+  created_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wecom_sync_runs_created ON wecom_sync_runs(created_at);
+
 CREATE TABLE IF NOT EXISTS wecom_links (
   id          TEXT PRIMARY KEY,
   person_id   TEXT REFERENCES persons(id) ON DELETE CASCADE,

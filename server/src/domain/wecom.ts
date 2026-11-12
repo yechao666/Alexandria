@@ -19,6 +19,7 @@ export interface WecomDepartment {
   id: number;
   name: string;
   parentid?: number;
+  leaders?: string[];
 }
 
 export interface WecomUser {
@@ -92,7 +93,16 @@ export async function wecomDepartments(config: WecomConfig, token: string): Prom
   const url = `${config.baseUrl}/cgi-bin/department/list?access_token=${encodeURIComponent(token)}`;
   const data = await jsonFetch(url);
   const list = (data.department ?? []) as WecomDepartment[];
-  return list.map((item) => ({ id: Number(item.id), name: String(item.name), parentid: item.parentid ? Number(item.parentid) : 0 }));
+  return list.map((item) => ({
+    id: Number(item.id),
+    name: String(item.name),
+    parentid: item.parentid ? Number(item.parentid) : 0,
+    leaders: Array.isArray((item as unknown as { department_leader?: string[] }).department_leader)
+      ? ((item as unknown as { department_leader: string[] }).department_leader)
+      : Array.isArray((item as unknown as { leaders?: string[] }).leaders)
+        ? (item as unknown as { leaders: string[] }).leaders
+        : [],
+  }));
 }
 
 export async function wecomUsers(config: WecomConfig, token: string, departments: WecomDepartment[]): Promise<WecomUser[]> {

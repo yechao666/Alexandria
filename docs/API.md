@@ -289,7 +289,8 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | --- | --- | --- | --- |
 | GET | `/api/integrations/wecom` | 登录 | 配置与映射状态 |
 | POST | `/api/integrations/wecom/config` | 管理员 | 保存 CorpID / AgentID / Secret |
-| POST | `/api/integrations/wecom/sync` | 管理员 | 拉取通讯录；默认 dry-run，`{apply:true}` 执行绑定/建团队 |
+| POST | `/api/integrations/wecom/sync` | 管理员 | 拉取通讯录；默认 dry-run，`{apply:true, deactivateMissing?:true}` 执行绑定/建团队/停用 |
+| GET | `/api/integrations/wecom/sync-runs` | 管理员 | 最近 20 次同步记录 |
 
 ---
 

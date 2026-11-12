@@ -25,11 +25,12 @@ const TABS = [
 
 export async function renderAdmin(tab = 'teams') {
   const isAdmin = Boolean(state.me?.person?.isAdmin);
-  const [teamsData, peopleData, wecom, keysData] = await Promise.all([
+  const [teamsData, peopleData, wecom, keysData, syncRunsData] = await Promise.all([
     api('/api/teams'),
     api('/api/people'),
     api('/api/integrations/wecom').catch(() => null),
     api('/api/api-keys').catch(() => ({ keys: [] })),
+    api('/api/integrations/wecom/sync-runs').catch(() => ({ runs: [] })),
   ]);
   const teams = teamsData.teams ?? [];
   const people = peopleData.people ?? [];
@@ -45,6 +46,11 @@ export async function renderAdmin(tab = 'teams') {
     )
     .join('');
 
+  const syncRuns = syncRunsData.runs ?? [];
+  const syncRunRows = syncRuns
+    .slice(0, 5)
+    .map((run) => `<tr><td>${timeAgo(run.created_at)}</td><td>${run.dry_run ? '预览' : '执行'}</td><td>${run.departments} / ${run.users}</td><td>${run.applied_departments} / ${run.applied_users} / ${run.deactivated}</td></tr>`)
+    .join('');
   const wecomBody = wecom
     ? `<div class="grid grid-2">
         <div class="panel wecom-card">
@@ -80,6 +86,10 @@ export async function renderAdmin(tab = 'teams') {
             ${wecom.persons.slice(0, 20).map((person) => `<tr><td>${esc(person.name)}</td><td class="mono">${esc(person.wecom_userid ?? '—')}</td><td>${person.wecom_userid ? '<span class="badge jade">已绑定</span>' : '<span class="badge outline">未绑定</span>'}</td></tr>`).join('')}
           </tbody></table></div>
         </div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h3>同步历史</h3><span class="small muted">最近 5 次</span></div>
+        <div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>时间</th><th>类型</th><th>发现部门/成员</th><th>写入 / 停用</th></tr></thead><tbody>${syncRunRows || '<tr><td colspan="4" class="muted" style="padding:18px">还没有同步记录</td></tr>'}</tbody></table></div>
       </div>`
     : '<div class="empty">企业微信集成信息不可用</div>';
 
@@ -145,13 +155,15 @@ export function mountAdmin(tab = 'teams') {
       openModal({
         title: '企业微信同步计划（dry run）',
         wide: true,
-        body: `<div class="small muted" style="margin-bottom:12px">${esc(result.note)}</div><div class="json" style="font-family:var(--mono);font-size:11px;white-space:pre-wrap;background:var(--paper-2);padding:14px;border-radius:9px;max-height:400px;overflow:auto">${esc(JSON.stringify(result.plan, null, 2))}</div>`,
+        body: `<div class="small muted" style="margin-bottom:12px">${esc(result.note)}</div><label class="small" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="deactivate-missing"> 停用不在通讯录中的已绑定成员（管理员账号会跳过）</label><div class="json" style="font-family:var(--mono);font-size:11px;white-space:pre-wrap;background:var(--paper-2);padding:14px;border-radius:9px;max-height:360px;overflow:auto">${esc(JSON.stringify(result.plan, null, 2))}</div>`,
         footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="apply-wecom-sync">应用计划</button>`,
         onMount: (modal) => {
           modal.querySelector('#apply-wecom-sync')?.addEventListener('click', async () => {
+            const deactivateMissing = Boolean(modal.querySelector('#deactivate-missing')?.checked);
+            if (deactivateMissing && !confirm('将停用通讯录中不存在的已绑定成员，确认执行？')) return;
             try {
-              const applied = await api('/api/integrations/wecom/sync', { method: 'POST', body: JSON.stringify({ apply: true }) });
-              toast(`已同步：团队 ${applied.applied?.departments ?? 0}，成员 ${applied.applied?.users ?? 0}`, 'success');
+              const applied = await api('/api/integrations/wecom/sync', { method: 'POST', body: JSON.stringify({ apply: true, deactivateMissing }) });
+              toast(`已同步：团队 ${applied.applied?.departments ?? 0}，成员 ${applied.applied?.users ?? 0}，停用 ${applied.applied?.deactivated ?? 0}`, 'success');
               closeModal();
               await loadBootstrap();
               window.dispatchEvent(new HashChangeEvent('hashchange'));
