@@ -1073,6 +1073,7 @@ export function seedDatabase(db: Db, env: Env): void {
         nodeId: 'cat_e_pipe',
         actor,
         defer: false,
+        dsh: false,
       });
       if (result.jobId) processJob(db, env, result.jobId);
     } catch (error) {
