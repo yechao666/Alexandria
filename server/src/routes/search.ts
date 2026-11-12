@@ -1,5 +1,6 @@
 import type { Router } from '../http/router.ts';
 import { requireActor } from '../http/auth.ts';
+import { effectivePageRole } from '../domain/access.ts';
 import { requireLibrary, visibleLibraries } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
 import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes } from '../knowledge/search.ts';
@@ -120,17 +121,22 @@ export function registerSearchRoutes(router: Router): void {
   router.get('/api/libraries/:id/facets', (rc) => {
     const actor = requireActor(rc);
     const { library } = requireLibrary(rc.app.db, actor, rc.params.id!);
-    const classes = rc.app.db
-      .prepare(
-        `SELECT p.class_key AS key, c.name, c.color, COUNT(*) AS count FROM pages p
-          LEFT JOIN ontology_classes c ON c.library_id = p.library_id AND c.key = p.class_key
-          WHERE p.library_id = ? GROUP BY p.class_key ORDER BY count DESC`,
-      )
-      .all(library.id) as unknown as { key: string; name: string; color: string; count: number }[];
-    const statuses = rc.app.db
-      .prepare('SELECT status AS key, COUNT(*) AS count FROM pages WHERE library_id = ? GROUP BY status')
-      .all(library.id) as unknown as { key: string; count: number }[];
-    const tags = rc.app.db.prepare('SELECT tags FROM pages WHERE library_id = ?').all(library.id) as unknown as { tags: string }[];
+    const accessible = (rc.app.db.prepare('SELECT * FROM pages WHERE library_id = ?').all(library.id) as unknown as PageRow[])
+      .filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
+    const classCounts = new Map<string, number>();
+    const statusCounts = new Map<string, number>();
+    for (const page of accessible) {
+      classCounts.set(page.class_key, (classCounts.get(page.class_key) ?? 0) + 1);
+      statusCounts.set(page.status, (statusCounts.get(page.status) ?? 0) + 1);
+    }
+    const classes = (rc.app.db
+      .prepare('SELECT key, name, color FROM ontology_classes WHERE library_id = ?')
+      .all(library.id) as unknown as { key: string; name: string; color: string }[])
+      .map((klass) => ({ ...klass, count: classCounts.get(klass.key) ?? 0 }))
+      .filter((klass) => klass.count > 0)
+      .sort((a, b) => b.count - a.count);
+    const statuses = [...statusCounts.entries()].map(([key, count]) => ({ key, count }));
+    const tags = accessible.map((page) => ({ tags: page.tags }));
     const tagCounts = new Map<string, number>();
     for (const row of tags) {
       for (const tag of parseList(row.tags)) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
@@ -148,9 +154,8 @@ export function registerSearchRoutes(router: Router): void {
     const libraries = visibleLibraries(rc.app.db, actor);
     const ids = libraries.map((library) => library.id);
     const ph = ids.map(() => '?').join(',') || "''";
-    const rows = rc.app.db.prepare(`SELECT tags FROM pages WHERE library_id IN (${ph})`).all(...(ids.length ? ids : [''])) as unknown as {
-      tags: string;
-    }[];
+    const rows = (ids.length ? (rc.app.db.prepare(`SELECT * FROM pages WHERE library_id IN (${ph})`).all(...ids) as unknown as PageRow[]) : [])
+      .filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
     const counts = new Map<string, number>();
     for (const row of rows) for (const tag of parseList(row.tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     rc.json({ tags: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 100).map(([tag, count]) => ({ tag, count })) });
@@ -166,8 +171,9 @@ export function registerSearchRoutes(router: Router): void {
           .prepare(`SELECT * FROM pages WHERE library_id IN (${ph}) ORDER BY updated_at DESC LIMIT ?`)
           .all(...ids, rc.queryInt('limit', 20)) as unknown as PageRow[])
       : [];
+    const visibleRows = rows.filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
     rc.json({
-      pages: rows.map((page) => {
+      pages: visibleRows.map((page) => {
         const lib = libraries.find((library) => library.id === page.library_id)!;
         return {
           id: page.id,

@@ -3,25 +3,17 @@ import { basename, dirname, join } from 'node:path';
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary } from '../domain/access.ts';
+import { requireLibrary, visibleLibraries, effectivePageRole, effectiveSourceRole, resourceGrants } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
-import { nowIso, parseJson } from '../lib/ids.ts';
+import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { extOf } from '../extract/index.ts';
 import { ingestBuffer, processJob, reprocessSource, sourceDownloadName } from '../ingest/pipeline.ts';
 import { sendBinary } from '../http/static.ts';
-import { canEdit, pageListDto } from './helpers.ts';
+import { canEdit, pageListDto, sourceAccess } from './helpers.ts';
 import type { SourceRow } from '../types.ts';
 
-function sourceFor(rc: RequestContext, id: string) {
-  const actor = requireActor(rc);
-  const source = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(id) as unknown as SourceRow | undefined;
-  if (!source) throw errors.notFound('文献不存在');
-  const { library, role } = requireLibrary(rc.app.db, actor, source.library_id);
-  return { actor, source, library, role };
-}
-
-function sourceView(rc: RequestContext, source: SourceRow): Record<string, unknown> {
+function sourceView(rc: RequestContext, source: SourceRow, actor?: import('../types.ts').Actor): Record<string, unknown> {
   const assets = rc.app.db
     .prepare('SELECT id, kind, filename, mime, width, height, ocr_text, thumbnail_path FROM source_assets WHERE source_id = ?')
     .all(source.id) as unknown as Record<string, unknown>[];
@@ -59,7 +51,7 @@ function sourceView(rc: RequestContext, source: SourceRow): Record<string, unkno
       url: `/api/sources/${source.id}/assets/${asset.id}`,
       thumbnailUrl: asset.thumbnail_path ? `/api/sources/${source.id}/assets/${asset.id}?thumb=1` : null,
     })),
-    compiledPages: compiledPages.map((page) => pageListDto(rc.app.db, page)),
+    compiledPages: compiledPages.filter((page) => !actor || Boolean(effectivePageRole(rc.app.db, actor, page))).map((page) => pageListDto(rc.app.db, page)),
     job: job
       ? {
           ...job,
@@ -106,7 +98,7 @@ export function registerSourceRoutes(router: Router): void {
     });
     rc.json(
       {
-        source: sourceView(rc, result.source),
+        source: sourceView(rc, result.source, actor),
         jobId: result.jobId,
         duplicate: result.duplicate,
       },
@@ -138,14 +130,13 @@ export function registerSourceRoutes(router: Router): void {
       const q = `%${rc.query('q')}%`;
       params.push(q, q, q);
     }
-    const total = rc.app.db
-      .prepare(`SELECT COUNT(*) AS c FROM sources WHERE ${conditions.join(' AND ')}`)
-      .get(...params) as unknown as { c: number };
-    const rows = rc.app.db
-      .prepare(`SELECT * FROM sources WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
-      .all(...params, limit, offset) as unknown as SourceRow[];
+    const allRows = rc.app.db
+      .prepare(`SELECT * FROM sources WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`)
+      .all(...params) as unknown as SourceRow[];
+    const visible = allRows.filter((source) => Boolean(effectiveSourceRole(rc.app.db, actor, source)));
+    const rows = visible.slice(offset, offset + limit);
     rc.json({
-      total: Number(total.c),
+      total: visible.length,
       sources: rows.map((source) => ({
         id: source.id,
         title: source.title,
@@ -166,23 +157,23 @@ export function registerSourceRoutes(router: Router): void {
   });
 
   router.get('/api/sources/:id', (rc) => {
-    const { source, role } = sourceFor(rc, rc.params.id!);
-    rc.json({ source: sourceView(rc, source), canEdit: canEdit(role) });
+    const { actor, source, role } = sourceAccess(rc, rc.params.id!);
+    rc.json({ source: sourceView(rc, source, actor), canEdit: canEdit(role) });
   });
 
   router.get('/api/sources/:id/download', (rc) => {
-    const { source } = sourceFor(rc, rc.params.id!);
+    const { source } = sourceAccess(rc, rc.params.id!);
     if (!existsSync(source.storage_path)) throw errors.notFound('原始文件已丢失');
     sendBinary(rc, readFileSync(source.storage_path), sourceDownloadName(source), source.mime || 'application/octet-stream');
   });
 
   router.get('/api/sources/:id/text', (rc) => {
-    const { source } = sourceFor(rc, rc.params.id!);
+    const { source } = sourceAccess(rc, rc.params.id!);
     rc.json({ text: source.extracted_text, metadata: parseJson<Record<string, unknown>>(source.metadata, {}) });
   });
 
   router.get('/api/sources/:id/assets/:assetId', (rc) => {
-    const { source } = sourceFor(rc, rc.params.id!);
+    const { source } = sourceAccess(rc, rc.params.id!);
     const asset = rc.app.db
       .prepare('SELECT * FROM source_assets WHERE id = ? AND source_id = ?')
       .get(rc.params.assetId!, source.id) as unknown as
@@ -196,7 +187,7 @@ export function registerSourceRoutes(router: Router): void {
   });
 
   router.post('/api/sources/:id/reprocess', (rc) => {
-    const { actor, source, library, role } = sourceFor(rc, rc.params.id!);
+    const { actor, source, library, role } = sourceAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     if (source.status === 'processing' || source.status === 'queued') {
       throw errors.conflict('该文献正在处理中');
@@ -207,7 +198,7 @@ export function registerSourceRoutes(router: Router): void {
   });
 
   router.delete('/api/sources/:id', (rc) => {
-    const { actor, source, library, role } = sourceFor(rc, rc.params.id!);
+    const { actor, source, library, role } = sourceAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     rc.app.db.prepare('DELETE FROM sources WHERE id = ?').run(source.id);
     try {
@@ -226,7 +217,9 @@ export function registerSourceRoutes(router: Router): void {
       | undefined;
     if (!job) throw errors.notFound('任务不存在');
     requireLibrary(rc.app.db, actor, String(job.library_id));
-    rc.json({ job: { ...job, log: parseJson<string[]>(String(job.log ?? '[]'), []) } });
+    const events = rc.app.db.prepare('SELECT * FROM job_events WHERE job_id = ? ORDER BY created_at ASC').all(String(job.id)) as unknown as Record<string, unknown>[];
+    const source = job.source_id ? rc.app.db.prepare('SELECT id, title FROM sources WHERE id = ?').get(String(job.source_id)) : undefined;
+    rc.json({ job: { ...job, log: parseJson<string[]>(String(job.log ?? '[]'), []), events, source } });
   });
 
   router.post('/api/jobs/:id/run', (rc) => {
@@ -252,9 +245,56 @@ export function registerSourceRoutes(router: Router): void {
     });
   });
 
+  router.get('/api/tasks', (rc) => {
+    const actor = requireActor(rc);
+    const libraries = visibleLibraries(rc.app.db, actor);
+    const ids = libraries.map((library) => library.id);
+    if (!ids.length) {
+      rc.json({ tasks: [] });
+      return;
+    }
+    const status = rc.query('status');
+    const limit = Math.max(1, Math.min(100, rc.queryInt('limit', 40)));
+    const ph = ids.map(() => '?').join(',');
+    const conditions = [`j.library_id IN (${ph})`];
+    const params: (string | number)[] = [...ids];
+    if (status) {
+      conditions.push('j.status = ?');
+      params.push(status);
+    }
+    const rows = rc.app.db
+      .prepare(
+        `SELECT j.*, l.name AS library_name, l.slug AS library_slug, s.title AS source_title, s.filename AS source_filename
+           FROM ingest_jobs j LEFT JOIN libraries l ON l.id = j.library_id LEFT JOIN sources s ON s.id = j.source_id
+          WHERE ${conditions.join(' AND ')} ORDER BY j.created_at DESC LIMIT ?`,
+      )
+      .all(...params, limit) as unknown as Record<string, unknown>[];
+    rc.json({
+      tasks: rows.map((job) => ({
+        ...job,
+        log: parseJson<string[]>(String(job.log ?? '[]'), []),
+        events: rc.app.db.prepare('SELECT * FROM job_events WHERE job_id = ? ORDER BY created_at ASC').all(String(job.id)),
+      })),
+    });
+  });
+
+  router.post('/api/jobs/:id/cancel', (rc) => {
+    const actor = requireActor(rc);
+    const job = rc.app.db.prepare('SELECT * FROM ingest_jobs WHERE id = ?').get(rc.params.id!) as unknown as
+      | { id: string; library_id: string; status: string; source_id: string | null }
+      | undefined;
+    if (!job) throw errors.notFound('任务不存在');
+    const { role } = requireLibrary(rc.app.db, actor, job.library_id);
+    if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
+    if (job.status !== 'queued') throw errors.conflict('只有排队中的任务可以取消');
+    rc.app.db.prepare("UPDATE ingest_jobs SET status = 'cancelled', stage = 'cancelled', finished_at = ? WHERE id = ?").run(nowIso(), job.id);
+    if (job.source_id) rc.app.db.prepare("UPDATE sources SET status = 'failed', error = '任务已取消', updated_at = ? WHERE id = ?").run(nowIso(), job.source_id);
+    rc.json({ ok: true });
+  });
+
   // 允许管理员对历史文献补做 OCR（图片类）
   router.post('/api/sources/:id/ocr', (rc) => {
-    const { source, role } = sourceFor(rc, rc.params.id!);
+    const { source, role } = sourceAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     const asset = rc.app.db
       .prepare("SELECT * FROM source_assets WHERE source_id = ? AND kind = 'image' LIMIT 1")
@@ -264,4 +304,36 @@ export function registerSourceRoutes(router: Router): void {
     void nowIso;
     rc.json({ ok: true, note: 'OCR 在重编译时执行，请使用 reprocess' });
   });
+  router.get('/api/sources/:id/access', (rc) => {
+    const { actor, source, role } = sourceAccess(rc, rc.params.id!, 'viewer');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要文献所有者权限');
+    rc.json({ sourceId: source.id, visibility: source.visibility, canManage: true, grants: resourceGrants(rc.app.db, 'source', source.id) });
+  });
+
+  router.patch('/api/sources/:id/access', async (rc) => {
+    const { actor, source, library, role } = sourceAccess(rc, rc.params.id!, 'viewer');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要文献所有者权限');
+    const body = await rc.body<{ visibility?: string; grants?: { subjectType?: string; subjectId?: string; role?: string }[] }>();
+    const visibility = ['inherit', 'restricted', 'private'].includes(String(body.visibility)) ? String(body.visibility) : source.visibility;
+    const valid = [];
+    for (const grant of Array.isArray(body.grants) ? body.grants : []) {
+      const subjectType = String(grant.subjectType ?? '');
+      const subjectId = String(grant.subjectId ?? '').trim();
+      const grantRole = String(grant.role ?? 'viewer');
+      if (!['person', 'team'].includes(subjectType) || !subjectId || !['viewer', 'editor'].includes(grantRole)) continue;
+      const exists = subjectType === 'person'
+        ? rc.app.db.prepare("SELECT 1 FROM persons WHERE id = ? AND status = 'active'").get(subjectId)
+        : rc.app.db.prepare('SELECT 1 FROM teams WHERE id = ?').get(subjectId);
+      if (exists) valid.push({ subjectType, subjectId, role: grantRole });
+    }
+    rc.app.db.prepare('UPDATE sources SET visibility = ?, updated_at = ? WHERE id = ?').run(visibility, nowIso(), source.id);
+    rc.app.db.prepare("DELETE FROM resource_grants WHERE resource_type = 'source' AND resource_id = ?").run(source.id);
+    const insert = rc.app.db.prepare(
+      'INSERT INTO resource_grants (id, resource_type, resource_id, subject_type, subject_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    for (const grant of valid) insert.run(newId('rgrant'), 'source', source.id, grant.subjectType, grant.subjectId, grant.role, actor.person.id, nowIso());
+    audit(rc.app.db, { actor, action: 'source.access.update', targetType: 'source', targetId: source.id, libraryId: library.id, detail: { visibility, grants: valid.length } });
+    rc.json({ ok: true, visibility, grants: resourceGrants(rc.app.db, 'source', source.id) });
+  });
+
 }

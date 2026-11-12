@@ -20,6 +20,7 @@ import { renderAdmin, mountAdmin } from './views/admin.js';
 import { renderAgent, mountAgent } from './views/agent.js';
 import { renderReview, mountReview } from './views/review.js';
 import { renderNotifications, mountNotifications } from './views/notifications.js';
+import { renderTasks, mountTasks } from './views/tasks.js';
 
 const app = document.getElementById('app');
 let routeSeq = 0;
@@ -198,6 +199,15 @@ async function route() {
       renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '资料入库' }], active: 'upload' });
       document.title = '资料入库 · Alexandria';
       mountUpload(parts[1] ? decodeURIComponent(parts[1]) : '');
+      return;
+    }
+    if (parts[0] === 'tasks') {
+      setContent(loading('正在读取任务…'));
+      const html = await renderTasks();
+      if (seq !== routeSeq) return;
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '任务中心' }], active: 'tasks' });
+      document.title = '任务中心 · Alexandria';
+      mountTasks();
       return;
     }
     if (parts[0] === 'graph') {

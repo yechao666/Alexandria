@@ -1,4 +1,9 @@
 import type { Db } from '../db/index.ts';
+import type { RequestContext } from '../http/context.ts';
+import { requireActor } from '../http/auth.ts';
+import { requireLibrary, effectivePageRole, effectiveSourceRole, roleAtLeast } from '../domain/access.ts';
+import { errors } from '../http/respond.ts';
+import { getPage } from '../knowledge/pages.ts';
 import type { Actor, LibraryRow, PageRow } from '../types.ts';
 import { parseJson } from '../lib/ids.ts';
 import { pageToView } from '../knowledge/pages.ts';
@@ -222,4 +227,28 @@ export function canEdit(role: string): boolean {
 
 export function actorName(actor: Actor): string {
   return actor.person.name;
+}
+
+
+export function pageAccess(rc: RequestContext, pageId: string, level: 'viewer' | 'editor' | 'owner' = 'viewer') {
+  const actor = requireActor(rc);
+  const page = getPage(rc.app.db, pageId);
+  if (!page) throw errors.notFound('知识页不存在');
+  const { library } = requireLibrary(rc.app.db, actor, page.library_id);
+  const role = effectivePageRole(rc.app.db, actor, page);
+  if (!role) throw errors.notFound('知识页不存在');
+  if (!roleAtLeast(role, level)) throw errors.forbidden(level === 'viewer' ? '无权访问该知识页' : '需要更高的知识页权限');
+  if (actor.viaApiKey && actor.apiScope === 'read' && level !== 'viewer') throw errors.forbidden('只读 API Key 不能修改知识页');
+  return { actor, page, library, role };
+}
+
+export function sourceAccess(rc: RequestContext, sourceId: string, level: 'viewer' | 'editor' | 'owner' = 'viewer') {
+  const actor = requireActor(rc);
+  const source = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as unknown as import('../types.ts').SourceRow | undefined;
+  if (!source) throw errors.notFound('文献不存在');
+  const { library } = requireLibrary(rc.app.db, actor, source.library_id);
+  const role = effectiveSourceRole(rc.app.db, actor, source);
+  if (!role) throw errors.notFound('文献不存在');
+  if (!roleAtLeast(role, level)) throw errors.forbidden(level === 'viewer' ? '无权访问该文献' : '需要更高的文献权限');
+  return { actor, source, library, role };
 }

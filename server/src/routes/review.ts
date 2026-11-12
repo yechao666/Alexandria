@@ -2,12 +2,12 @@ import type { Router } from '../http/router.ts';
 import type { Db } from '../db/index.ts';
 import type { Actor, LibraryRow, PageRow } from '../types.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary, visibleLibraries } from '../domain/access.ts';
+import { requireLibrary, visibleLibraries, effectivePageRole } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { nowIso } from '../lib/ids.ts';
 import { getPage, reviewPage, pageToView } from '../knowledge/pages.ts';
-import { pageListDto } from './helpers.ts';
+import { pageAccess, pageListDto } from './helpers.ts';
 import { normalizeTitle } from '../knowledge/terms.ts';
 import { notifyPerson } from '../domain/notifications.ts';
 
@@ -54,6 +54,7 @@ export function reviewQueue(
       )
       .all(library.id) as unknown as PageRow[];
     for (const page of rows) {
+      if (!effectivePageRole(db, actor, page)) continue;
       if (options.status && options.status !== 'all' && page.review_status !== options.status) continue;
       const view = pageToView(db, page);
       const conflicts = pageConflicts(db, page.id);
@@ -150,7 +151,7 @@ export function registerReviewRoutes(router: Router): void {
 
   router.post('/api/pages/:id/review', async (rc) => {
     const actor = requireActor(rc);
-    const page = getPage(rc.app.db, rc.params.id!);
+    const { page } = pageAccess(rc, rc.params.id!, 'editor');
     if (!page) throw errors.notFound('知识页不存在');
     const { library, role } = requireLibrary(rc.app.db, actor, page.library_id, 'editor');
     if (role !== 'owner' && role !== 'editor') throw errors.forbidden('需要编辑权限');
@@ -202,7 +203,7 @@ export function registerReviewRoutes(router: Router): void {
       | { id: string; page_id: string; subject: string; predicate: string; object: string; status: string }
       | undefined;
     if (!claim) throw errors.notFound('主张不存在');
-    const page = getPage(rc.app.db, claim.page_id);
+    const { page } = pageAccess(rc, claim.page_id, 'editor');
     if (!page) throw errors.notFound('知识页不存在');
     const { library } = requireLibrary(rc.app.db, actor, page.library_id, 'editor');
     const body = await rc.body<{ resolution?: string; note?: string }>();

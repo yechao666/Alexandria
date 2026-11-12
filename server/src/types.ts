@@ -46,6 +46,7 @@ export interface PageRow {
   tldr: string;
   body: string;
   status: string;
+  visibility: string;
   review_status: string;
   review_note: string;
   reviewed_by: string | null;
@@ -77,6 +78,7 @@ export interface SourceRow {
   kind: string;
   storage_path: string;
   status: string;
+  visibility: string;
   language: string;
   page_count: number;
   word_count: number;

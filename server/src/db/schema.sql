@@ -94,6 +94,20 @@ CREATE TABLE IF NOT EXISTS library_grants (
 CREATE INDEX IF NOT EXISTS idx_grants_library ON library_grants(library_id);
 CREATE INDEX IF NOT EXISTS idx_grants_subject ON library_grants(subject_type, subject_id);
 
+CREATE TABLE IF NOT EXISTS resource_grants (
+  id            TEXT PRIMARY KEY,
+  resource_type TEXT NOT NULL,
+  resource_id   TEXT NOT NULL,
+  subject_type  TEXT NOT NULL,
+  subject_id    TEXT NOT NULL,
+  role          TEXT NOT NULL,
+  created_by    TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL,
+  UNIQUE(resource_type, resource_id, subject_type, subject_id)
+);
+CREATE INDEX IF NOT EXISTS idx_resource_grants_resource ON resource_grants(resource_type, resource_id);
+
+
 CREATE TABLE IF NOT EXISTS catalog_nodes (
   id          TEXT PRIMARY KEY,
   library_id  TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
@@ -167,6 +181,7 @@ CREATE TABLE IF NOT EXISTS sources (
   sha256         TEXT NOT NULL,
   kind           TEXT NOT NULL DEFAULT 'text',
   storage_path   TEXT NOT NULL,
+  visibility     TEXT NOT NULL DEFAULT 'inherit',
   status         TEXT NOT NULL DEFAULT 'queued',
   language       TEXT NOT NULL DEFAULT 'zh',
   page_count     INTEGER NOT NULL DEFAULT 0,
@@ -219,6 +234,19 @@ CREATE TABLE IF NOT EXISTS ingest_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_source ON ingest_jobs(source_id);
 
+CREATE TABLE IF NOT EXISTS job_events (
+  id          TEXT PRIMARY KEY,
+  job_id      TEXT NOT NULL REFERENCES ingest_jobs(id) ON DELETE CASCADE,
+  step        TEXT NOT NULL,
+  status      TEXT NOT NULL,
+  message     TEXT NOT NULL DEFAULT '',
+  progress    INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, created_at);
+
+
 CREATE TABLE IF NOT EXISTS pages (
   id             TEXT PRIMARY KEY,
   library_id     TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
@@ -230,6 +258,7 @@ CREATE TABLE IF NOT EXISTS pages (
   tldr           TEXT NOT NULL DEFAULT '',
   body           TEXT NOT NULL DEFAULT '',
   status         TEXT NOT NULL DEFAULT 'active',
+  visibility     TEXT NOT NULL DEFAULT 'inherit',
   review_status  TEXT NOT NULL DEFAULT 'unreviewed',
   review_note    TEXT NOT NULL DEFAULT '',
   reviewed_by    TEXT REFERENCES persons(id) ON DELETE SET NULL,

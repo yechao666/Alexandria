@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Router } from '../http/router.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary, visibleLibraries } from '../domain/access.ts';
+import { requireLibrary, visibleLibraries, effectivePageRole } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
 import { audit } from '../domain/audit.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
@@ -10,7 +10,7 @@ import { createPage, getPage, pageContext, pageToView, updatePage, attachSource 
 import { searchKnowledge, answerKnowledge, graphForLibrary } from '../knowledge/search.ts';
 import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
-import { pageListDto, parseList } from './helpers.ts';
+import { pageAccess, pageListDto, parseList } from './helpers.ts';
 import { ingestBuffer } from '../ingest/pipeline.ts';
 import type { PageRow } from '../types.ts';
 
@@ -125,7 +125,7 @@ export function registerAgentRoutes(router: Router): void {
       }
     }
     if (!page) throw errors.notFound('知识页不存在');
-    const { library, role } = requireLibrary(rc.app.db, actor, page.library_id);
+    const { library, role } = pageAccess(rc, page.id);
     const view = pageToView(rc.app.db, page);
     const properties = rc.app.db
       .prepare('SELECT key, value FROM page_properties WHERE page_id = ?')
@@ -137,18 +137,26 @@ export function registerAgentRoutes(router: Router): void {
           JOIN sources s ON s.id = ps.source_id WHERE ps.page_id = ?`,
       )
       .all(page.id);
-    const links = rc.app.db
+    const links = (rc.app.db
       .prepare(
         `SELECT l.relation, l.origin, p.id, p.title, p.slug, p.class_key FROM links l JOIN pages p ON p.id = l.to_page_id
           WHERE l.from_page_id = ? ORDER BY l.weight DESC`,
       )
-      .all(page.id);
-    const backlinks = rc.app.db
+      .all(page.id) as unknown as { id: string }[])
+      .filter((item) => {
+        const target = getPage(rc.app.db, item.id);
+        return Boolean(target && effectivePageRole(rc.app.db, actor, target));
+      });
+    const backlinks = (rc.app.db
       .prepare(
         `SELECT l.relation, p.id, p.title, p.slug, p.class_key FROM links l JOIN pages p ON p.id = l.from_page_id
           WHERE l.to_page_id = ? ORDER BY l.weight DESC`,
       )
-      .all(page.id);
+      .all(page.id) as unknown as { id: string }[])
+      .filter((item) => {
+        const target = getPage(rc.app.db, item.id);
+        return Boolean(target && effectivePageRole(rc.app.db, actor, target));
+      });
     rc.json({
       page: {
         ...pageListDto(rc.app.db, page),
@@ -273,6 +281,8 @@ export function registerAgentRoutes(router: Router): void {
     }
     let page: PageRow;
     if (existing) {
+      const access = pageAccess(rc, existing.id, 'editor');
+      if (!access) throw errors.forbidden('需要知识页编辑权限');
       page = updatePage(
         rc.app.db,
         existing,

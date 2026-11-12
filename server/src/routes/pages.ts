@@ -1,35 +1,33 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary } from '../domain/access.ts';
+import { requireLibrary, effectivePageRole, effectiveSourceRole, resourceGrants } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef } from '../knowledge/pages.ts';
 import { relatedPages } from '../knowledge/search.ts';
-import { canEdit, pageListDto, parseList } from './helpers.ts';
+import { canEdit, pageAccess, pageListDto, parseList } from './helpers.ts';
 import type { PageRow } from '../types.ts';
 
-function requirePage(rc: RequestContext, id: string) {
-  const actor = requireActor(rc);
-  const page = getPage(rc.app.db, id);
-  if (!page) throw errors.notFound('知识页不存在');
-  const { library, role } = requireLibrary(rc.app.db, actor, page.library_id);
-  return { actor, page, library, role };
-}
-
-function pageDetail(rc: RequestContext, page: PageRow) {
+function pageDetail(rc: RequestContext, page: PageRow, role: import('../types.ts').Role, actor: import('../types.ts').Actor) {
   const view = pageToView(rc.app.db, page);
   const sources = rc.app.db
     .prepare(
-      `SELECT s.id, s.title, s.filename, s.kind, s.status, ps.relation, ps.locator, ps.quote
+      `SELECT s.*, ps.relation, ps.locator, ps.quote
          FROM page_sources ps JOIN sources s ON s.id = ps.source_id WHERE ps.page_id = ?`,
     )
-    .all(page.id);
+    .all(page.id) as unknown as import('../types.ts').SourceRow[];
+  const visibleSources = sources.filter((source) => Boolean(effectiveSourceRole(rc.app.db, actor, source)));
   const claims = rc.app.db
     .prepare("SELECT * FROM claims WHERE page_id = ? AND status NOT IN ('ignored', 'resolved') ORDER BY confidence DESC, created_at ASC")
     .all(page.id) as unknown as Record<string, unknown>[];
-  const relations = relatedPages(rc.app.db, page.id);
+  const allRelations = relatedPages(rc.app.db, page.id);
+  const canSeeRelated = (item: { id: string }) => {
+    const related = getPage(rc.app.db, item.id);
+    return Boolean(related && effectivePageRole(rc.app.db, actor, related));
+  };
+  const relations = { outbound: allRelations.outbound.filter(canSeeRelated), inbound: allRelations.inbound.filter(canSeeRelated) };
   const properties = rc.app.db
     .prepare(
       `SELECT pp.key, pp.value, op.name, op.type, op.options
@@ -63,9 +61,13 @@ function pageDetail(rc: RequestContext, page: PageRow) {
       supersededBy: view.superseded_by,
       creatorName: view.creatorName,
       updaterName: view.updaterName,
+      visibility: page.visibility,
+      access: role === 'owner'
+        ? { canManage: true, grants: resourceGrants(rc.app.db, 'page', page.id) }
+        : { canManage: false, grants: [] },
     },
     library,
-    sources,
+    sources: visibleSources,
     claims: claims.map((claim) => ({
       ...claim,
       confidence: Number(claim.confidence),
@@ -109,22 +111,20 @@ export function registerPageRoutes(router: Router): void {
       const q = `%${rc.query('q')}%`;
       params.push(q, q, q);
     }
-    const total = rc.app.db
-      .prepare(`SELECT COUNT(*) AS c FROM pages WHERE ${conditions.join(' AND ')}`)
-      .get(...params) as unknown as { c: number };
-    const rows = rc.app.db
-      .prepare(`SELECT * FROM pages WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC LIMIT ? OFFSET ?`)
-      .all(...params, limit, offset) as unknown as PageRow[];
-    rc.json({ total: Number(total.c), pages: rows.map((page) => pageListDto(rc.app.db, page)) });
+    const allRows = rc.app.db
+      .prepare(`SELECT * FROM pages WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC`)
+      .all(...params) as unknown as PageRow[];
+    const visible = allRows.filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
+    rc.json({ total: visible.length, pages: visible.slice(offset, offset + limit).map((page) => pageListDto(rc.app.db, page)) });
   });
 
   router.get('/api/pages/:id', (rc) => {
-    const { page, role } = requirePage(rc, rc.params.id!);
-    rc.json({ ...pageDetail(rc, page), role, canEdit: canEdit(role) });
+    const { actor, page, role } = pageAccess(rc, rc.params.id!);
+    rc.json({ ...pageDetail(rc, page, role, actor), role, canEdit: canEdit(role) });
   });
 
   router.get('/api/pages/:id/context', (rc) => {
-    const { page } = requirePage(rc, rc.params.id!);
+    const { page } = pageAccess(rc, rc.params.id!);
     rc.json({ context: pageContext(rc.app.db, page), page: pageListDto(rc.app.db, page) });
   });
 
@@ -161,7 +161,7 @@ export function registerPageRoutes(router: Router): void {
 
   router.patch('/api/pages/:id', async (rc) => {
     const actor = requireActor(rc);
-    const { page, library, role } = requirePage(rc, rc.params.id!);
+    const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     const body = await rc.body<Record<string, unknown>>();
     if (body.classKey !== undefined) {
@@ -204,7 +204,7 @@ export function registerPageRoutes(router: Router): void {
 
   router.delete('/api/pages/:id', (rc) => {
     const actor = requireActor(rc);
-    const { page, library, role } = requirePage(rc, rc.params.id!);
+    const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     deletePage(rc.app.db, page.id);
     audit(rc.app.db, { actor, action: 'page.delete', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { title: page.title } });
@@ -212,7 +212,7 @@ export function registerPageRoutes(router: Router): void {
   });
 
   router.get('/api/pages/:id/revisions', (rc) => {
-    const { page } = requirePage(rc, rc.params.id!);
+    const { page } = pageAccess(rc, rc.params.id!);
     const rows = rc.app.db
       .prepare('SELECT id, version, snapshot, editor_id, note, created_at FROM page_revisions WHERE page_id = ? ORDER BY version DESC LIMIT 40')
       .all(page.id) as unknown as { id: string; version: number; snapshot: string; editor_id: string | null; note: string; created_at: string }[];
@@ -230,7 +230,7 @@ export function registerPageRoutes(router: Router): void {
 
   router.post('/api/pages/:id/claims', async (rc) => {
     const actor = requireActor(rc);
-    const { page, library, role } = requirePage(rc, rc.params.id!);
+    const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     const body = await rc.body<Record<string, unknown>>();
     const text = String(body.text ?? '').trim();
@@ -259,7 +259,7 @@ export function registerPageRoutes(router: Router): void {
 
   router.post('/api/pages/:id/sources', async (rc) => {
     const actor = requireActor(rc);
-    const { page, library, role } = requirePage(rc, rc.params.id!);
+    const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     const body = await rc.body<Record<string, unknown>>();
     const sourceId = String(body.sourceId ?? '');
@@ -273,7 +273,7 @@ export function registerPageRoutes(router: Router): void {
   });
 
   router.get('/api/pages/:id/related', (rc) => {
-    const { page } = requirePage(rc, rc.params.id!);
+    const { page } = pageAccess(rc, rc.params.id!);
     rc.json(relatedPages(rc.app.db, page.id));
   });
 
@@ -287,4 +287,48 @@ export function registerPageRoutes(router: Router): void {
     if (!page) throw errors.notFound('未找到页面');
     rc.json({ page: pageListDto(rc.app.db, page) });
   });
+  router.get('/api/pages/:id/access', (rc) => {
+    const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'viewer');
+    const canManage = actor.person.isAdmin || role === 'owner';
+    if (!canManage) throw errors.forbidden('需要知识页所有者权限');
+    rc.json({
+      pageId: page.id,
+      visibility: page.visibility,
+      canManage,
+      grants: resourceGrants(rc.app.db, 'page', page.id),
+      libraryRole: requireLibrary(rc.app.db, actor, library.id).role,
+      visibilityOptions: ['inherit', 'restricted', 'private'],
+    });
+  });
+
+  router.patch('/api/pages/:id/access', async (rc) => {
+    const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'viewer');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要知识页所有者权限');
+    const body = await rc.body<{
+      visibility?: string;
+      grants?: { subjectType?: string; subjectId?: string; role?: string }[];
+    }>();
+    const visibility = ['inherit', 'restricted', 'private'].includes(String(body.visibility)) ? String(body.visibility) : page.visibility;
+    const grants = Array.isArray(body.grants) ? body.grants : [];
+    const valid = [];
+    for (const grant of grants) {
+      const subjectType = String(grant.subjectType ?? '');
+      const subjectId = String(grant.subjectId ?? '').trim();
+      const grantRole = String(grant.role ?? 'viewer');
+      if (!['person', 'team'].includes(subjectType) || !subjectId || !['viewer', 'editor'].includes(grantRole)) continue;
+      const exists = subjectType === 'person'
+        ? rc.app.db.prepare("SELECT 1 FROM persons WHERE id = ? AND status = 'active'").get(subjectId)
+        : rc.app.db.prepare('SELECT 1 FROM teams WHERE id = ?').get(subjectId);
+      if (exists) valid.push({ subjectType, subjectId, role: grantRole });
+    }
+    rc.app.db.prepare('UPDATE pages SET visibility = ?, updated_at = ? WHERE id = ?').run(visibility, nowIso(), page.id);
+    rc.app.db.prepare("DELETE FROM resource_grants WHERE resource_type = 'page' AND resource_id = ?").run(page.id);
+    const insert = rc.app.db.prepare(
+      'INSERT INTO resource_grants (id, resource_type, resource_id, subject_type, subject_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    for (const grant of valid) insert.run(newId('rgrant'), 'page', page.id, grant.subjectType, grant.subjectId, grant.role, actor.person.id, nowIso());
+    audit(rc.app.db, { actor, action: 'page.access.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { visibility, grants: valid.length } });
+    rc.json({ ok: true, visibility, grants: resourceGrants(rc.app.db, 'page', page.id) });
+  });
+
 }

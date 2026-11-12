@@ -3,7 +3,7 @@ import type { Actor, LibraryRow, PageRow } from '../types.ts';
 import { parseJson, truncate } from '../lib/ids.ts';
 import { normalizeTitle, queryTokens, snippet, termsString } from './terms.ts';
 import { pageToView, type PageView } from './pages.ts';
-import { visibleLibraries } from '../domain/access.ts';
+import { visibleLibraries, effectivePageRole, effectiveSourceRole } from '../domain/access.ts';
 
 export interface SearchFilters {
   libraryIds?: string[];
@@ -267,7 +267,17 @@ export function searchKnowledge(db: Db, actor: Actor, query: string, filters: Se
     }
   }
 
-  return [...hits.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return [...hits.values()]
+    .filter((hit) => {
+      if (hit.kind === 'page') {
+        const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(hit.id) as unknown as PageRow | undefined;
+        return Boolean(page && effectivePageRole(db, actor, page));
+      }
+      const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(hit.id) as unknown as import('../types.ts').SourceRow | undefined;
+      return Boolean(source && effectiveSourceRole(db, actor, source));
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 interface SourceRow {
@@ -316,14 +326,15 @@ export function graphForLibrary(
         ORDER BY degree DESC, p.updated_at DESC LIMIT ?`,
     )
     .all(libraryId, ...(options.classKey ? [options.classKey] : []), limit) as unknown as (PageRow & { degree: number })[];
-  const ids = new Set(rows.map((row) => row.id));
+  const visibleRows = rows.filter((row) => Boolean(effectivePageRole(db, actor, row)));
+  const ids = new Set(visibleRows.map((row) => row.id));
   const edges = db
     .prepare(
       `SELECT from_page_id, to_page_id, relation, weight FROM links WHERE library_id = ?`,
     )
     .all(libraryId) as unknown as { from_page_id: string; to_page_id: string; relation: string; weight: number }[];
   return {
-    nodes: rows.map((row) => ({
+    nodes: visibleRows.map((row) => ({
       id: row.id,
       title: row.title,
       slug: row.slug,

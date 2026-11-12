@@ -1,7 +1,7 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { requireActor, requireAdmin } from '../http/auth.ts';
-import { requireLibrary, visibleLibraries, effectiveRole, parseActorFromPerson } from '../domain/access.ts';
+import { requireLibrary, visibleLibraries, effectiveRole, effectivePageRole, effectiveSourceRole, parseActorFromPerson } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson, slugify } from '../lib/ids.ts';
@@ -198,12 +198,13 @@ export function registerLibraryRoutes(router: Router): void {
       rc.app.db
         .prepare('SELECT * FROM pages WHERE library_id = ? ORDER BY updated_at DESC LIMIT 10')
         .all(library.id) as unknown as PageRow[]
-    ).map((page) => pageListDto(rc.app.db, page));
+    ).filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page))).map((page) => pageListDto(rc.app.db, page));
     const recentSources = rc.app.db
       .prepare(
         'SELECT id, title, filename, kind, status, page_count, word_count, excerpt, created_at, updated_at FROM sources WHERE library_id = ? ORDER BY created_at DESC LIMIT 10',
       )
-      .all(library.id);
+      .all(library.id) as unknown as import('../types.ts').SourceRow[];
+    const visibleSources = recentSources.filter((source) => Boolean(effectiveSourceRole(rc.app.db, actor, source)));
     const properties = rc.app.db
       .prepare('SELECT * FROM ontology_properties WHERE library_id = ? ORDER BY class_key, sort_order')
       .all(library.id) as unknown as Record<string, unknown>[];
@@ -225,7 +226,7 @@ export function registerLibraryRoutes(router: Router): void {
       grants: grantViews,
       grantsCount: Number(grantsSummary.c),
       recentPages,
-      recentSources,
+      recentSources: visibleSources,
       counts: libraryCounts(rc.app.db, library.id),
       stats: {
         pages: Number(

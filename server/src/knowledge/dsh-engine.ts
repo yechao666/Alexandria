@@ -15,8 +15,23 @@ interface DshClaim {
   confidence?: number;
 }
 
+interface DshEntity {
+  name?: string;
+  type?: string;
+  description?: string;
+  aliases?: string[];
+}
+
+interface DshFact {
+  subject?: string;
+  predicate?: string;
+  object?: string;
+  confidence?: number;
+}
+
 interface DshConcept {
   title?: string;
+  parent?: string;
   classKey?: string;
   summary?: string;
   definition?: string;
@@ -33,6 +48,8 @@ interface DshCompilation {
   sourceSummary?: string;
   tldr?: string;
   claims?: DshClaim[];
+  entities?: DshEntity[];
+  facts?: DshFact[];
   concepts?: DshConcept[];
 }
 
@@ -93,7 +110,7 @@ function toClaim(input: DshClaim, fallbackSubject: string, section = 'DSH 编译
   };
 }
 
-function sourceBody(source: SourceRow, extracted: ExtractResult, concepts: { slug: string; title: string }[], claims: ExtractedClaim[], summary: string): string {
+function sourceBody(source: SourceRow, extracted: ExtractResult, concepts: { slug: string; title: string }[], claims: ExtractedClaim[], summary: string, entities: { slug: string; title: string }[] = []): string {
   const rows = extracted.sections
     .filter((section) => section.title && section.text)
     .slice(0, 18)
@@ -114,6 +131,9 @@ function sourceBody(source: SourceRow, extracted: ExtractResult, concepts: { slu
     '## 相关概念',
     concepts.length ? concepts.map((concept) => `- [[${concept.slug}|${concept.title}]]`).join('\n') : '（DSH 未给出概念）',
     '',
+    '## 实体',
+    entities.length ? entities.map((entity) => `- [[${entity.slug}|${entity.title}]]`).join('\n') : '（DSH 未给出实体）',
+    '',
     '## 溯源',
     `文件：${source.filename} · 格式：${source.ext || extracted.kind}${source.page_count ? ` · 页数：${source.page_count}` : ''}`,
   ].join('\n');
@@ -133,11 +153,11 @@ function buildPrompt(source: SourceRow, extracted: ExtractResult, db: Db, classe
     '只输出一个 JSON 对象，不要输出 Markdown、解释或代码围栏之外的文字。',
     '',
     'JSON 结构：',
-    '{"sourceSummary":"一句话摘要","tldr":"一句话结论","claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"concepts":[{"title":"稳定名词","classKey":"concept","summary":"一句话","definition":"定义","points":["要点"],"tags":["标签"],"aliases":["别名"],"readWhen":["何时读这一页"],"confidence":0.6,"claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"related":["已有页面 slug 或标题"]}]}',
+    '{"sourceSummary":"一句话摘要","tldr":"一句话结论","claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"entities":[{"name":"实体名","type":"组织/人物/产品/标准/指标","description":"一句话","aliases":["别名"]}],"facts":[{"subject":"主语","predicate":"关系","object":"宾语","confidence":0.6}],"concepts":[{"title":"稳定名词","classKey":"concept","parent":"上位概念标题","summary":"一句话","definition":"定义","points":["要点"],"tags":["标签"],"aliases":["别名"],"readWhen":["何时读这一页"],"confidence":0.6,"claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"related":["已有页面 slug 或标题"]}]}',
     '',
     '规则：',
     '- 一页只讲一个概念；标题必须是 2–30 字的稳定名词，不要句子、不要章节编号。',
-    '- 最多 8 个概念；没有足够信息时 concepts 可以为空。',
+    '- 最多 8 个概念；entities 抽取资料中出现的组织、人物、产品、标准、指标等；facts 抽取可核对的主谓宾事实。\n- 分层：用 parent 指向更上位的概念（或已有页面标题）；没有把握时留空。\n- 没有足够信息时对应数组可以为空。',
     '- 每条主张尽量带来源语境；不要编造资料中不存在的数字、人物或结论。',
     '- 优先复用已有页面；related 使用已有页面的 slug 或标题，避免制造重复页。',
     '- classKey 必须来自给定本体类型；不确定时用 concept。',
@@ -181,14 +201,19 @@ export function dshCompileSource(
       return true;
     })
     .slice(0, 8);
-  const log: string[] = [`DSH 返回 ${concepts.length} 个概念`];
+  const entities = (Array.isArray(parsed.entities) ? parsed.entities : [])
+    .filter((entity): entity is DshEntity & { name: string } => typeof entity.name === 'string' && entity.name.trim().length >= 2)
+    .slice(0, 12);
+  const facts = (Array.isArray(parsed.facts) ? parsed.facts : []).slice(0, 30);
+  const log: string[] = [`DSH 返回 ${concepts.length} 个概念、${entities.length} 个实体、${facts.length} 条事实`];
   let pagesCreated = 0;
   let pagesUpdated = 0;
   let conflicts = 0;
 
-  const topClaims = (Array.isArray(parsed.claims) ? parsed.claims : [])
-    .map((claim) => toClaim(claim, source.title))
+  const factClaims = facts
+    .map((fact) => toClaim({ text: `${fact.subject ?? ''} ${fact.predicate ?? ''} ${fact.object ?? ''}`.trim(), subject: fact.subject, predicate: fact.predicate, object: fact.object, confidence: fact.confidence }, source.title, 'DSH 事实'))
     .filter((claim): claim is ExtractedClaim => Boolean(claim));
+  const topClaims = [...(Array.isArray(parsed.claims) ? parsed.claims : []).map((claim) => toClaim(claim, source.title)).filter((claim): claim is ExtractedClaim => Boolean(claim)), ...factClaims];
   const summary = String(parsed.sourceSummary ?? '').trim() || truncate(extracted.text, 220);
   const sourceSlug = `sources/${slugify(source.title, 'source')}`;
   const existingSource = findSourcePage(db, source.id);
@@ -201,7 +226,7 @@ export function dshCompileSource(
         title: source.title,
         summary,
         tldr: String(parsed.tldr ?? '').trim() || truncate(topClaims[0]?.text ?? extracted.text, 120),
-        body: sourceBody(source, extracted, [], topClaims, summary),
+        body: sourceBody(source, extracted, [], topClaims, summary, []),
         status: 'active',
         metadata: { ...parseJson<Record<string, unknown>>(existingSource.metadata, {}), compiledBy: 'dsh', compiledAt: nowIso() },
         note: 'DSH 重新编译文献',
@@ -220,7 +245,7 @@ export function dshCompileSource(
         slug: sourceSlug,
         summary,
         tldr: String(parsed.tldr ?? '').trim() || truncate(topClaims[0]?.text ?? extracted.text, 120),
-        body: sourceBody(source, extracted, [], topClaims, summary),
+        body: sourceBody(source, extracted, [], topClaims, summary, []),
         status: 'active',
         confidence: 0.7,
         tags: [],
@@ -340,7 +365,55 @@ export function dshCompileSource(
       if (page && page.id !== concept.id) addLink(db, source.library_id, concept.id, page.id, 'related-to', 'semantic', 0.6);
     }
   }
-  const finalBody = sourceBody(source, extracted, linked, topClaims, summary);
+  const linkedEntities: { id: string; slug: string; title: string }[] = [];
+  for (const entity of entities) {
+    const name = entity.name.trim();
+    const existing = findExisting(db, source.library_id, name);
+    if (existing) {
+      const attached = db.prepare('SELECT 1 FROM page_sources WHERE page_id = ? AND source_id = ?').get(existing.id, source.id);
+      if (!attached) attachSource(db, existing.id, source.id, 'derived-from', '', entity.description ?? '');
+      addLink(db, source.library_id, existing.id, sourcePage.id, 'derived-from', 'frontmatter', 1.1);
+      addLink(db, source.library_id, sourcePage.id, existing.id, 'mentions', 'frontmatter', 0.9);
+      linkedEntities.push({ id: existing.id, slug: existing.slug, title: existing.title });
+      continue;
+    }
+    const page = createPage(db, {
+      libraryId: source.library_id,
+      nodeId: source.node_id,
+      classKey: allowedClasses.has('entity') ? 'entity' : 'concept',
+      title: name,
+      slug: `entities/${slugify(name, 'entity')}`,
+      summary: truncate(String(entity.description ?? ''), 180),
+      tldr: truncate(String(entity.description ?? ''), 120),
+      body: `## 实体说明\n${entity.description ?? '由 DSH 从资料中抽取。'}\n\n## 来源\n- [[${sourcePage.slug}|《${source.title}》]]`,
+      status: 'draft',
+      confidence: 0.6,
+      tags: [String(entity.type ?? '实体')],
+      aliases: (entity.aliases ?? []).map(String).slice(0, 6),
+      metadata: { compiledBy: 'dsh', compiledFrom: source.id, entityType: entity.type ?? 'entity' },
+      createdBy: actor?.person.id ?? null,
+    }, actor ?? null);
+    attachSource(db, page.id, source.id, 'derived-from', '', String(entity.description ?? ''));
+    addLink(db, source.library_id, page.id, sourcePage.id, 'derived-from', 'frontmatter', 1.1);
+    addLink(db, source.library_id, sourcePage.id, page.id, 'mentions', 'frontmatter', 0.9);
+    pagesCreated += 1;
+    linkedEntities.push({ id: page.id, slug: page.slug, title: page.title });
+  }
+  for (const fact of facts) {
+    const subject = findByRef(db, source.library_id, String(fact.subject ?? '').trim());
+    const object = findByRef(db, source.library_id, String(fact.object ?? '').trim());
+    if (subject && object && subject.id !== object.id) {
+      addLink(db, source.library_id, subject.id, object.id, String(fact.predicate ?? 'relates-to').trim().slice(0, 40), 'semantic', Number(fact.confidence ?? 0.6));
+    }
+  }
+  for (const concept of linked) {
+    const sourceConcept = concepts.find((item) => normalizeTitle(item.title) === normalizeTitle(concept.title));
+    if (sourceConcept?.parent) {
+      const parent = findByRef(db, source.library_id, sourceConcept.parent);
+      if (parent && parent.id !== concept.id) addLink(db, source.library_id, concept.id, parent.id, 'broader-than', 'semantic', 0.7);
+    }
+  }
+  const finalBody = sourceBody(source, extracted, linked, topClaims, summary, linkedEntities);
   sourcePage = updatePage(
     db,
     sourcePage,

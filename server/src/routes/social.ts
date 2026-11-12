@@ -1,11 +1,12 @@
 import type { Router } from '../http/router.ts';
 import { requireActor } from '../http/auth.ts';
 import { requireLibrary } from '../domain/access.ts';
+
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso } from '../lib/ids.ts';
 import { createNotification, notifyPerson, unreadNotificationCount } from '../domain/notifications.ts';
-import { getPage } from '../knowledge/pages.ts';
+import { pageAccess } from './helpers.ts';
 
 function commentView(row: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -22,14 +23,6 @@ function commentView(row: Record<string, unknown>): Record<string, unknown> {
     resolvedAt: row.resolved_at,
     resolvedByName: row.resolved_by_name ?? null,
   };
-}
-
-function pageAccess(rc: Parameters<Parameters<Router['get']>[1]>[0], pageId: string) {
-  const actor = requireActor(rc);
-  const page = getPage(rc.app.db, pageId);
-  if (!page) throw errors.notFound('知识页不存在');
-  const { library, role } = requireLibrary(rc.app.db, actor, page.library_id);
-  return { actor, page, library, role };
 }
 
 export function registerSocialRoutes(router: Router): void {

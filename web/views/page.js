@@ -11,6 +11,8 @@ import {
   reviewBadge,
   avatar,
   toast,
+  openModal,
+  closeModal,
   go,
   libraryColor,
   fmtDate,
@@ -60,6 +62,10 @@ export async function renderPage(ref) {
   const tagChips = (page.tags ?? []).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('');
   const readWhen = (page.readWhen ?? []).map((item) => `<div class="rail-item"><span class="dot" style="background:var(--ochre)"></span><span>${esc(item)}</span></div>`).join('');
   const sourcesAttached = detail.sources ?? [];
+  const visibilityLabel = { inherit: '继承知识库', restricted: '受限页面', private: '仅所有者' }[page.visibility] ?? page.visibility;
+  const accessCard = detail.page?.access?.canManage
+    ? `<div class="rail-card"><div class="title">访问控制 <span class="badge ${page.visibility === 'inherit' ? 'outline' : 'clay'}">${visibilityLabel}</span></div><div class="small muted">默认继承知识库权限；受限页面只对所有者与显式共享者开放。</div><button class="btn btn-sm" id="page-access" style="margin-top:10px">${icon('lock', 14)} 管理访问</button></div>`
+    : '';
   const propertyRows = (detail.properties ?? [])
     .map((property) => `<div class="rail-item"><span class="faint" style="min-width:64px">${esc(property.name ?? property.key)}</span><span>${esc(Array.isArray(property.value) ? property.value.join('、') : (property.value ?? '—'))}</span></div>`)
     .join('');
@@ -85,6 +91,7 @@ export async function renderPage(ref) {
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
         </article>
         <aside class="rail">
+          ${accessCard}
           <div class="rail-card"><div class="title">校对状态 <span>${reviewBadge(page.reviewStatus)}</span></div><div class="small muted">${page.reviewedAt ? `最近审核：${timeAgo(page.reviewedAt)}${page.reviewerName ? ` · ${esc(page.reviewerName)}` : ''}` : '尚未经过人工校对'}</div>${page.reviewNote ? `<div class="review-note">${esc(page.reviewNote)}</div>` : ''}</div>
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
           <div class="rail-card"><div class="title">来源 <span>${sourcesAttached.length}</span></div><div class="rail-list">${sources || '<div class="rail-empty">该页尚未关联文献</div>'}</div></div>
@@ -107,6 +114,54 @@ export async function mountPage(ref) {
   const detail = await api(`/api/pages/${encodeURIComponent(ref)}`);
   const page = detail.page;
   const libraryDetail = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}`).catch(() => null);
+
+  document.getElementById('page-access')?.addEventListener('click', async () => {
+    try {
+      const access = await api(`/api/pages/${encodeURIComponent(page.id)}/access`);
+      const subjects = [
+        ...(state.people ?? []).map((person) => ({ type: 'person', id: person.id, name: person.name, sub: person.title ?? '成员' })),
+        ...(state.teams ?? []).map((team) => ({ type: 'team', id: team.id, name: team.name, sub: '团队' })),
+      ];
+      const grants = new Map((access.grants ?? []).map((grant) => [`${grant.subjectType}:${grant.subjectId}`, grant.role]));
+      const rows = subjects.map((subject) => {
+        const key = `${subject.type}:${subject.id}`;
+        const checked = grants.has(key);
+        const role = grants.get(key) ?? 'viewer';
+        return `<label class="rail-item" style="display:flex;gap:8px;align-items:center;padding:7px 0"><input type="checkbox" data-access-subject="${subject.type}:${subject.id}" ${checked ? 'checked' : ''}><span style="flex:1">${esc(subject.name)} <span class="faint">· ${esc(subject.sub)}</span></span><select class="select" data-access-role="${subject.type}:${subject.id}" style="width:92px"><option value="viewer" ${role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${role === 'editor' ? 'selected' : ''}>可编辑</option></select></label>`;
+      }).join('');
+      openModal({
+        title: '页面访问控制',
+        body: `<div class="field"><label>可见性</label><select class="select" id="page-visibility">
+          <option value="inherit" ${access.visibility === 'inherit' ? 'selected' : ''}>继承知识库权限</option>
+          <option value="restricted" ${access.visibility === 'restricted' ? 'selected' : ''}>受限：仅所有者与共享对象</option>
+          <option value="private" ${access.visibility === 'private' ? 'selected' : ''}>私有：仅页面所有者与共享对象</option>
+        </select></div><div class="small faint" style="margin:12px 0 4px">共享给</div><div style="max-height:340px;overflow:auto">${rows}</div>`,
+        footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-page-access">保存访问策略</button>`,
+        onMount: (modal) => {
+          modal.querySelector('#save-page-access')?.addEventListener('click', async () => {
+            const visibility = modal.querySelector('#page-visibility')?.value ?? 'inherit';
+            const grantsToSave = [];
+            modal.querySelectorAll('[data-access-subject]').forEach((input) => {
+              if (!input.checked) return;
+              const [subjectType, ...rest] = input.dataset.accessSubject.split(':');
+              const role = modal.querySelector(`[data-access-role="${input.dataset.accessSubject}"]`)?.value ?? 'viewer';
+              grantsToSave.push({ subjectType, subjectId: rest.join(':'), role });
+            });
+            try {
+              await api(`/api/pages/${encodeURIComponent(page.id)}/access`, { method: 'PATCH', body: JSON.stringify({ visibility, grants: grantsToSave }) });
+              closeModal();
+              toast('访问策略已更新', 'success');
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            } catch (error) {
+              toast(error.message, 'error');
+            }
+          });
+        },
+      });
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
 
   document.querySelectorAll('[data-source]').forEach((node) => {
     node.addEventListener('click', () => openSource(node.dataset.source));

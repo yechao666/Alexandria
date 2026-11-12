@@ -6,6 +6,7 @@ import {
   effectiveRole,
   requireLibrary,
   visibleLibraries,
+  effectivePageRole,
 } from '../server/src/domain/access.ts';
 import type { Actor, Person } from '../server/src/types.ts';
 
@@ -75,4 +76,48 @@ test('只读 API Key 不能执行写权限检查', () => {
     () => requireLibrary(ctx.db, readActor, 'lib_product', 'editor'),
     (error: any) => error.status === 403,
   );
+});
+
+test('组织层级：上级可读下级团队的知识库，下级不能反向读取上级', () => {
+  const engLead: Actor = actorFor(ctx.db, personById('usr_zhou'));
+  const marketLead: Actor = actorFor(ctx.db, personById('usr_chen'));
+  const knowledgeLead: Actor = actorFor(ctx.db, personById('usr_shen'));
+  // 研发中心负责人可读下级知识运营组的库。
+  assert.equal(effectiveRole(ctx.db, engLead, library('lib_research')), 'viewer');
+  // 市场负责人不是产品上级，不能读取产品库。
+  assert.equal(effectiveRole(ctx.db, marketLead, library('lib_product')), null);
+  // 知识运营负责人可编辑自己团队的库，但不能编辑上级研发库（只读或无权）。
+  assert.equal(effectiveRole(ctx.db, knowledgeLead, library('lib_research')), 'owner');
+});
+
+test('下级成员看不到上级知识库，除非显式共享', () => {
+  const now = new Date().toISOString();
+  ctx.db
+    .prepare("INSERT INTO persons (id, email, name, title, avatar_color, is_admin, password_hash, status, created_at) VALUES ('usr_child', 'child@alex.dev', '子团队成员', '', 'slate', 0, 'x', 'active', ?)")
+    .run(now);
+  ctx.db
+    .prepare("INSERT INTO team_members (team_id, person_id, role, created_at) VALUES ('team_knowledge', 'usr_child', 'member', ?)")
+    .run(now);
+  const child: Actor = actorFor(ctx.db, personById('usr_child'));
+  assert.equal(effectiveRole(ctx.db, child, library('lib_eng')), null);
+  ctx.db
+    .prepare("INSERT INTO library_grants (id, library_id, subject_type, subject_id, role, created_by, created_at) VALUES ('grant_child_eng', 'lib_eng', 'person', 'usr_child', 'viewer', 'usr_lin', ?)")
+    .run(now);
+  assert.equal(effectiveRole(ctx.db, child, library('lib_eng')), 'viewer');
+  ctx.db.prepare("DELETE FROM library_grants WHERE id = 'grant_child_eng'").run();
+  ctx.db.prepare("DELETE FROM team_members WHERE person_id = 'usr_child'").run();
+  ctx.db.prepare("DELETE FROM persons WHERE id = 'usr_child'").run();
+});
+
+test('页面级 ACL：restricted 页面仅所有者与显式共享者可见', () => {
+  const page = ctx.db.prepare("SELECT * FROM pages WHERE library_id = 'lib_product' LIMIT 1").get() as unknown as import('../server/src/types.ts').PageRow;
+  ctx.db.prepare("UPDATE pages SET visibility = 'restricted' WHERE id = ?").run(page.id);
+  const restricted = ctx.db.prepare('SELECT * FROM pages WHERE id = ?').get(page.id) as unknown as import('../server/src/types.ts').PageRow;
+  assert.equal(effectivePageRole(ctx.db, guest, restricted), null);
+  ctx.db
+    .prepare("INSERT INTO resource_grants (id, resource_type, resource_id, subject_type, subject_id, role, created_by, created_at) VALUES ('rg_test_guest', 'page', ?, 'person', 'usr_guest', 'viewer', 'usr_lin', ?)")
+    .run(page.id, new Date().toISOString());
+  assert.equal(effectivePageRole(ctx.db, guest, restricted), 'viewer');
+  ctx.db.prepare("DELETE FROM resource_grants WHERE id = 'rg_test_guest'").run();
+  ctx.db.prepare("UPDATE pages SET visibility = 'inherit' WHERE id = ?").run(page.id);
 });

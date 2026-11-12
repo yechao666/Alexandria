@@ -24,6 +24,8 @@ process.stdin.on('end', () => {
       sourceSummary: 'DSH 生成的摘要',
       tldr: 'DSH 生成的一句话结论',
       claims: [{ text: 'DSH 编译测试主张', subject: 'DSH 编译测试概念', predicate: '定义', object: '由本机 DSH 编译', confidence: 0.8 }],
+      entities: [{ name: 'DSH 实体测试', type: '产品', description: '由 DSH 抽取的实体。', aliases: ['DSH Entity'] }],
+      facts: [{ subject: 'DSH 实体测试', predicate: '属于', object: 'DSH 编译测试概念', confidence: 0.8 }],
       concepts: [{
         title: 'DSH 编译测试概念',
         classKey: 'concept',
@@ -70,6 +72,10 @@ async function j<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+function sourcePageIdForTest(): string {
+  return (ctx.db.prepare("SELECT id FROM pages WHERE title = 'DSH 编译测试资料'").get() as unknown as { id: string }).id;
+}
+
 test('DSH 编译：入库任务使用本机 DSH 生成概念页', async () => {
   const response = await fetch(`${base}/api/libraries/lib_eng/sources`, {
     method: 'POST',
@@ -97,6 +103,10 @@ test('DSH 编译：入库任务使用本机 DSH 生成概念页', async () => {
   assert.match(page.metadata, /"compiledBy":"dsh"/);
   const source = ctx.db.prepare("SELECT body FROM pages WHERE title = 'DSH 编译测试资料'").get() as unknown as { body: string };
   assert.match(source.body, /本机 DSH/);
+  const entity = ctx.db.prepare("SELECT * FROM pages WHERE title = 'DSH 实体测试'").get() as unknown as { id: string } | undefined;
+  assert.ok(entity, 'DSH 应创建实体页');
+  const fact = ctx.db.prepare("SELECT * FROM claims WHERE page_id = ? AND predicate = '属于'").get(sourcePageIdForTest()) as unknown as { text: string } | undefined;
+  assert.ok(fact, 'DSH 应抽取事实');
 });
 
 test('DSH 语义重排用于 /api/search', async () => {

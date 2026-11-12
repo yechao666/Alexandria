@@ -38,6 +38,22 @@ function safeFilename(filename: string): string {
     .slice(0, 180) || 'file';
 }
 
+
+function jobEvent(
+  db: Db,
+  jobId: string,
+  step: string,
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped',
+  message: string,
+  progress: number,
+  durationMs?: number | null,
+): void {
+  db.prepare(
+    `INSERT INTO job_events (id, job_id, step, status, message, progress, duration_ms, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(newId('jevt'), jobId, step, status, message, progress, durationMs ?? null, nowIso());
+}
+
 function jobLog(db: Db, jobId: string, line: string): void {
   const row = db.prepare('SELECT log FROM ingest_jobs WHERE id = ?').get(jobId) as unknown as { log: string } | undefined;
   const entries = parseJson<string[]>(row?.log, []);
@@ -126,6 +142,7 @@ export function ingestBuffer(db: Db, env: Env, libraryId: string, input: IngestI
     `INSERT INTO ingest_jobs (id, library_id, source_id, status, stage, progress, compiler, log, created_at)
      VALUES (?, ?, ?, 'queued', 'queued', 0, ?, '[]', ?)`,
   ).run(jobId, libraryId, sourceId, useDsh ? 'dsh' : 'rule', now);
+  jobEvent(db, jobId, 'queued', 'queued', '任务已创建，等待解析', 0);
 
   audit(db, {
     actor: input.actor,
@@ -155,6 +172,8 @@ export function processJob(db: Db, env: Env, jobId: string): void {
   }
 
   setJob(db, jobId, { status: 'running', stage: 'extract', progress: 8, started_at: nowIso() });
+  jobEvent(db, jobId, 'extract', 'running', `开始解析 ${source.filename}`, 8);
+  let stepStarted = Date.now();
   db.prepare("UPDATE sources SET status = 'processing', updated_at = ? WHERE id = ?").run(nowIso(), source.id);
   jobLog(db, jobId, `开始解析 ${source.filename}`);
 
@@ -163,6 +182,8 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     const buffer = readFileSync(source.storage_path);
     const extracted = extractBuffer(buffer, source.filename, source.storage_path);
     setJob(db, jobId, { stage: 'normalize', progress: 32 });
+    jobEvent(db, jobId, 'extract', 'succeeded', `解析完成：${extracted.kind}，${extracted.sections.length} 节`, 32, Date.now() - stepStarted);
+    stepStarted = Date.now();
     jobLog(db, jobId, `解析完成：${extracted.kind}，${extracted.sections.length} 节，${extracted.warnings.length} 个提示`);
 
     let extractedText = cleanText(extracted.text);
@@ -240,6 +261,8 @@ export function processJob(db: Db, env: Env, jobId: string): void {
       jobLog(db, jobId, `识别到 ${extracted.assets.length} 个内嵌图片，OCR 文本已并入知识`);
     }
 
+    jobEvent(db, jobId, 'assets', 'succeeded', `资产 ${assetIds.length} 个，OCR 文本 ${ocrAppend ? '已' : '未'}追加`, 50, Date.now() - stepStarted);
+    stepStarted = Date.now();
     const excerpt = truncate(extractedText, 240);
     const sectionsMeta = extracted.sections.map((section) => ({
       title: section.title,
@@ -271,8 +294,11 @@ export function processJob(db: Db, env: Env, jobId: string): void {
 
     const refreshed = db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as SourceRow;
     indexSource(db, refreshed);
+    jobEvent(db, jobId, 'index', 'succeeded', `全文索引完成：${refreshed.word_count} 字`, 55, Date.now() - stepStarted);
+    stepStarted = Date.now();
 
     setJob(db, jobId, { stage: jobCompiler === 'dsh' ? 'dsh-compile' : 'compile', progress: 58 });
+    jobEvent(db, jobId, 'compile', 'running', jobCompiler === 'dsh' ? '本机 DSH 正在抽取概念、实体、主张与关联' : '规则编译器正在抽取概念与关联', 58);
     let report = null;
     if (jobCompiler === 'dsh') {
       jobLog(db, jobId, '调用本机 DSH 编译知识：概念、主张、关联');
@@ -288,6 +314,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
       report = compileSource(db, refreshed, { ...extracted, text: extractedText }, { actor: null, maxConcepts: 10 });
     }
 
+    jobEvent(db, jobId, 'compile', 'succeeded', `生成 ${report.pagesCreated} 页、更新 ${report.pagesUpdated} 页、${report.conflicts} 处矛盾`, 92, Date.now() - stepStarted);
     setJob(db, jobId, {
       status: 'succeeded',
       stage: 'done',
@@ -298,6 +325,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
       finished_at: nowIso(),
     });
     for (const line of report.log) jobLog(db, jobId, line);
+    jobEvent(db, jobId, 'done', 'succeeded', '编译完成，知识已可检索', 100);
     db.prepare(
       `UPDATE sources SET metadata = ?, updated_at = ? WHERE id = ?`,
     ).run(
@@ -326,6 +354,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     const message = (error as Error).message || String(error);
     setJob(db, jobId, { status: 'failed', stage: 'failed', error: message, finished_at: nowIso() });
     db.prepare("UPDATE sources SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(message, nowIso(), source.id);
+    jobEvent(db, jobId, 'failed', 'failed', message, 100);
     jobLog(db, jobId, `失败：${message}`);
     console.error(`[ingest] ${source.filename}:`, error);
   }

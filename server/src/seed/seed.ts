@@ -958,6 +958,12 @@ export function seedDatabase(db: Db, env: Env): void {
     ensureDefaultOntology(db, library.id);
   }
 
+  // 只读访客：显式授予产品知识库 viewer，用于演示“只读成员”边界。
+  db.prepare(
+    `INSERT INTO library_grants (id, library_id, subject_type, subject_id, role, created_by, created_at)
+     VALUES (?, 'lib_product', 'person', 'usr_guest', 'viewer', 'usr_lin', ?)`,
+  ).run(newId('grant'), now);
+
   // 战略库：仅授权总部与知识运营负责人；产品/工程库由团队关系自然授权。
   for (const personId of ['usr_lin', 'usr_shen']) {
     db.prepare(

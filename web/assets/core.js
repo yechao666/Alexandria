@@ -243,6 +243,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
           <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
           <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>校对台</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
           <a class="nav-link ${active === 'upload' ? 'active' : ''}" href="#/upload">${icon('upload')}<span>资料入库</span></a>
+          <a class="nav-link ${active === 'tasks' ? 'active' : ''}" href="#/tasks">${icon('clock')}<span>任务中心</span></a>
         </div>
         <div class="side-section">
           <div class="side-label">我的知识库</div>
