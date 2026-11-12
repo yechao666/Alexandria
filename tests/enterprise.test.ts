@@ -305,3 +305,20 @@ test('管理员权限矩阵展示每人对每个库的有效角色', async () =>
   const denied = await fetch(`${base}/api/admin/access-matrix`, { headers: { authorization: `Bearer ${guest.token}` } });
   assert.equal(denied.status, 403);
 });
+
+test('校对台支持批量批准无矛盾页面', async () => {
+  const create = async (title: string) =>
+    j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, classKey: 'concept', body: `## 定义\n${title}`, status: 'draft' }),
+    });
+  const first = await create('批量校对测试 A');
+  const second = await create('批量校对测试 B');
+  const result = await j<{ approved: number; skipped: number }>('/api/review/bulk', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [first.page.id, second.page.id], action: 'approve' }),
+  });
+  assert.equal(result.approved, 2);
+});

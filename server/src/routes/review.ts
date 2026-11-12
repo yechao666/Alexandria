@@ -290,6 +290,32 @@ export function registerReviewRoutes(router: Router): void {
     }
     rc.json({ conflicts: result, summary: reviewSummary(rc.app.db, actor) });
   });
+  router.post('/api/review/bulk', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{ ids?: string[]; action?: string; note?: string; forceConflicts?: boolean }>();
+    const action = body.action === 'request_changes' ? 'request_changes' : 'approve';
+    const ids = [...new Set(Array.isArray(body.ids) ? body.ids.map(String) : [])].slice(0, 50);
+    if (!ids.length) throw errors.badRequest('请选择页面');
+    let approved = 0;
+    let skipped = 0;
+    for (const id of ids) {
+      try {
+        const { page, role } = pageAccess(rc, id, 'editor');
+        if (role === 'viewer') { skipped += 1; continue; }
+        if (action === 'approve' && pageConflicts(rc.app.db, page.id) > 0 && !body.forceConflicts) {
+          skipped += 1;
+          continue;
+        }
+        reviewPage(rc.app.db, page, action === 'approve' ? 'approve' : 'request_changes', String(body.note ?? '批量校对'), actor);
+        approved += 1;
+      } catch {
+        skipped += 1;
+      }
+    }
+    audit(rc.app.db, { actor, action: 'review.bulk', targetType: 'page', targetId: ids.join(','), detail: { action, approved, skipped } });
+    rc.json({ ok: true, action, approved, skipped });
+  });
+
 }
 
 export { normalizeTitle };
