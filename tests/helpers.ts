@@ -177,6 +177,34 @@ export function createPdfFixture(dir: string): string {
   return pdfPath;
 }
 
+export function createOdtFixture(dir: string): string {
+  const path = join(dir, 'demo.odt');
+  const script = `
+import zipfile
+path = ${JSON.stringify(path)}
+content = '''<?xml version="1.0" encoding="UTF-8"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:h text:outline-level="1">知识编译</text:h><text:p>知识编译在入库时完成。</text:p><text:h text:outline-level="2">检索</text:h><text:p>检索使用 FTS5 与图谱。</text:p></office:text></office:body></office:document-content>'''
+with zipfile.ZipFile(path, 'w') as z:
+    z.writestr('mimetype', 'application/vnd.oasis.opendocument.text')
+    z.writestr('content.xml', content)
+`;
+  execFileSync(pythonBin(), ['-c', script], { timeout: 60_000 });
+  return path;
+}
+
+export function createEpubFixture(dir: string): string {
+  const path = join(dir, 'demo.epub');
+  const script = `
+import zipfile
+path = ${JSON.stringify(path)}
+html = '''<html><body><h1>知识编译</h1><p>知识编译是入库时的结构化过程。</p></body></html>'''
+with zipfile.ZipFile(path, 'w') as z:
+    z.writestr('mimetype', 'application/epub+zip')
+    z.writestr('OEBPS/chapter1.xhtml', html)
+`;
+  execFileSync(pythonBin(), ['-c', script], { timeout: 60_000 });
+  return path;
+}
+
 export function createScannedPdfFixture(dir: string): string {
   const path = join(dir, 'scanned.pdf');
   const script = `

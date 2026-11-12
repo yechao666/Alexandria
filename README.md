@@ -208,6 +208,7 @@ cd ../alexandria && node server/src/main.ts
 - [设计方案](docs/DESIGN.md)：架构、数据模型、编译、本体、检索、权限、企业微信。
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
+- [验收报告](docs/ACCEPTANCE.md)：需求映射、60 项测试证据与已知边界。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
 
 ## 本体属性
