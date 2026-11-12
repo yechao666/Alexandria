@@ -114,6 +114,7 @@ export async function renderLibrary(ref, tab = 'catalog') {
       <div class="btn-row">
         ${detail.canEdit ? `<a class="btn btn-primary" href="#/upload/${encodeURIComponent(library.slug)}">${icon('upload', 15)} 上传资料</a>` : ''}
         <a class="btn" href="#/search?library=${encodeURIComponent(library.slug)}">${icon('search', 15)} 检索</a>
+        <a class="btn" href="#/review?library=${encodeURIComponent(library.slug)}">${icon('check', 15)} 校对 ${detail.counts.reviewPending ?? 0}</a>
       </div>
     </div>
     <div class="tabs">${tabsHtml}</div>

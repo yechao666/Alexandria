@@ -27,6 +27,7 @@ export function libraryCounts(db: Db, libraryId: string): {
   claims: number;
   conflicts: number;
   nodes: number;
+  reviewPending: number;
 } {
   const one = (sql: string) => Number((db.prepare(sql).get(libraryId) as unknown as { c: number } | undefined)?.c ?? 0);
   return {
@@ -38,6 +39,7 @@ export function libraryCounts(db: Db, libraryId: string): {
       "SELECT COUNT(*) AS c FROM claims WHERE status = 'conflicted' AND page_id IN (SELECT id FROM pages WHERE library_id = ?)",
     ),
     nodes: one('SELECT COUNT(*) AS c FROM catalog_nodes WHERE library_id = ?'),
+    reviewPending: one("SELECT COUNT(*) AS c FROM pages WHERE library_id = ? AND (review_status <> 'approved' OR status = 'draft')"),
   };
 }
 
@@ -138,6 +140,10 @@ export function pageListDto(db: Db, page: PageRow): Record<string, unknown> {
     summary: view.summary,
     tldr: view.tldr,
     status: view.status,
+    reviewStatus: view.reviewStatus,
+    reviewNote: view.reviewNote,
+    reviewerName: view.reviewerName,
+    reviewedAt: view.reviewed_at,
     confidence: view.confidence,
     tags: view.tagsList,
     aliases: view.aliasesList,

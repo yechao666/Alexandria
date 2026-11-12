@@ -150,7 +150,9 @@ export function detectConflicts(db: Db, pageId: string): { count: number; detail
     for (const rival of rivals) {
       if (!rival.object || similar(claim.object, rival.object)) continue;
       db.prepare("UPDATE claims SET status = 'conflicted' WHERE id IN (?, ?)").run(claim.id, rival.id);
-      db.prepare("UPDATE pages SET status = 'draft', updated_at = ? WHERE id IN (?, ?)").run(nowIso(), pageId, rival.page_id);
+      db.prepare(
+        "UPDATE pages SET status = 'draft', review_status = 'unreviewed', review_note = ?, updated_at = ? WHERE id IN (?, ?)",
+      ).run(`检测到与《${rival.title}》的主张矛盾`, nowIso(), pageId, rival.page_id);
       count += 1;
       details.push(`「${claim.subject}」在《${rival.title}》中的说法与本页不一致`);
     }

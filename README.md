@@ -62,6 +62,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记 |
+| **校对台** | 草稿/退回/矛盾队列；批准、要求修改、撤回校对、逐条裁决主张 |
 | **企业微信** | 组织/人员映射骨架与 dry-run 同步计划，预留真实 OAuth/通讯录接入 |
 
 ### 知识编译 vs 查询期 RAG
@@ -80,8 +81,9 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 1. **建库**：首页「新建知识库」，绑定团队与可见性；系统自动写入默认本体与两个目录。
 2. **上传资料**：支持拖拽；解析与编译异步执行，页面会显示任务阶段与编译出的新页面。
 3. **阅读与校正**：打开概念页，查看来源、主张、出链/入链与邻域图谱；人工编辑正文、类型、置信度与标签。
-4. **检索与合成**：全局检索给出词法 + 图谱的命中与信号分解；「知识合成」返回带引用的答案，并标注草稿与缺口。
-5. **接入智能体**：在「团队与权限 / API 密钥」创建读写密钥，把 [SKILL.md](skills/alexandria/SKILL.md) 交给 DSH。
+4. **校对与裁决**：进入「校对台」处理自动编译的草稿；批准、退回或撤回校对。页面内可直接对冲突主张选择「采用」或「驳回」。
+5. **检索与合成**：全局检索给出词法 + 图谱的命中与信号分解；「知识合成」返回带引用的答案，并标注草稿与缺口。
+6. **接入智能体**：在「团队与权限 / API 密钥」创建读写密钥，把 [SKILL.md](skills/alexandria/SKILL.md) 交给 DSH。
 
 ## 架构
 
@@ -191,6 +193,17 @@ curl -s http://127.0.0.1:4520/api/agent/search \
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
+
+## 校对流程
+
+```text
+自动编译（draft / unreviewed）
+   → 校对台
+       ├── 批准 → active / approved（记录审核人与说明）
+       ├── 要求修改 → draft / changes_requested（必填说明）
+       ├── 撤回校对 → draft / unreviewed
+       └── 矛盾主张 → 采用 / 驳回（保留双方，另一侧标记 resolved）
+```
 
 ## 已知边界
 

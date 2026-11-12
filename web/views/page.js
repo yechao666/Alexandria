@@ -8,6 +8,7 @@ import {
   classBadge,
   statusBadge,
   confidence,
+  reviewBadge,
   toast,
   go,
   libraryColor,
@@ -45,7 +46,7 @@ export async function renderPage(ref) {
     .join('');
   const claims = (detail.claims ?? [])
     .map(
-      (claim) => `<div class="claim ${claim.status === 'conflicted' ? 'conflicted' : ''}">${esc(claim.text)}<div class="claim-meta"><span>${esc(claim.predicate)}</span><span>${Math.round(Number(claim.confidence) * 100)}%</span>${claim.status === 'conflicted' ? '<span class="badge clay">待裁决</span>' : ''}</div></div>`,
+      (claim) => `<div class="claim ${claim.status === 'conflicted' ? 'conflicted' : ''}">${esc(claim.text)}<div class="claim-meta"><span>${esc(claim.predicate)}</span><span>${Math.round(Number(claim.confidence) * 100)}%</span>${claim.status === 'conflicted' ? '<span class="badge clay">待裁决</span>' : ''}</div>${claim.status === 'conflicted' && detail.canEdit ? `<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-claim-resolution="keep" data-claim-id="${esc(claim.id)}">采用此说法</button><button class="btn btn-sm btn-ghost" data-claim-resolution="dismiss" data-claim-id="${esc(claim.id)}">驳回</button></div>` : ''}</div>`,
     )
     .join('');
   const outbound = (detail.links?.outbound ?? [])
@@ -65,7 +66,7 @@ export async function renderPage(ref) {
         <article>
           <div class="small muted" style="margin-bottom:14px"><a href="#/library/${encodeURIComponent(page.libraryId)}">${esc(detail.library.name)}</a><span> / </span><span>${esc(page.className)}</span></div>
           <header class="article-head">
-            <div class="row wrap">${classBadge(page)}${statusBadge(page.status)}${page.tags?.slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('') ?? ''}</div>
+            <div class="row wrap">${classBadge(page)}${statusBadge(page.status)}${reviewBadge(page.reviewStatus)}${page.tags?.slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('') ?? ''}</div>
             <h1>${esc(page.title)}</h1>
             <div class="summary">${esc(page.summary)}</div>
             <div class="article-meta">
@@ -75,11 +76,12 @@ export async function renderPage(ref) {
               ${page.creatorName ? `<span>创建者 ${esc(page.creatorName)}</span>` : ''}
               <span class="mono">${esc(page.slug)}</span>
             </div>
-            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button><button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
+            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
           </header>
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
         </article>
         <aside class="rail">
+          <div class="rail-card"><div class="title">校对状态 <span>${reviewBadge(page.reviewStatus)}</span></div><div class="small muted">${page.reviewedAt ? `最近审核：${timeAgo(page.reviewedAt)}${page.reviewerName ? ` · ${esc(page.reviewerName)}` : ''}` : '尚未经过人工校对'}</div>${page.reviewNote ? `<div class="review-note">${esc(page.reviewNote)}</div>` : ''}</div>
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
           <div class="rail-card"><div class="title">来源 <span>${sourcesAttached.length}</span></div><div class="rail-list">${sources || '<div class="rail-empty">该页尚未关联文献</div>'}</div></div>
           <div class="rail-card"><div class="title">结构化主张 <span>${detail.claims?.length ?? 0}</span></div><div>${claims || '<div class="rail-empty">暂无主张</div>'}</div></div>
@@ -115,6 +117,35 @@ export async function mountPage(ref) {
     } catch (error) {
       toast(error.message, 'error');
     }
+  });
+  const review = async (action, note = '') => {
+    try {
+      await api(`/api/pages/${encodeURIComponent(page.id)}/review`, { method: 'POST', body: { action, note } });
+      toast(action === 'approve' ? '已批准' : action === 'request_changes' ? '已退回修改' : '已撤回校对', 'success');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  };
+  document.getElementById('review-approve')?.addEventListener('click', () => review('approve'));
+  document.getElementById('review-changes')?.addEventListener('click', () => {
+    const note = prompt('说明需要修改什么（必填）：');
+    if (note?.trim()) review('request_changes', note.trim());
+  });
+  document.getElementById('review-reopen')?.addEventListener('click', () => review('reopen'));
+  document.querySelectorAll('[data-claim-resolution]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await api(`/api/claims/${encodeURIComponent(button.dataset.claimId)}/resolve`, {
+          method: 'POST',
+          body: { resolution: button.dataset.claimResolution },
+        });
+        toast(button.dataset.claimResolution === 'keep' ? '已采用该说法' : '已驳回该说法', 'success');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
   });
   document.getElementById('page-graph');
   try {

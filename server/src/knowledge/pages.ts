@@ -14,6 +14,8 @@ export interface PageInput {
   tldr?: string;
   body?: string;
   status?: string;
+  reviewStatus?: string;
+  reviewNote?: string;
   confidence?: number;
   tags?: string[];
   aliases?: string[];
@@ -24,6 +26,9 @@ export interface PageInput {
 }
 
 export interface PageView extends PageRow {
+  reviewStatus: string;
+  reviewNote: string;
+  reviewerName: string | null;
   tagsList: string[];
   aliasesList: string[];
   readWhenList: string[];
@@ -62,8 +67,14 @@ export function pageToView(db: Db, row: PageRow): PageView {
   const updater = row.updated_by
     ? (db.prepare('SELECT name FROM persons WHERE id = ?').get(row.updated_by) as unknown as { name: string } | undefined)
     : undefined;
+  const reviewer = row.reviewed_by
+    ? (db.prepare('SELECT name FROM persons WHERE id = ?').get(row.reviewed_by) as unknown as { name: string } | undefined)
+    : undefined;
   return {
     ...row,
+    reviewStatus: row.review_status,
+    reviewNote: row.review_note,
+    reviewerName: reviewer?.name ?? null,
     tagsList: parseJson<string[]>(row.tags, []),
     aliasesList: parseJson<string[]>(row.aliases, []),
     readWhenList: parseJson<string[]>(row.read_when, []),
@@ -212,10 +223,15 @@ export function createPage(db: Db, input: PageInput, actor?: Actor | null): Page
     if (!node) throw errors.badRequest('目录节点不属于该知识库');
   }
 
+  const status = input.status ?? 'active';
+  const reviewStatus = input.reviewStatus ?? (status === 'draft' ? 'unreviewed' : 'approved');
+  const creatorId = input.createdBy ?? actor?.person.id ?? null;
+  const reviewedBy = reviewStatus === 'approved' ? creatorId : null;
   db.prepare(
-    `INSERT INTO pages (id, library_id, node_id, class_key, slug, title, summary, tldr, body, status, confidence,
-       tags, aliases, read_when, owner_person_id, superseded_by, metadata, version, created_by, updated_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 1, ?, ?, ?, ?)`,
+    `INSERT INTO pages (id, library_id, node_id, class_key, slug, title, summary, tldr, body, status, review_status, review_note,
+       reviewed_by, reviewed_at, confidence, tags, aliases, read_when, owner_person_id, superseded_by, metadata, version,
+       created_by, updated_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, NULL, ?, 1, ?, ?, ?, ?)`,
   ).run(
     id,
     input.libraryId,
@@ -226,15 +242,18 @@ export function createPage(db: Db, input: PageInput, actor?: Actor | null): Page
     input.summary ?? truncate(input.body ?? '', 180),
     input.tldr ?? '',
     input.body ?? '',
-    input.status ?? 'active',
+    status,
+    reviewStatus,
+    reviewedBy,
+    reviewStatus === 'approved' ? now : null,
     Math.max(0, Math.min(1, input.confidence ?? 0.5)),
     JSON.stringify(input.tags ?? []),
     JSON.stringify(input.aliases ?? []),
     JSON.stringify(input.readWhen ?? []),
     input.ownerPersonId ?? actor?.person.id ?? null,
     JSON.stringify(input.metadata ?? {}),
-    input.createdBy ?? actor?.person.id ?? null,
-    input.createdBy ?? actor?.person.id ?? null,
+    creatorId,
+    creatorId,
     now,
     now,
   );
@@ -257,6 +276,8 @@ export interface PagePatch {
   tldr?: string;
   body?: string;
   status?: string;
+  reviewStatus?: string;
+  reviewNote?: string;
   confidence?: number;
   tags?: string[];
   aliases?: string[];
@@ -288,6 +309,14 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
   if (patch.tldr !== undefined) set('tldr', patch.tldr);
   if (patch.body !== undefined) set('body', patch.body);
   if (patch.status !== undefined) set('status', patch.status);
+  if (patch.reviewStatus !== undefined) {
+    set('review_status', patch.reviewStatus);
+    set('review_note', patch.reviewNote ?? '');
+    set('reviewed_by', actor?.person.id ?? null);
+    set('reviewed_at', nowIso());
+  } else if (patch.reviewNote !== undefined) {
+    set('review_note', patch.reviewNote);
+  }
   if (patch.confidence !== undefined) set('confidence', Math.max(0, Math.min(1, patch.confidence)));
   if (patch.tags !== undefined) set('tags', JSON.stringify(patch.tags));
   if (patch.aliases !== undefined) set('aliases', JSON.stringify(patch.aliases));
@@ -307,6 +336,34 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
   rebuildBodyLinks(db, updated);
   if (patch.title !== undefined || patch.slug !== undefined) backfillLinksTo(db, updated);
   return updated;
+}
+
+export function reviewPage(
+  db: Db,
+  page: PageRow,
+  action: 'approve' | 'request_changes' | 'reopen' | 'archive',
+  note: string,
+  actor: Actor,
+): PageRow {
+  const next =
+    action === 'approve'
+      ? { status: 'active', reviewStatus: 'approved' }
+      : action === 'archive'
+        ? { status: 'archived', reviewStatus: 'approved' }
+        : action === 'request_changes'
+          ? { status: 'draft', reviewStatus: 'changes_requested' }
+          : { status: 'draft', reviewStatus: 'unreviewed' };
+  return updatePage(
+    db,
+    page,
+    {
+      status: next.status,
+      reviewStatus: next.reviewStatus,
+      reviewNote: note,
+      note: `审核：${action === 'approve' ? '批准' : action === 'archive' ? '归档' : action === 'request_changes' ? '要求修改' : '重新打开'}${note ? ` · ${note}` : ''}`,
+    },
+    actor,
+  );
 }
 
 export function deletePage(db: Db, pageId: string): void {

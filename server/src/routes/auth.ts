@@ -6,6 +6,7 @@ import { errors } from '../http/respond.ts';
 import { visibleLibraries } from '../domain/access.ts';
 import { parseJson } from '../lib/ids.ts';
 import { libraryCounts, nodeTree, serializeLibrary, teamTree } from './helpers.ts';
+import { reviewSummary } from './review.ts';
 import type { LibraryRow, PageRow } from '../types.ts';
 
 export function mePayload(rc: RequestContext) {
@@ -112,6 +113,7 @@ export function registerAuthRoutes(router: Router): void {
           .get(...libraryIds, ...libraryIds, ...libraryIds, ...libraryIds, ...libraryIds) as unknown as Record<string, number>)
       : { pages: 0, sources: 0, links: 0, claims: 0, conflicts: 0 };
 
+    const review = reviewSummary(rc.app.db, actor);
     rc.json({
       me: { person: actor.person, teams: actor.teamIds },
       libraries: libraries.map((library) => serializeLibrary(rc.app.db, library as LibraryRow, library.role)),
@@ -129,7 +131,10 @@ export function registerAuthRoutes(router: Router): void {
         ...totals,
         libraries: libraries.length,
         members: people.length,
+        reviewPending: review.pending,
+        conflicts: review.conflicts,
       },
+      review,
       classes: classDistribution,
       features: {
         llm: Boolean(rc.app.env.llm),

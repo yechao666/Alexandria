@@ -151,6 +151,12 @@ export function classBadge(page) {
   return `<span class="badge ${page.classColor ?? 'jade'}">${escapeHtml(page.className ?? page.classKey)}</span>`;
 }
 
+export function reviewBadge(status) {
+  const labels = { unreviewed: '待校对', changes_requested: '已退回', approved: '已校对' };
+  const tone = status === 'approved' ? 'jade' : status === 'changes_requested' ? 'clay' : 'ochre';
+  return `<span class="badge ${tone}">${labels[status] ?? status}</span>`;
+}
+
 export function statusBadge(status) {
   const labels = { active: '有效', draft: '草稿', stale: '陈旧', archived: '归档', ready: '已就绪', processing: '处理中', queued: '排队中', failed: '失败' };
   return `<span class="badge status-${status}">${labels[status] ?? status}</span>`;
@@ -235,6 +241,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
           <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>总览</span></a>
           <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>全局检索</span></a>
           <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
+          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>校对台</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
           <a class="nav-link ${active === 'upload' ? 'active' : ''}" href="#/upload">${icon('upload')}<span>资料入库</span></a>
         </div>
         <div class="side-section">

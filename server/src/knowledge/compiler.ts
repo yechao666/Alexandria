@@ -187,7 +187,7 @@ function conceptBody(title: string, definitions: string[], points: string[], sou
     points.length ? points.map((point) => `- ${point}`).join('\n') : '- 暂无结构化要点，建议补充人工校对。',
     '',
     `## 来源`,
-    `- [[${sourceSlug}]] · 《${sourceTitle}》`,
+    `- [[${sourceSlug}|《${sourceTitle}》]]`,
     '',
     `## 开放问题`,
     `- 「${title}」与其他概念的边界是否清晰？哪些来源支持或反驳本页？`,

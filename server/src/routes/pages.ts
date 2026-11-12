@@ -27,7 +27,7 @@ function pageDetail(rc: RequestContext, page: PageRow) {
     )
     .all(page.id);
   const claims = rc.app.db
-    .prepare('SELECT * FROM claims WHERE page_id = ? ORDER BY confidence DESC, created_at ASC')
+    .prepare("SELECT * FROM claims WHERE page_id = ? AND status NOT IN ('ignored', 'resolved') ORDER BY confidence DESC, created_at ASC")
     .all(page.id) as unknown as Record<string, unknown>[];
   const relations = relatedPages(rc.app.db, page.id);
   const properties = rc.app.db

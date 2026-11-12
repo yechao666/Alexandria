@@ -87,7 +87,7 @@ export async function renderHome() {
       <div class="stat-cell"><div class="label">知识页</div><div class="value">${fmtNumber(stats.pages)}</div><div class="sub">原子化、可引用</div></div>
       <div class="stat-cell"><div class="label">馆藏文献</div><div class="value">${fmtNumber(stats.sources)}</div><div class="sub">原始文件可回溯</div></div>
       <div class="stat-cell"><div class="label">知识关联</div><div class="value">${fmtNumber(stats.links)}</div><div class="sub">wikilink + 类型化边</div></div>
-      <div class="stat-cell"><div class="label">知识库</div><div class="value">${fmtNumber(stats.libraries ?? libraries.length)}</div><div class="sub">${fmtNumber(stats.members)} 位成员可见</div></div>
+      <div class="stat-cell"><div class="label">待校对</div><div class="value">${fmtNumber(stats.reviewPending ?? 0)}</div><div class="sub">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库 · ${fmtNumber(stats.conflicts ?? 0)} 处矛盾</div></div>
     </section>
 
     <div class="section-head">

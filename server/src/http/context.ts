@@ -88,7 +88,9 @@ export function createContext(input: {
       return url.searchParams.get(name) ?? fallback;
     },
     queryInt(name, fallback) {
-      const value = Number(url.searchParams.get(name));
+      const raw = url.searchParams.get(name);
+      if (raw === null || raw.trim() === '') return fallback;
+      const value = Number(raw);
       return Number.isFinite(value) ? value : fallback;
     },
     header(name) {

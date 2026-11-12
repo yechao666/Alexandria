@@ -101,7 +101,7 @@
 | `sources` | sha256, kind, status, extracted_text, metadata | 原始馆藏；同库哈希去重 |
 | `source_assets` | kind, storage_path, thumbnail_path, ocr_text | 内嵌图片 / 附件 |
 | `ingest_jobs` | stage, progress, log, pages_created, conflicts | 异步编译任务 |
-| `pages` | class_key, slug, body, status, confidence, tags, aliases, read_when | 原子知识页 |
+| `pages` | class_key, slug, body, status, review_status, confidence, tags, aliases, read_when | 原子知识页；含校对状态 |
 | `page_sources` | relationship, locator, quote | 页面到来源的锚点 |
 | `claims` | subject, predicate, object, confidence, status | 结构化主张 |
 | `links` | relation, origin, weight | 类型化图边 |
@@ -234,7 +234,31 @@ queryTokens
 
 ---
 
-## 8. 权限模型
+## 8. 校对与矛盾裁决
+
+### 8.1 状态
+
+- `review_status`：`unreviewed`（待首次校对）/ `changes_requested`（已退回）/ `approved`（已校对）。
+- `status`：`draft` / `active` / `stale` / `archived`。
+- 自动编译的概念页：`draft + unreviewed`；人工创建的有效页：`active + approved`；文献页：`active + approved`。
+
+### 8.2 动作
+
+| 动作 | 结果 | 记录 |
+| --- | --- | --- |
+| 批准 | `active + approved` | 审核人、时间、说明 |
+| 要求修改 | `draft + changes_requested` | 必填说明 |
+| 撤回校对 | `draft + unreviewed` | 说明 |
+| 归档 | `archived + approved` | 说明 |
+| 矛盾裁决 | 采用/驳回；另一侧 `resolved` | 审计 |
+
+### 8.3 队列
+
+`GET /api/review` 聚合所有可见库中 `review_status <> approved` 或 `status = draft` 的页面，附带矛盾数、来源数与原因；前端「校对台」支持按知识库、状态过滤。
+
+---
+
+## 9. 权限模型
 
 | 主体 | 解析方式 | 结果 |
 | --- | --- | --- |
@@ -257,7 +281,7 @@ queryTokens
 
 ---
 
-## 9. 企业微信（分阶段）
+## 10. 企业微信（分阶段）
 
 ### 9.1 设计
 
@@ -285,7 +309,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 10. API 设计
+## 11. API 设计
 
 - 统一响应：成功直接返回资源；错误 `{ error: { code, message, details, requestId } }`。
 - 认证：Cookie 会话或 Bearer API Key。
@@ -295,7 +319,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 11. 前端
+## 12. 前端
 
 - 原生 ES Modules，无构建步骤；`web/index.html` + `app.js` + `assets/*` + `views/*`。
 - Hash 路由：`#/`、`#/library/:slug`、`#/page/:slug`、`#/search`、`#/upload`、`#/graph`、`#/admin`、`#/agent`、`#/resolve/...`。
@@ -305,7 +329,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 12. 安全与运维
+## 13. 安全与运维
 
 - 密码 PBKDF2-SHA256（120k 迭代），会话 token 哈希存储；
 - Cookie HttpOnly + SameSite=Lax；API Key 只存哈希；
@@ -317,7 +341,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 13. 关键决策（ADR）
+## 14. 关键决策（ADR）
 
 ### ADR-0001：SQLite 作为单一事实源
 
@@ -345,7 +369,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 14. 已知限制与后续
+## 15. 已知限制与后续
 
 1. 扫描 PDF 已支持抽取页面内嵌图片做 OCR；无可抽取图片的纯矢量 PDF 仍需外部渲染器（如 PyMuPDF/poppler）。
 2. 旧版 WPS/DOC 依赖外部转换器；兜底质量有限。
@@ -356,7 +380,7 @@ WeCom OAuth / 通讯录
 
 ---
 
-## 15. 验收口径（v0.1）
+## 16. 验收口径（v0.1）
 
 - 能登录并看到按权限过滤的知识库；
 - 能上传 PDF/DOCX/PPTX/XLSX/TEX/RTF/图片/Markdown 中的至少 6 类并完成编译；

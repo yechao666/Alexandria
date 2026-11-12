@@ -46,6 +46,10 @@ export interface PageRow {
   tldr: string;
   body: string;
   status: string;
+  review_status: string;
+  review_note: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   confidence: number;
   tags: string;
   aliases: string;

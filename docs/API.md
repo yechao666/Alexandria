@@ -159,6 +159,21 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 
 ---
 
+## 校对与矛盾裁决
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/review?library=&status=` | 登录 | 待校对队列与汇总 |
+| GET | `/api/libraries/:id/review` | viewer | 单库队列 |
+| GET | `/api/review/summary` | 登录 | 待校对 / 退回 / 矛盾计数 |
+| GET | `/api/review/conflicts` | 登录 | 冲突主张列表 |
+| POST | `/api/pages/:id/review` | editor | `{action: approve|request_changes|reopen|archive, note, confidence?}` |
+| POST | `/api/claims/:id/resolve` | editor | `{resolution: keep|dismiss, note}` |
+
+批准会写入 `status=active`、`review_status=approved`、审核人与时间；要求修改必须提供说明。矛盾裁决会保留双方记录，将另一侧标记为 `resolved`。
+
+---
+
 ## 检索与图谱
 
 | 方法 | 路径 | 说明 |
