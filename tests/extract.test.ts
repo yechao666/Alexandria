@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { extractBuffer, extractFile } from '../server/src/extract/index.ts';
 import { sectionsFromMarkdown } from '../server/src/extract/sections.ts';
 import { extractTex } from '../server/src/extract/tex.ts';
-import { createDocxFixture, createImageFixture, createPdfFixture, createPptxFixture, createXlsxFixture } from './helpers.ts';
+import { createDocxFixture, createImageFixture, createPdfFixture, createPptxFixture, createScannedPdfFixture, createXlsxFixture } from './helpers.ts';
 
 test('Markdown 按标题切分章节', () => {
   const parsed = sectionsFromMarkdown('# 标题\n\n## 第一节\n内容一\n\n## 第二节\n内容二');
@@ -65,6 +65,16 @@ test('PDF 抽取文本层', () => {
   const result = extractFile(path, 'demo.pdf');
   assert.equal(result.kind, 'pdf');
   assert.match(result.text.toLowerCase(), /alexandria/);
+});
+
+test('扫描版 PDF 通过页面图片 OCR 还原文本', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'alex-scan-'));
+  const path = createScannedPdfFixture(dir);
+  const result = extractFile(path, 'scanned.pdf');
+  assert.equal(result.kind, 'pdf');
+  assert.match(result.text, /扫描版/);
+  assert.ok(result.assets.length > 0);
+  assert.ok(result.warnings.some((warning) => warning.includes('OCR')));
 });
 
 test('图片 OCR 识别中文并保留尺寸', () => {

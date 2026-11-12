@@ -177,6 +177,22 @@ export function createPdfFixture(dir: string): string {
   return pdfPath;
 }
 
+export function createScannedPdfFixture(dir: string): string {
+  const path = join(dir, 'scanned.pdf');
+  const script = `
+from PIL import Image, ImageDraw, ImageFont
+img = Image.new('RGB', (900, 1200), 'white')
+d = ImageDraw.Draw(img)
+font = ImageFont.truetype('/System/Library/Fonts/Hiragino Sans GB.ttc', 44)
+d.text((40, 60), '扫描版 PDF 测试', font=font, fill='black')
+d.text((40, 160), '知识编译与图像识别', font=font, fill='black')
+d.text((40, 260), '这一页没有文本层。', font=font, fill='black')
+img.save(${JSON.stringify(path)})
+`;
+  execFileSync(pythonBin(), ['-c', script], { timeout: 60_000 });
+  return path;
+}
+
 export function createImageFixture(dir: string): string {
   const path = join(dir, 'ocr.png');
   const script = `

@@ -164,7 +164,7 @@
 
 | 格式 | 主路径 | 降级 / 备注 |
 | --- | --- | --- |
-| PDF | 调用 Python `pypdf` 逐页抽取 | Flate 流 `Tj/TJ` 兜底；扫描件提示需 OCR |
+| PDF | 调用 Python `pypdf` 逐页抽取；无文本层时抽取页面图片 OCR | Flate 流 `Tj/TJ` 兜底；纯矢量无图仍提示需外部渲染 |
 | DOCX | ZIP + `word/document.xml` | 标题样式、表格、内嵌图片 |
 | DOC | LibreOffice → `textutil` | OLE 文本兜底 |
 | PPTX | ZIP + `ppt/slides/*.xml` | 每页一节，图片资产 |
@@ -347,7 +347,7 @@ WeCom OAuth / 通讯录
 
 ## 14. 已知限制与后续
 
-1. 扫描 PDF 多页渲染 OCR 未实现；当前仅文本层。
+1. 扫描 PDF 已支持抽取页面内嵌图片做 OCR；无可抽取图片的纯矢量 PDF 仍需外部渲染器（如 PyMuPDF/poppler）。
 2. 旧版 WPS/DOC 依赖外部转换器；兜底质量有限。
 3. 自动编译概念页为草稿，需要校对工作流。
 4. 跨库 wikilink 不解析；智能体可跨库检索。
