@@ -241,6 +241,8 @@ cd ../alexandria && node server/src/main.ts
 
 > 生产环境应使用企业微信加密 XML 回调；JSON 回调用于本地 Mock 与内网联调。
 
+![企业微信机器人问答](docs/screenshots/17-wecom-bot.png)
+
 ## 校对流程
 
 ```text
