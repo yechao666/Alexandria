@@ -30,8 +30,8 @@ export function createSession(db: Db, personId: string, ttlHours: number, rc: Re
   return token;
 }
 
-export function sessionCookie(token: string, ttlHours: number): string {
-  return `${SESSION_PREFIX}cookie=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ttlHours * 3600}`;
+export function sessionCookie(token: string, ttlHours: number, secure = false): string {
+  return `${SESSION_PREFIX}cookie=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}; Max-Age=${ttlHours * 3600}`;
 }
 
 function cookieToken(rc: RequestContext): string {

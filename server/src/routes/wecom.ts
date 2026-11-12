@@ -115,7 +115,7 @@ export function registerWecomAuthRoutes(router: Router): void {
       detail: { wecomUserid: userid, mode: config.mock ? 'mock' : 'wecom' },
     });
     redirect(rc, safeReturnTo(row.return_to), {
-      'set-cookie': sessionCookie(session, rc.app.env.sessionTtlHours),
+      'set-cookie': sessionCookie(session, rc.app.env.sessionTtlHours, rc.app.env.wecom.publicUrl.startsWith('https://')),
     });
   });
 

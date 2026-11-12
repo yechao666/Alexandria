@@ -195,3 +195,16 @@ test('检索接口返回信号分解，查询接口返回引用', async () => {
   assert.ok(query.data.citations.length > 0);
   assert.ok(query.data.answer.length > 0);
 });
+
+test('登录失败次数过多会被限流', async () => {
+  let last = 0;
+  for (let i = 0; i < 9; i += 1) {
+    const response = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'ratelimit-test@alex.dev', password: `wrong-${i}` }),
+    });
+    last = response.status;
+  }
+  assert.equal(last, 429);
+});

@@ -28,6 +28,12 @@ function pageDetail(rc: RequestContext, page: PageRow, role: import('../types.ts
     return Boolean(related && effectivePageRole(rc.app.db, actor, related));
   };
   const relations = { outbound: allRelations.outbound.filter(canSeeRelated), inbound: allRelations.inbound.filter(canSeeRelated) };
+  const parentRow = rc.app.db
+    .prepare("SELECT p.id, p.title, p.slug FROM links l JOIN pages p ON p.id = l.to_page_id WHERE l.from_page_id = ? AND l.relation = 'broader-than' LIMIT 1")
+    .get(page.id) as unknown as { id: string; title: string; slug: string } | undefined;
+  const childRows = rc.app.db
+    .prepare("SELECT p.id, p.title, p.slug FROM links l JOIN pages p ON p.id = l.from_page_id WHERE l.to_page_id = ? AND l.relation = 'broader-than' ORDER BY p.title")
+    .all(page.id) as unknown as { id: string; title: string; slug: string }[];
   const properties = rc.app.db
     .prepare(
       `SELECT pp.key, pp.value, op.name, op.type, op.options
@@ -356,6 +362,29 @@ export function registerPageRoutes(router: Router): void {
       detail: { sourceId: page.id, sourceTitle: page.title, targetId: target.id, targetTitle: target.title },
     });
     rc.json({ ok: true, page: pageListDto(rc.app.db, merged), mergedInto: target.id });
+  });
+
+  router.post('/api/pages/:id/parent', async (rc) => {
+    const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'editor');
+    if (actor.viaApiKey && actor.apiScope === 'read') throw errors.forbidden('只读 API Key 不能修改层级');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要页面所有者权限');
+    const body = await rc.body<{ parentId?: string | null }>();
+    const parentId = body.parentId ? String(body.parentId) : null;
+    if (parentId === page.id) throw errors.badRequest('不能把页面设为自己的上位概念');
+    if (parentId) {
+      const target = getPage(rc.app.db, parentId);
+      if (!target || target.library_id !== library.id) throw errors.badRequest('上位概念必须属于同一知识库');
+      const targetAccess = pageAccess(rc, target.id, 'viewer');
+      if (!targetAccess.role) throw errors.notFound('上位概念不存在');
+    }
+    rc.app.db.prepare("DELETE FROM links WHERE from_page_id = ? AND relation = 'broader-than'").run(page.id);
+    if (parentId) {
+      rc.app.db
+        .prepare('INSERT OR IGNORE INTO links (id, library_id, from_page_id, to_page_id, relation, origin, weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId('lnk'), library.id, page.id, parentId, 'broader-than', 'manual', 1, nowIso());
+    }
+    audit(rc.app.db, { actor, action: 'page.hierarchy.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { parentId } });
+    rc.json({ ok: true, parentId });
   });
 
 }

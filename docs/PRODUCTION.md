@@ -12,6 +12,8 @@ node server/src/main.ts
 - 默认监听 `127.0.0.1:4520`；生产放在 Nginx/Caddy 后，仅暴露 HTTPS。
 - 建议使用 launchd / systemd 托管，失败自动重启。
 - 健康检查：`GET /api/health`，关注 `ok`、`dsh`、`llm`。
+- 登录限流：同一 IP + 邮箱 15 分钟 8 次失败后返回 429；多副本需替换为 Redis 限流。
+- 已启用 CSP、HSTS（HTTPS）、Secure Cookie、X-Frame-Options、nosniff。
 - 企业微信 Mock 仅用于联调，生产关闭或限制在内网。
 
 ## 2. 必配环境
@@ -49,7 +51,8 @@ data/
 
 备份建议：
 
-1. 用 `sqlite3 data/alexandria.db "VACUUM INTO 'backup.db'"` 或应用停机后复制；
+1. 运行 `npm run backup`，生成 `data/backups/alexandria-<timestamp>/`（数据库 + uploads + thumbnails + manifest）；
+   或应用停机后复制 `data/alexandria.db`；
 2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
 3. 备份文件加密后异地保存，保留 30/90 天；
 4. 定期在隔离环境恢复演练。
@@ -74,7 +77,7 @@ data/
 ## 6. 监控与审计
 
 - 健康检查 + 进程存活；
-- 任务失败率、DSH 超时率、平均编译耗时；
+- 任务失败率、DSH 超时率、平均编译耗时、队列深度；
 - 登录失败、API Key 使用、权限变更、导出行为；
 - SQLite 文件大小、WAL 增长、备份成功；
 - 建议把 `/api/tasks` 与 `audit_events` 接入组织日志平台（当前无内置告警）。

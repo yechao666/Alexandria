@@ -31,6 +31,9 @@ export const errors = {
   conflict(message: string, details?: unknown): HttpError {
     return new HttpError(409, 'CONFLICT', message, details);
   },
+  tooManyRequests(message = '请求过于频繁'): HttpError {
+    return new HttpError(429, 'TOO_MANY_REQUESTS', message);
+  },
   payloadTooLarge(message = '文件超过大小限制'): HttpError {
     return new HttpError(413, 'PAYLOAD_TOO_LARGE', message);
   },

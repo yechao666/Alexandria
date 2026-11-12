@@ -314,6 +314,9 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | POST | `/api/jobs/:id/cancel` | 取消排队中的任务 |
 | GET | `/api/search/facets` | 库/类型/标签分面（权限过滤） |
 | GET | `/api/pages/:id/access` | 页面访问策略 |
+| POST | `/api/pages/:id/merge` | 合并同类型重复页 |
+| POST | `/api/pages/:id/parent` | 设置上位概念 |
+| GET | `/api/graph/hierarchy` | 权限过滤的层级树 |
 | PATCH | `/api/pages/:id/access` | 设置页面 visibility 与个人/团队共享 |
 | GET | `/api/sources/:id/access` | 文献访问策略 |
 | PATCH | `/api/sources/:id/access` | 设置文献 visibility 与个人/团队共享 |

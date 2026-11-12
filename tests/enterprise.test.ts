@@ -135,3 +135,30 @@ test('重复页面可以合并并保留归档指针', async () => {
   const targetRow = ctx.db.prepare('SELECT aliases FROM pages WHERE id = ?').get(target.page.id) as unknown as { aliases: string };
   assert.match(targetRow.aliases, /合并测试重复页 A/);
 });
+
+test('层级图谱接口返回权限过滤后的 broader-than 树', async () => {
+  const tree = await j<{ nodes: { id: string; level: number }[]; edges: unknown[] }>('/api/graph/hierarchy', admin.token);
+  assert.ok(tree.nodes.length > 0);
+  const guestTree = await j<{ nodes: { libraryId?: string }[] }>('/api/graph/hierarchy', guest.token);
+  assert.ok(guestTree.nodes.every((node) => node.libraryId === 'lib_product' || node.libraryId === undefined));
+});
+
+test('页面可以设置上位概念并出现在层级图', async () => {
+  const create = async (title: string) =>
+    j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, classKey: 'concept', body: `## 定义\n${title}`, status: 'draft' }),
+    });
+  const parent = await create('层级测试上位');
+  const child = await create('层级测试下位');
+  const response = await j<{ ok: boolean }>(`/api/pages/${child.page.id}/parent`, admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ parentId: parent.page.id }),
+  });
+  assert.equal(response.ok, true);
+  const tree = await j<{ nodes: { id: string; level: number }[] }>('/api/graph/hierarchy?library=lib_eng', admin.token);
+  assert.equal(tree.nodes.find((node) => node.id === child.page.id)?.level, 1);
+  assert.equal(tree.nodes.find((node) => node.id === parent.page.id)?.level, 0);
+});

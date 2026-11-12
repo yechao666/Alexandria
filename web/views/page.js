@@ -63,6 +63,8 @@ export async function renderPage(ref) {
   const readWhen = (page.readWhen ?? []).map((item) => `<div class="rail-item"><span class="dot" style="background:var(--ochre)"></span><span>${esc(item)}</span></div>`).join('');
   const sourcesAttached = detail.sources ?? [];
   const visibilityLabel = { inherit: '继承知识库', restricted: '受限页面', private: '仅所有者' }[page.visibility] ?? page.visibility;
+  const hierarchy = detail.hierarchy ?? { parent: null, children: [] };
+  const hierarchyCard = `<div class="rail-card"><div class="title">知识层级</div><div class="rail-list">${hierarchy.parent ? `<a class="rail-item" href="#/page/${encodeURIComponent(hierarchy.parent.id)}"><span class="dot" style="background:var(--indigo)"></span><span>上位：${esc(hierarchy.parent.title)}</span></a>` : '<div class="rail-empty">暂无上位概念</div>'}${hierarchy.children.slice(0, 6).map((child) => `<a class="rail-item" href="#/page/${encodeURIComponent(child.id)}"><span class="dot" style="background:var(--jade)"></span><span>下位：${esc(child.title)}</span></a>`).join('')}</div>${detail.canEdit ? `<button class="btn btn-sm" id="set-parent" style="margin-top:10px">${icon('layers', 14)} 设置上位概念</button>` : ''}</div>`;
   const accessCard = detail.page?.access?.canManage
     ? `<div class="rail-card"><div class="title">访问控制 <span class="badge ${page.visibility === 'inherit' ? 'outline' : 'clay'}">${visibilityLabel}</span></div><div class="small muted">默认继承知识库权限；受限页面只对所有者与显式共享者开放。</div><button class="btn btn-sm" id="page-access" style="margin-top:10px">${icon('lock', 14)} 管理访问</button></div>`
     : '';
@@ -92,6 +94,7 @@ export async function renderPage(ref) {
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
         </article>
         <aside class="rail">
+          ${hierarchyCard}
           ${accessCard}
           <div class="rail-card"><div class="title">校对状态 <span>${reviewBadge(page.reviewStatus)}</span></div><div class="small muted">${page.reviewedAt ? `最近审核：${timeAgo(page.reviewedAt)}${page.reviewerName ? ` · ${esc(page.reviewerName)}` : ''}` : '尚未经过人工校对'}</div>${page.reviewNote ? `<div class="review-note">${esc(page.reviewNote)}</div>` : ''}</div>
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
@@ -115,6 +118,30 @@ export async function mountPage(ref) {
   const detail = await api(`/api/pages/${encodeURIComponent(ref)}`);
   const page = detail.page;
   const libraryDetail = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}`).catch(() => null);
+
+  document.getElementById('set-parent')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}/pages?limit=300`);
+      const candidates = (data.pages ?? []).filter((item) => item.id !== page.id);
+      const options = candidates.map((item) => `<option value="${esc(item.id)}" ${detail.hierarchy?.parent?.id === item.id ? 'selected' : ''}>${esc(item.title)} · ${esc(item.className ?? item.classKey ?? '')}</option>`).join('');
+      openModal({
+        title: '设置上位概念',
+        body: `<p class="small muted">上位概念用于知识分层和图谱树；一个页面只能有一个直接上位概念。</p><div class="field" style="margin-top:12px"><label>上位概念</label><select class="select" id="parent-target"><option value="">无（作为根节点）</option>${options}</select></div>`,
+        footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-parent">保存层级</button>`,
+        onMount: (modal) => {
+          modal.querySelector('#save-parent')?.addEventListener('click', async () => {
+            const parentId = modal.querySelector('#parent-target')?.value || null;
+            try {
+              await api(`/api/pages/${encodeURIComponent(page.id)}/parent`, { method: 'POST', body: JSON.stringify({ parentId }) });
+              closeModal();
+              toast('知识层级已更新', 'success');
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            } catch (error) { toast(error.message, 'error'); }
+          });
+        },
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  });
 
   document.getElementById('merge-page')?.addEventListener('click', async () => {
     try {

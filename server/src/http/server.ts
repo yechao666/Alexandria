@@ -21,6 +21,10 @@ export function createHttpServer(app: AppContext, router: Router): Server {
     res.setHeader('x-frame-options', 'DENY');
     res.setHeader('referrer-policy', 'same-origin');
     res.setHeader('permissions-policy', 'geolocation=(), microphone=(), camera=()');
+    res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'");
+    if (String(process.env.ALEXANDRIA_PUBLIC_URL ?? '').startsWith('https://')) {
+      res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+    }
 
     let url: URL;
     try {

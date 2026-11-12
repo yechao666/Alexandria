@@ -10,3 +10,4 @@ node_modules
 .DS_Store
 data/seed/
 data/dsh-home/
+data/backups/

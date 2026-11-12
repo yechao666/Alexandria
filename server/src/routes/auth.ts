@@ -1,6 +1,7 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { authenticate, login, logout, sessionCookie } from '../http/auth.ts';
+import { rateLimit, resetRateLimit, rateLimitKey } from '../domain/rate-limit.ts';
 import { requireActor } from '../http/auth.ts';
 import { errors } from '../http/respond.ts';
 import { visibleLibraries } from '../domain/access.ts';
@@ -36,11 +37,23 @@ export function registerAuthRoutes(router: Router): void {
   router.post('/api/auth/login', async (rc) => {
     const body = await rc.body<{ email?: string; password?: string }>();
     if (!body.email || !body.password) throw errors.badRequest('请输入邮箱和密码');
-    const result = login(rc, body.email, body.password);
+    const limitKey = rateLimitKey(rc, 'login', body.email);
+    const limited = rateLimit(limitKey, 8, 15 * 60_000);
+    if (!limited.ok) {
+      rc.res.setHeader('retry-after', String(limited.retryAfter));
+      throw errors.tooManyRequests(`登录尝试过多，请 ${Math.ceil(limited.retryAfter / 60)} 分钟后再试`);
+    }
+    let result;
+    try {
+      result = login(rc, body.email, body.password);
+      resetRateLimit(limitKey);
+    } catch (error) {
+      throw error;
+    }
     rc.json(
       { person: result.actor.person, teams: result.actor.teamIds, token: result.token },
       200,
-      { 'set-cookie': sessionCookie(result.token, rc.app.env.sessionTtlHours) },
+      { 'set-cookie': sessionCookie(result.token, rc.app.env.sessionTtlHours, rc.app.env.wecom.publicUrl.startsWith('https://')) },
     );
   });
 
