@@ -51,7 +51,7 @@ data/
 
 备份建议：
 
-1. 运行 `npm run backup`，生成 `data/backups/alexandria-<timestamp>/`（数据库 + uploads + thumbnails + manifest）；
+1. 运行 `npm run backup`（可用 `ALEXANDRIA_BACKUP_KEEP_DAYS` 控制保留天数），生成 `data/backups/alexandria-<timestamp>/`（数据库 + uploads + thumbnails + manifest）；
    或应用停机后复制 `data/alexandria.db`；
 2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
 3. 备份文件加密后异地保存，保留 30/90 天；

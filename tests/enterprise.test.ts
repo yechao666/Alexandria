@@ -162,3 +162,16 @@ test('页面可以设置上位概念并出现在层级图', async () => {
   assert.equal(tree.nodes.find((node) => node.id === child.page.id)?.level, 1);
   assert.equal(tree.nodes.find((node) => node.id === parent.page.id)?.level, 0);
 });
+
+test('系统会给出重复页合并建议', async () => {
+  const create = async (title: string, aliases: string[] = []) =>
+    j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, classKey: 'concept', body: `## 定义\n${title}`, aliases, status: 'draft' }),
+    });
+  await create('知识编译引擎同名');
+  await create('知识编译引擎同名', ['Knowledge Compilation Engine']);
+  const result = await j<{ suggestions: { score: number; reasons: string[] }[] }>('/api/libraries/lib_eng/merge-suggestions', admin.token);
+  assert.ok(result.suggestions.some((suggestion) => suggestion.score >= 0.55));
+});

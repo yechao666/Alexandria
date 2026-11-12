@@ -77,9 +77,10 @@ function findExisting(db: Db, libraryId: string, title: string): PageRow | null 
   const normalized = normalizeTitle(title);
   const pages = db.prepare('SELECT * FROM pages WHERE library_id = ?').all(libraryId) as unknown as PageRow[];
   return (
-    pages.find((page) => page.class_key !== 'source' && normalizeTitle(page.title) === normalized) ??
+    pages.find((page) => page.class_key !== 'source' && page.status !== 'archived' && normalizeTitle(page.title) === normalized) ??
     pages.find((page) =>
       page.class_key !== 'source' &&
+      page.status !== 'archived' &&
       parseJson<string[]>(page.aliases, []).some((alias) => normalizeTitle(alias) === normalized),
     ) ??
     null

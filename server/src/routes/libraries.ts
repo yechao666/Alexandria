@@ -8,6 +8,7 @@ import { newId, nowIso, parseJson, slugify } from '../lib/ids.ts';
 import { ensureDefaultOntology } from '../knowledge/ontology.ts';
 import { pageToView } from '../knowledge/pages.ts';
 import { canEdit, libraryCounts, nodeTree, pageListDto, serializeLibrary } from './helpers.ts';
+import { mergeSuggestions } from '../knowledge/entities.ts';
 import type { LibraryRow, PageRow } from '../types.ts';
 
 function requireLibraryEdit(rc: RequestContext, idOrSlug: string) {
@@ -512,6 +513,12 @@ export function registerLibraryRoutes(router: Router): void {
     rc.app.db.prepare('DELETE FROM library_grants WHERE id = ?').run(grant.id);
     audit(rc.app.db, { actor, action: 'library.revoke', targetType: 'library', targetId: grant.library_id, libraryId: grant.library_id, detail: { grantId: grant.id } });
     rc.json({ ok: true });
+  });
+
+  router.get('/api/libraries/:id/merge-suggestions', (rc) => {
+    const actor = requireActor(rc);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
+    rc.json({ suggestions: mergeSuggestions(rc.app.db, actor, library.id) });
   });
 
   router.get('/api/libraries/:id/audit', (rc) => {

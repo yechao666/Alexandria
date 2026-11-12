@@ -364,7 +364,7 @@ function settingsTab(detail, library, color) {
               { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
             ] })}
           </form>
-          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button>` : ''}</div>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button><button class="btn" id="merge-suggestions">${icon('layers', 14)} 扫描重复页</button>` : ''}</div>
         </div>
       </div>
       <div class="panel">
@@ -392,6 +392,34 @@ function settingsTab(detail, library, color) {
 }
 
 function bindLibrarySettings(library, detail) {
+  document.getElementById('merge-suggestions')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/merge-suggestions`);
+      const suggestions = data.suggestions ?? [];
+      const rows = suggestions.map((item, index) => `<div class="suggestion-row" style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="between"><span><b>${esc(item.source.title)}</b> → <b>${esc(item.target.title)}</b></span><span class="badge ${item.score >= 0.85 ? 'clay' : 'ochre'}">${Math.round(item.score * 100)}%</span></div><div class="small muted" style="margin:4px 0">${esc(item.reasons.join(' · '))}</div><button class="btn btn-sm" data-merge-suggestion="${index}">合并源页到目标</button></div>`).join('');
+      openModal({
+        title: '重复页合并建议',
+        wide: true,
+        body: `<p class="small muted">按标题、别名与摘要相似度排序；合并会迁移来源/主张/链接/属性并保留源页归档。</p><div style="max-height:460px;overflow:auto">${rows || '<div class="rail-empty" style="padding:20px">没有发现高置信度重复页。</div>'}</div>`,
+        footer: `<button class="btn" data-close-modal>关闭</button>`,
+        onMount: (modal) => {
+          modal.querySelectorAll('[data-merge-suggestion]').forEach((button) => {
+            button.addEventListener('click', async () => {
+              const item = suggestions[Number(button.dataset.mergeSuggestion)];
+              if (!item || !confirm(`确认把「${item.source.title}」合并到「${item.target.title}」？`)) return;
+              try {
+                await api(`/api/pages/${encodeURIComponent(item.source.id)}/merge`, { method: 'POST', body: JSON.stringify({ targetId: item.target.id }) });
+                closeModal();
+                toast('页面已合并', 'success');
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
+              } catch (error) { toast(error.message, 'error'); }
+            });
+          });
+        },
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  });
+
   document.getElementById('library-audit')?.addEventListener('click', async () => {
     try {
       const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/audit`);
