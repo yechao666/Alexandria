@@ -4,6 +4,7 @@ import { audit } from '../domain/audit.ts';
 import { securityEvent } from '../domain/security.ts';
 import { nowIso } from '../lib/ids.ts';
 import { createBackup } from './backup.ts';
+import { uploadBackupToS3 } from './s3.ts';
 
 let running = false;
 
@@ -44,6 +45,7 @@ export function runMaintenance(db: Db, env: Env): MaintenanceResult {
       const due = !meta || Date.now() - Date.parse(meta.value) >= env.autoBackupHours * 3_600_000;
       if (due) {
         backup = createBackup(env).target;
+        void uploadBackupToS3(env, backup).catch((error) => console.warn('[maintenance] S3 备份失败', (error as Error).message));
         db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_auto_backup', ?)").run(now);
       }
     }

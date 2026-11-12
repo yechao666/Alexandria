@@ -35,6 +35,14 @@ export interface Env {
     publicUrl: string;
     mock: boolean;
   };
+  s3?: {
+    endpoint: string;
+    bucket: string;
+    region: string;
+    accessKey: string;
+    secretKey: string;
+    prefix: string;
+  };
   oidc?: {
     issuer: string;
     clientId: string;
@@ -100,6 +108,17 @@ export function loadEnv(root: string): Env {
       publicUrl: wecomPublicUrl,
       mock: process.env.ALEXANDRIA_WECOM_MODE === 'mock' || wecomBase.includes('127.0.0.1:4800') || wecomBase.includes('localhost:4800'),
     },
+    s3:
+      process.env.ALEXANDRIA_S3_ENDPOINT && process.env.ALEXANDRIA_S3_BUCKET && process.env.ALEXANDRIA_S3_ACCESS_KEY && process.env.ALEXANDRIA_S3_SECRET_KEY
+        ? {
+            endpoint: process.env.ALEXANDRIA_S3_ENDPOINT.replace(/\/+$/, ''),
+            bucket: process.env.ALEXANDRIA_S3_BUCKET,
+            region: process.env.ALEXANDRIA_S3_REGION?.trim() || 'us-east-1',
+            accessKey: process.env.ALEXANDRIA_S3_ACCESS_KEY,
+            secretKey: process.env.ALEXANDRIA_S3_SECRET_KEY,
+            prefix: process.env.ALEXANDRIA_S3_PREFIX?.trim() || 'alexandria',
+          }
+        : undefined,
     oidc:
       process.env.ALEXANDRIA_OIDC_ISSUER && process.env.ALEXANDRIA_OIDC_CLIENT_ID && process.env.ALEXANDRIA_OIDC_CLIENT_SECRET
         ? {

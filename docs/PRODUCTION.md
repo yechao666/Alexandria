@@ -62,8 +62,9 @@ data/
    或应用停机后复制 `data/alexandria.db`；
 2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
 3. 备份文件加密后异地保存，保留 30/90 天；
-4. 备份 manifest 会记录 `integrity_check`、schema 版本与人数/页面/文献计数；恢复前复核后再切换。
-5. 定期在隔离环境恢复演练：`ALEXANDRIA_DATA_DIR=/tmp/restore npm run restore -- <backupDir>`，确认 `PRAGMA integrity_check` 与账号/权限/文件后再切换。
+4. 可选配置 `ALEXANDRIA_S3_*`，备份完成后递归上传到 S3 兼容对象存储（SigV4）；S3 失败不影响本地备份。
+5. 备份 manifest 会记录 `integrity_check`、schema 版本与人数/页面/文献计数；恢复前复核后再切换。
+6. 定期在隔离环境恢复演练：`ALEXANDRIA_DATA_DIR=/tmp/restore npm run restore -- <backupDir>`，确认 `PRAGMA integrity_check` 与账号/权限/文件后再切换。
 
 ## 4. 权限上线检查
 
