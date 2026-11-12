@@ -11,7 +11,8 @@ node server/src/main.ts
 
 - 默认监听 `127.0.0.1:4520`；生产放在 Nginx/Caddy 后，仅暴露 HTTPS。
 - 建议使用 launchd / systemd 托管，失败自动重启。
-- 健康检查：`GET /api/health`，关注 `ok`、`dsh`、`llm`。
+- 健康检查：`GET /api/health`，关注 `ok`、`dsh`、`llm`；`GET /api/health/ready` 用于编排系统就绪探针。
+- 巡检：管理员「运行状态」或 `GET /api/admin/observability` 查看队列、内容规模、SQLite/WAL、备份和进程内存。
 - 登录限流：同一 IP + 邮箱 15 分钟 8 次失败后返回 429；多副本需替换为 Redis 限流。
 - 已启用 CSP、HSTS（HTTPS）、Secure Cookie、X-Frame-Options、nosniff。
 - 企业微信 Mock 仅用于联调，生产关闭或限制在内网。

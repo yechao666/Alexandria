@@ -39,6 +39,15 @@ export function registerAuthRoutes(router: Router): void {
     });
   });
 
+  router.get('/api/health/ready', (rc) => {
+    try {
+      const row = rc.app.db.prepare('SELECT 1 AS ok').get() as unknown as { ok: number };
+      rc.json({ ok: row.ok === 1, database: true, queue: 'ok', time: new Date().toISOString() });
+    } catch (error) {
+      rc.json({ ok: false, database: false, error: (error as Error).message }, 503);
+    }
+  });
+
   router.post('/api/auth/login', async (rc) => {
     const body = await rc.body<{ email?: string; password?: string }>();
     if (!body.email || !body.password) throw errors.badRequest('请输入邮箱和密码');

@@ -239,3 +239,13 @@ test('合并建议可以进入审批流并批准', async () => {
   const archived = ctx.db.prepare('SELECT status FROM pages WHERE id = ?').get(proposal.source_page_id) as unknown as { status: string };
   assert.equal(archived.status, 'archived');
 });
+
+test('运行状态与就绪检查接口可用', async () => {
+  const ready = await fetch(`${base}/api/health/ready`);
+  assert.equal(ready.status, 200);
+  const metrics = await j<{ queue: { active: number }; counts: { pages: number }; process: { node: string } }>('/api/admin/observability', admin.token);
+  assert.ok(metrics.counts.pages > 0);
+  assert.equal(typeof metrics.queue.active, 'number');
+  const denied = await fetch(`${base}/api/admin/observability`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+});

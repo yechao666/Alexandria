@@ -6,6 +6,9 @@ import { newId, nowIso, slugify } from '../lib/ids.ts';
 import { teamTree } from './helpers.ts';
 import { audit } from '../domain/audit.ts';
 import { securityEvent, requestIp } from '../domain/security.ts';
+import { queueSnapshot } from '../ingest/queue.ts';
+import { statSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Person } from '../types.ts';
 import { getWecomConfig, wecomConfigured, wecomAccessToken, wecomDepartments, wecomUsers } from '../domain/wecom.ts';
 
@@ -491,5 +494,55 @@ export function registerAdminRoutes(router: Router): void {
     rc.json({ events: rows.map((row) => ({ ...row, detail: JSON.parse(String(row.detail ?? '{}')) })), counts });
   });
 
+
+  router.get('/api/admin/observability', (rc) => {
+    requireAdmin(rc);
+    const db = rc.app.db;
+    const one = (sql: string, ...params: (string | number)[]) => Number((db.prepare(sql).get(...params) as unknown as { c: number } | undefined)?.c ?? 0);
+    const group = (sql: string) => db.prepare(sql).all() as unknown as { key: string; c: number }[];
+    const fileInfo = (path: string) => {
+      try { return existsSync(path) ? statSync(path).size : 0; } catch { return 0; }
+    };
+    const backupsDir = join(rc.app.env.dataDir, 'backups');
+    let backups: { name: string; size: number; modified: string }[] = [];
+    try {
+      backups = readdirSync(backupsDir).filter((name) => name.startsWith('alexandria-')).slice(-5).map((name) => {
+        const info = statSync(join(backupsDir, name));
+        return { name, size: info.size, modified: info.mtime.toISOString() };
+      });
+    } catch { /* no backups */ }
+    rc.json({
+      process: {
+        pid: process.pid,
+        node: process.version,
+        platform: `${process.platform}/${process.arch}`,
+        uptimeSeconds: Math.round(process.uptime()),
+        memory: process.memoryUsage(),
+      },
+      queue: queueSnapshot(),
+      counts: {
+        persons: one("SELECT COUNT(*) AS c FROM persons WHERE status = 'active'"),
+        teams: one('SELECT COUNT(*) AS c FROM teams'),
+        libraries: one('SELECT COUNT(*) AS c FROM libraries'),
+        pages: one('SELECT COUNT(*) AS c FROM pages'),
+        sources: one('SELECT COUNT(*) AS c FROM sources'),
+        claims: one('SELECT COUNT(*) AS c FROM claims'),
+        links: one('SELECT COUNT(*) AS c FROM links'),
+      },
+      jobs: group('SELECT status AS key, COUNT(*) AS c FROM ingest_jobs GROUP BY status'),
+      security: group("SELECT severity AS key, COUNT(*) AS c FROM security_events WHERE created_at > ? GROUP BY severity"),
+      search: {
+        last24h: one("SELECT COUNT(*) AS c FROM search_queries WHERE created_at > ?"),
+        saved: one('SELECT COUNT(*) AS c FROM saved_searches'),
+      },
+      storage: {
+        databaseBytes: fileInfo(rc.app.env.dbPath),
+        walBytes: fileInfo(`${rc.app.env.dbPath}-wal`),
+        uploadsDir: rc.app.env.uploadsDir,
+        backups,
+      },
+      features: { dsh: rc.app.env.dsh.enabled, llm: Boolean(rc.app.env.llm), wecom: Boolean(rc.app.env.wecom.enabled) },
+    });
+  });
 
 }
