@@ -123,6 +123,8 @@ interface DshRankPayload {
  * DSH 语义重排：本地 FTS/图谱给出候选，DSH 在候选内选择与排序。
  * 失败时回退到原始检索结果。
  */
+const searchCache = new Map<string, { expires: number; value: import('./search.ts').SearchHit[] }>();
+
 export async function searchKnowledgeWithDsh(
   db: Db,
   env: Env,
@@ -130,6 +132,9 @@ export async function searchKnowledgeWithDsh(
   query: string,
   filters: SearchFilters = {},
 ): Promise<import('./search.ts').SearchHit[]> {
+  const cacheKey = `${actor.person.id}:${query}:${JSON.stringify(filters)}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.value;
   const hits = answerKnowledge(db, actor, query, filters).pages;
   if (!env.dsh.enabled || !query.trim() || hits.length < 2) return hits;
   const pages = hits.filter((hit) => hit.kind === 'page').slice(0, 15);
@@ -144,7 +149,7 @@ export async function searchKnowledgeWithDsh(
     '候选结果：',
     ...pages.map((hit, index) => `${index + 1}. id=${hit.id}｜${hit.title}｜${hit.libraryName}｜${hit.className}\n摘要：${hit.summary}\n片段：${hit.snippet}`),
   ].join('\n');
-  const output = await runDsh(env, prompt, { timeoutMs: Math.max(45_000, env.dsh.timeoutMs), maxChars: 8000 });
+  const output = await runDsh(env, prompt, { timeoutMs: Math.max(1_200, env.dsh.searchTimeoutMs), maxChars: 8000 });
   const parsed = extractJson<DshRankPayload>(output);
   if (!parsed || !Array.isArray(parsed.selected) || !parsed.selected.length) return hits;
   const selected = parsed.selected
@@ -152,9 +157,12 @@ export async function searchKnowledgeWithDsh(
     .filter((id) => pages.some((hit) => hit.id === id));
   if (!selected.length) return hits;
   const rank = new Map(selected.map((id, index) => [id, index]));
-  return [...hits].sort((a, b) => {
+  const ranked = [...hits].sort((a, b) => {
     const left = rank.has(a.id) ? rank.get(a.id)! : 1000;
     const right = rank.has(b.id) ? rank.get(b.id)! : 1000;
     return left - right || b.score - a.score;
   }).map((hit) => (rank.has(hit.id) ? { ...hit, signals: { ...hit.signals, dsh: 1 } } : hit));
+  if (searchCache.size > 80) searchCache.clear();
+  searchCache.set(cacheKey, { expires: Date.now() + 30_000, value: ranked });
+  return ranked;
 }

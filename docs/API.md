@@ -313,6 +313,9 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/jobs/:id` | 任务详情、日志与 `events[]` |
 | POST | `/api/jobs/:id/cancel` | 取消排队中的任务 |
 | GET | `/api/search/facets` | 库/类型/标签分面（权限过滤） |
+| GET | `/api/search/suggest` | 标题自动补全 |
+| GET | `/api/search/history` | 当前成员检索历史 |
+| GET/POST/DELETE | `/api/search/saved` | 保存检索 |
 | GET | `/api/pages/:id/access` | 页面访问策略 |
 | GET | `/api/libraries/:id/merge-suggestions` | 重复页合并建议 |
 | POST | `/api/pages/:id/merge` | 合并同类型重复页 |

@@ -8,6 +8,7 @@ import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { getPage, pageToView } from '../knowledge/pages.ts';
 import { parseList } from './helpers.ts';
+import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import type { PageRow } from '../types.ts';
 
 function filtersFrom(rc: import('../http/context.ts').RequestContext) {
@@ -29,7 +30,8 @@ function filtersFrom(rc: import('../http/context.ts').RequestContext) {
     classKey: rc.query('class') || rc.query('classKey') || undefined,
     status: rc.query('status') || undefined,
     tag: rc.query('tag') || undefined,
-    limit: rc.queryInt('limit', 30),
+    limit: Math.max(1, Math.min(100, rc.queryInt('limit', 30))),
+    offset: Math.max(0, rc.queryInt('offset', 0)),
   };
 }
 
@@ -39,16 +41,28 @@ export function registerSearchRoutes(router: Router): void {
     const q = rc.query('q');
     const filters = filtersFrom(rc);
     const started = Date.now();
-    const hits = q && rc.app.env.dsh.enabled
-      ? await searchKnowledgeWithDsh(rc.app.db, rc.app.env, actor, q, filters)
-      : searchKnowledge(rc.app.db, actor, q, filters);
+    const fetchLimit = Math.min(100, filters.offset! + filters.limit! + 1);
+    const allHits = q && rc.app.env.dsh.enabled
+      ? await searchKnowledgeWithDsh(rc.app.db, rc.app.env, actor, q, { ...filters, limit: fetchLimit })
+      : searchKnowledge(rc.app.db, actor, q, { ...filters, limit: fetchLimit });
+    const hits = allHits.slice(filters.offset, filters.offset! + filters.limit!);
+    const tookMs = Date.now() - started;
+    if (q) {
+      rc.app.db
+        .prepare('INSERT INTO search_queries (id, person_id, library_id, query, mode, hits, took_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId('sq'), actor.person.id, filters.libraryIds?.[0] ?? null, q, rc.app.env.dsh.enabled ? 'dsh' : 'compiled', hits.length, tookMs, nowIso());
+      rc.app.db.prepare("DELETE FROM search_queries WHERE person_id = ? AND id NOT IN (SELECT id FROM search_queries WHERE person_id = ? ORDER BY created_at DESC LIMIT 100)").run(actor.person.id, actor.person.id);
+    }
     rc.json({
       query: q,
-      tookMs: Date.now() - started,
-      total: hits.length,
+      tookMs,
+      total: allHits.length,
+      offset: filters.offset,
+      limit: filters.limit,
+      hasMore: allHits.length > filters.offset! + filters.limit!,
       hits,
       strategy: q
-        ? `FTS5 词法检索 + 预编译关联图扩展 + 元数据/时效重排${rc.app.env.dsh.enabled ? ' + 本机 DSH 语义重排' : ''}（无查询时向量化）`
+        ? `FTS5 词法检索 + 预编译关联图扩展 + 元数据/时效重排${hits.some((hit) => hit.signals?.dsh) ? ' + 本机 DSH 语义重排' : ''}（无查询时向量化）`
         : '最近更新',
     });
   });
@@ -86,6 +100,9 @@ export function registerSearchRoutes(router: Router): void {
         mode = 'llm';
       }
     }
+    rc.app.db
+      .prepare('INSERT INTO search_queries (id, person_id, library_id, query, mode, hits, took_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(newId('sq'), actor.person.id, filters.libraryIds?.[0] ?? null, q, mode, compiled.citations.length, compiled.tookMs ?? 0, nowIso());
     rc.json({ ...compiled, answer, mode, query: q });
   });
 
@@ -157,6 +174,62 @@ export function registerSearchRoutes(router: Router): void {
     const actor = requireActor(rc);
     const { library } = requireLibrary(rc.app.db, actor, rc.params.id!);
     rc.json({ ...hierarchyForLibrary(rc.app.db, actor, library.id), libraryId: library.id });
+  });
+
+  router.get('/api/search/suggest', (rc) => {
+    const actor = requireActor(rc);
+    const q = String(rc.query('q') ?? '').trim();
+    if (!q) {
+      rc.json({ suggestions: [] });
+      return;
+    }
+    const hits = searchKnowledge(rc.app.db, actor, q, { limit: 8 });
+    rc.json({
+      suggestions: hits
+        .filter((hit) => hit.kind === 'page')
+        .slice(0, 6)
+        .map((hit) => ({ id: hit.id, title: hit.title, libraryName: hit.libraryName })),
+    });
+  });
+
+  router.get('/api/search/history', (rc) => {
+    const actor = requireActor(rc);
+    const rows = rc.app.db
+      .prepare(
+        `SELECT q.*, l.name AS library_name FROM search_queries q LEFT JOIN libraries l ON l.id = q.library_id
+          WHERE q.person_id = ? ORDER BY q.created_at DESC LIMIT 30`,
+      )
+      .all(actor.person.id) as unknown as Record<string, unknown>[];
+    rc.json({ history: rows });
+  });
+
+  router.get('/api/search/saved', (rc) => {
+    const actor = requireActor(rc);
+    const rows = rc.app.db
+      .prepare('SELECT * FROM saved_searches WHERE person_id = ? ORDER BY created_at DESC LIMIT 50')
+      .all(actor.person.id) as unknown as Record<string, unknown>[];
+    rc.json({ saved: rows.map((row) => ({ ...row, params: parseJson<Record<string, unknown>>(String(row.params), {}) })) });
+  });
+
+  router.post('/api/search/saved', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{ name?: string; params?: Record<string, unknown> }>();
+    const name = String(body.name ?? '').trim().slice(0, 60);
+    if (!name) throw errors.badRequest('需要检索名称');
+    const params = body.params && typeof body.params === 'object' ? body.params : {};
+    const id = newId('saved');
+    rc.app.db
+      .prepare('INSERT INTO saved_searches (id, person_id, library_id, name, params, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, actor.person.id, params.libraryId ? String(params.libraryId) : null, name, JSON.stringify(params), nowIso());
+    rc.json({ saved: { id, name, params } }, 201);
+  });
+
+  router.delete('/api/search/saved/:id', (rc) => {
+    const actor = requireActor(rc);
+    const row = rc.app.db.prepare('SELECT * FROM saved_searches WHERE id = ? AND person_id = ?').get(rc.params.id!, actor.person.id) as unknown as { id: string } | undefined;
+    if (!row) throw errors.notFound('保存的检索不存在');
+    rc.app.db.prepare('DELETE FROM saved_searches WHERE id = ?').run(row.id);
+    rc.json({ ok: true });
   });
 
   router.get('/api/graph/hierarchy', (rc) => {

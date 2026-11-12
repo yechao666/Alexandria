@@ -369,6 +369,28 @@ CREATE TABLE IF NOT EXISTS page_properties (
   PRIMARY KEY (page_id, key)
 );
 
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id         TEXT PRIMARY KEY,
+  person_id  TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+  library_id TEXT REFERENCES libraries(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  params     TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_person ON saved_searches(person_id, created_at);
+
+CREATE TABLE IF NOT EXISTS search_queries (
+  id         TEXT PRIMARY KEY,
+  person_id  TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  library_id TEXT REFERENCES libraries(id) ON DELETE SET NULL,
+  query      TEXT NOT NULL,
+  mode       TEXT NOT NULL DEFAULT 'compiled',
+  hits       INTEGER NOT NULL DEFAULT 0,
+  took_ms    INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_search_queries_person ON search_queries(person_id, created_at);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id          TEXT PRIMARY KEY,
   actor_id    TEXT,

@@ -175,3 +175,20 @@ test('系统会给出重复页合并建议', async () => {
   const result = await j<{ suggestions: { score: number; reasons: string[] }[] }>('/api/libraries/lib_eng/merge-suggestions', admin.token);
   assert.ok(result.suggestions.some((suggestion) => suggestion.score >= 0.55));
 });
+
+test('检索历史、保存检索与自动补全可用', async () => {
+  await fetch(`${base}/api/search?q=${encodeURIComponent('知识编译')}`, { headers: { authorization: `Bearer ${admin.token}` } });
+  const history = await j<{ history: { query: string }[] }>('/api/search/history', admin.token);
+  assert.ok(history.history.some((item) => item.query.includes('知识编译')));
+  const created = await j<{ saved: { id: string } }>('/api/search/saved', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: '知识编译检索', params: { q: '知识编译' } }),
+  });
+  assert.ok(created.saved.id);
+  const saved = await j<{ saved: { name: string }[] }>('/api/search/saved', admin.token);
+  assert.ok(saved.saved.some((item) => item.name === '知识编译检索'));
+  const suggest = await j<{ suggestions: { title: string }[] }>('/api/search/suggest?q=%E7%9F%A5%E8%AF%86', admin.token);
+  assert.ok(suggest.suggestions.length > 0);
+  await j(`/api/search/saved/${created.saved.id}`, admin.token, { method: 'DELETE' });
+});

@@ -22,29 +22,35 @@ export async function renderSearch(params) {
   const libraryRef = params.get('library') ?? '';
   const classKey = params.get('class') ?? '';
   const tag = params.get('tag') ?? '';
+  const offset = Math.max(0, Number(params.get('offset') ?? 0) || 0);
   const library = state.libraries.find((item) => item.slug === libraryRef || item.id === libraryRef);
   let hits = [];
   let answer = null;
   let took = 0;
   let strategy = '';
   let facets = { tags: [], classes: [], libraries: [] };
+  let hasMore = false;
+  let saved = [];
+  let history = [];
   if (q) {
-    const query = new URLSearchParams({ q, limit: '30' });
+    const query = new URLSearchParams({ q, limit: '30', offset: String(offset) });
     if (library) query.set('library', library.id);
     if (classKey) query.set('class', classKey);
     if (tag) query.set('tag', tag);
     const facetsPromise = api('/api/search/facets').catch(() => ({ tags: [], classes: [], libraries: [] }));
     const searchPromise = api(`/api/search?${query.toString()}`);
-    const answerPromise = api('/api/query', {
-      method: 'POST',
-      body: { q, libraryIds: library ? [library.id] : undefined, limit: 6 },
-    }).catch(() => null);
-    const [searchResult, answerResult, facetResult] = await Promise.all([searchPromise, answerPromise, facetsPromise]);
+    const answerPromise = Promise.resolve(null);
+    const savedPromise = api('/api/search/saved').catch(() => ({ saved: [] }));
+    const historyPromise = api('/api/search/history').catch(() => ({ history: [] }));
+    const [searchResult, answerResult, facetResult, savedResult, historyResult] = await Promise.all([searchPromise, answerPromise, facetsPromise, savedPromise, historyPromise]);
     facets = facetResult;
+    saved = savedResult.saved ?? [];
+    history = historyResult.history ?? [];
     hits = searchResult.hits ?? [];
     took = searchResult.tookMs ?? 0;
     strategy = searchResult.strategy ?? '';
-    answer = answerResult;
+    hasMore = Boolean(searchResult.hasMore);
+    answer = null;
   }
 
   const classOptions = state.bootstrap?.classes
@@ -93,8 +99,10 @@ export async function renderSearch(params) {
       <div class="eyebrow">FTS5 · TYPED GRAPH · COMPILED PAGES</div>
       <h1>沿着知识路径找答案。</h1>
       <form class="search-box" id="search-form">
-        <input name="q" value="${esc(q)}" placeholder="问一个问题，或输入一个概念 / 文献名 / 标签…" autofocus>
+        <input name="q" value="${esc(q)}" list="search-suggestions" placeholder="问一个问题，或输入一个概念 / 文献名 / 标签…" autofocus>
+        <datalist id="search-suggestions"></datalist>
         <button class="btn btn-primary" type="submit">${icon('search', 16)} 检索</button>
+        ${q ? `<button class="btn" type="button" id="save-search" title="保存当前检索">${icon('book', 15)} 保存</button>` : ''}
       </form>
       <div class="row wrap" style="margin-top:12px;gap:8px">
         <span class="small faint">试试：</span>
@@ -104,9 +112,11 @@ export async function renderSearch(params) {
     ${q ? `<div class="between" style="margin:4px 0 14px"><span class="small muted">命中 ${hits.length} 条 · ${took} ms</span><span class="small faint">${esc(strategy)}</span></div>` : ''}
     <div class="search-layout">
       <div>
+        ${q && offset === 0 ? '<div id="answer-slot"><div class="answer-card"><div class="answer-head">本机 DSH 正在合成答案…</div></div></div>' : ''}
         ${answerHtml}
         <div class="result-list" style="margin-top:${answerHtml ? '18px' : '0'}">
           ${q ? results || emptyState('没有命中的知识', '尝试减少限定词，或先上传相关资料。', '<a class="btn btn-sm" href="#/upload">上传资料</a>') : ''}
+          ${hasMore ? `<div class="center" style="margin-top:16px"><a class="btn" href="#/search?${new URLSearchParams({ q, ...(libraryRef ? { library: libraryRef } : {}), ...(classKey ? { class: classKey } : {}), ...(tag ? { tag } : {}), offset: String(offset + 30) }).toString()}">加载更多</a></div>` : ''}
           ${!q ? `<div class="panel panel-pad"><h3>从一个文獻或概念开始</h3><p class="muted">检索会先用 FTS5 做词法召回，再沿预编译的关联图扩展一跳，最后按标题覆盖、置信度、时效与 read_when 重排。没有查询时向量化。</p><div class="rail-list" style="margin-top:14px">${recent}</div></div>` : ''}
         </div>
       </div>
@@ -132,11 +142,50 @@ export async function renderSearch(params) {
           </div>
         </div>` : ''}
         ${answer?.citations?.length ? `<div class="panel side-card" style="margin-top:14px"><div class="panel-head"><h3 style="font-size:13px">引用来源</h3></div><div class="panel-body rail-list">${answer.citations.map((citation) => `<a class="rail-item" href="#/page/${encodeURIComponent(citation.pageId)}"><span class="dot" style="background:var(--clay)"></span><span>${esc(citation.title)}<br><span class="faint">${esc(citation.libraryName)} · ${Math.round(citation.confidence * 100)}%</span></span></a>`).join('')}</div></div>` : ''}
+        ${saved.length ? `<div class="panel side-card" style="margin-top:14px"><div class="panel-head"><h3 style="font-size:13px">已保存的检索</h3></div><div class="panel-body rail-list">${saved.slice(0, 8).map((item) => `<a class="rail-item" href="#/search?q=${encodeURIComponent(item.params?.q ?? '')}${item.params?.library ? `&library=${encodeURIComponent(item.params.library)}` : ''}"><span class="dot" style="background:var(--indigo)"></span><span>${esc(item.name)}</span></a>`).join('')}</div></div>` : ''}
+        ${history.length ? `<div class="panel side-card" style="margin-top:14px"><div class="panel-head"><h3 style="font-size:13px">最近检索</h3></div><div class="panel-body rail-list">${history.slice(0, 8).map((item) => `<a class="rail-item" href="#/search?q=${encodeURIComponent(item.query)}"><span class="dot" style="background:var(--ochre)"></span><span>${esc(item.query)} <span class="faint">· ${item.hits}</span></span></a>`).join('')}</div></div>` : ''}
       </aside>
     </div>`;
 }
 
 export function mountSearch() {
+  const qInput = document.querySelector('#search-form input[name="q"]');
+  let suggestTimer = null;
+  qInput?.addEventListener('input', () => {
+    clearTimeout(suggestTimer);
+    const q = qInput.value.trim();
+    if (!q) return;
+    suggestTimer = setTimeout(async () => {
+      try {
+        const data = await api(`/api/search/suggest?q=${encodeURIComponent(q)}`);
+        const list = document.getElementById('search-suggestions');
+        if (list) list.innerHTML = (data.suggestions ?? []).map((item) => `<option value="${esc(item.title)}">${esc(item.libraryName)}</option>`).join('');
+      } catch { /* ignore */ }
+    }, 220);
+  });
+  const answerSlot = document.getElementById('answer-slot');
+  if (answerSlot) {
+    const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
+    const q = params.get('q') ?? '';
+    const libraryRef = params.get('library') ?? '';
+    const library = state.libraries.find((item) => item.slug === libraryRef || item.id === libraryRef);
+    api('/api/query', { method: 'POST', body: { q, libraryIds: library ? [library.id] : undefined, limit: 6 } })
+      .then((answer) => {
+        const citations = (answer.citations ?? []).map((citation) => `<a class="rail-item" href="#/page/${encodeURIComponent(citation.pageId)}"><span class="dot" style="background:var(--clay)"></span><span>${esc(citation.title)} <span class="faint">· ${esc(citation.libraryName ?? '')}</span></span></a>`).join('');
+        answerSlot.innerHTML = `<div class="answer-card"><div class="answer-head">${icon('spark', 18)}<h3 style="font-size:16px">知识合成</h3><span class="badge ${answer.mode === 'dsh' ? 'jade' : 'outline'}">${answer.mode === 'dsh' ? '本机 DSH' : answer.mode === 'llm' ? 'LLM 合成' : '编译知识'}</span><span class="small faint" style="margin-left:auto">${answer.tookMs ?? 0} ms · ${answer.citations?.length ?? 0} 条引用</span></div><div class="answer-body">${formatAnswer(answer.answer)}</div>${answer.gaps?.length ? `<div class="gaps">${answer.gaps.map((gap) => `<div class="gap-item">${icon('clock', 13)}<span>${esc(gap)}</span></div>`).join('')}</div>` : ''}${citations ? `<div class="rail-list" style="margin-top:12px">${citations}</div>` : ''}</div>`;
+      })
+      .catch(() => { answerSlot.innerHTML = ''; });
+  }
+  document.getElementById('save-search')?.addEventListener('click', async () => {
+    const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
+    const q = params.get('q') ?? '';
+    const name = prompt('为这次检索命名', q.slice(0, 30));
+    if (!name) return;
+    try {
+      await api('/api/search/saved', { method: 'POST', body: JSON.stringify({ name, params: { q, library: params.get('library') ?? '', class: params.get('class') ?? '', tag: params.get('tag') ?? '' } }) });
+      toast('检索已保存', 'success');
+    } catch (error) { toast(error.message, 'error'); }
+  });
   document.getElementById('search-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const q = new FormData(event.currentTarget).get('q')?.toString().trim() ?? '';

@@ -16,6 +16,7 @@ export interface Env {
     bin: string;
     profile: string;
     timeoutMs: number;
+    searchTimeoutMs: number;
     sourceHome: string;
   };
   wecom: {
@@ -67,6 +68,7 @@ export function loadEnv(root: string): Env {
       bin: process.env.ALEXANDRIA_DSH_BIN?.trim() || process.env.HIVE_DSH_BIN?.trim() || 'dsh',
       profile: process.env.ALEXANDRIA_DSH_PROFILE?.trim() || 'headless',
       timeoutMs: Number(process.env.ALEXANDRIA_DSH_TIMEOUT_MS ?? 90_000),
+      searchTimeoutMs: Number(process.env.ALEXANDRIA_DSH_SEARCH_TIMEOUT_MS ?? 2_500),
       sourceHome: process.env.ALEXANDRIA_DSH_SOURCE_HOME?.trim() || join(process.env.HOME || '', '.dsh'),
     },
     wecom: {

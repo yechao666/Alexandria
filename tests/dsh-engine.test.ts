@@ -56,7 +56,7 @@ const previousKey = process.env.DEEPSEEK_API_KEY;
 process.env.DEEPSEEK_API_KEY = 'test-key';
 
 const ctx = createTestContext();
-ctx.env.dsh = { enabled: true, bin: fakeDsh, profile: 'headless', timeoutMs: 10_000, sourceHome: fakeHome };
+ctx.env.dsh = { enabled: true, bin: fakeDsh, profile: 'headless', timeoutMs: 10_000, searchTimeoutMs: 1000, sourceHome: fakeHome };
 const { server, base } = await startTestServer(ctx.app);
 const { token } = await login(base, 'lin@alex.dev');
 
