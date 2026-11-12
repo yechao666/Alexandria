@@ -5,6 +5,7 @@ import { createContext } from './context.ts';
 import { METHOD_MISMATCH, normalizePath, type Router } from './router.ts';
 import { errors, sendError } from './respond.ts';
 import { serveStatic } from './static.ts';
+import { rateLimit } from '../domain/rate-limit.ts';
 
 function requestId(req: import('node:http').IncomingMessage): string {
   const incoming = String(req.headers['x-request-id'] ?? '').trim();
@@ -34,6 +35,16 @@ export function createHttpServer(app: AppContext, router: Router): Server {
       return;
     }
     const pathname = normalizePath(url.pathname);
+    if (pathname.startsWith('/api/') && pathname !== '/api/health' && pathname !== '/api/health/ready') {
+      const ip = req.socket.remoteAddress ?? 'unknown';
+      const limit = Math.max(60, Number(process.env.ALEXANDRIA_RATE_LIMIT_PER_MINUTE ?? 1200));
+      const bucket = rateLimit(`api:${method === 'GET' || method === 'HEAD' ? 'read' : 'write'}:${ip}`, limit, 60_000);
+      if (!bucket.ok) {
+        res.setHeader('retry-after', String(bucket.retryAfter));
+        sendError(res, id, errors.tooManyRequests('请求过于频繁，请稍后再试'));
+        return;
+      }
+    }
     if (method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

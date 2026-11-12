@@ -252,8 +252,10 @@ cd ../alexandria && node server/src/main.ts
 - [设计方案](docs/DESIGN.md)：架构、数据模型、编译、实体/事实、组织层级、资源 ACL、任务、企业微信。
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
-- [验收报告](docs/ACCEPTANCE.md)：需求映射、89 项测试证据与已知边界。
+- [验收报告](docs/ACCEPTANCE.md)：需求映射、90 项测试证据与已知边界。
 - [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
+- [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
+- **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
 
 ## 本体属性

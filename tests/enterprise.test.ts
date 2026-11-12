@@ -283,3 +283,14 @@ test('删除页面进入回收站并可恢复/彻底删除', async () => {
   const page = await fetch(`${base}/api/pages/${restored.page.id}`, { headers: { authorization: `Bearer ${admin.token}` } });
   assert.equal(page.status, 200);
 });
+
+test('管理员可以导出安全与审计 CSV', async () => {
+  const security = await fetch(`${base}/api/admin/security/export?days=30`, { headers: { authorization: `Bearer ${admin.token}` } });
+  assert.equal(security.status, 200);
+  assert.match(security.headers.get('content-type') ?? '', /text\/csv/);
+  assert.match(await security.text(), /kind|severity/);
+  const audit = await fetch(`${base}/api/admin/audit/export?days=30`, { headers: { authorization: `Bearer ${admin.token}` } });
+  assert.equal(audit.status, 200);
+  const denied = await fetch(`${base}/api/admin/security/export`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+});

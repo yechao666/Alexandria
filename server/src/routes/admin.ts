@@ -577,4 +577,36 @@ export function registerAdminRoutes(router: Router): void {
     });
   });
 
+  router.get('/api/admin/audit/export', (rc) => {
+    requireAdmin(rc);
+    const days = Math.max(1, Math.min(365, rc.queryInt('days', 30)));
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const rows = rc.app.db
+      .prepare('SELECT a.*, p.name AS actor_name FROM audit_events a LEFT JOIN persons p ON p.id = a.actor_id WHERE a.created_at >= ? ORDER BY a.created_at DESC LIMIT 5000')
+      .all(cutoff) as unknown as Record<string, unknown>[];
+    const csv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const header = ['created_at', 'action', 'actor', 'target_type', 'target_id', 'library_id', 'ip', 'detail'].map(csv).join(',');
+    const body = rows.map((row) => [row.created_at, row.action, row.actor_name, row.target_type, row.target_id, row.library_id, row.ip, row.detail].map(csv).join(',')).join('\n');
+    rc.res.statusCode = 200;
+    rc.res.setHeader('content-type', 'text/csv; charset=utf-8');
+    rc.res.setHeader('content-disposition', `attachment; filename*=UTF-8''alexandria-audit-${days}d.csv`);
+    rc.res.end(`\uFEFF${header}\n${body}`);
+  });
+
+  router.get('/api/admin/security/export', (rc) => {
+    requireAdmin(rc);
+    const days = Math.max(1, Math.min(365, rc.queryInt('days', 30)));
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const rows = rc.app.db
+      .prepare('SELECT s.*, p.name AS actor_name FROM security_events s LEFT JOIN persons p ON p.id = s.actor_id WHERE s.created_at >= ? ORDER BY s.created_at DESC LIMIT 5000')
+      .all(cutoff) as unknown as Record<string, unknown>[];
+    const csv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const header = ['created_at', 'kind', 'severity', 'actor', 'subject', 'ip', 'detail'].map(csv).join(',');
+    const body = rows.map((row) => [row.created_at, row.kind, row.severity, row.actor_name, row.subject, row.ip, row.detail].map(csv).join(',')).join('\n');
+    rc.res.statusCode = 200;
+    rc.res.setHeader('content-type', 'text/csv; charset=utf-8');
+    rc.res.setHeader('content-disposition', `attachment; filename*=UTF-8''alexandria-security-${days}d.csv`);
+    rc.res.end(`\uFEFF${header}\n${body}`);
+  });
+
 }

@@ -16,6 +16,7 @@ node server/src/main.ts
 - 维护任务：每小时清理过期会话/登录挑战/SSO state；回收站超过 `ALEXANDRIA_TRASH_RETENTION_DAYS`（默认 30 天）自动清理；`ALEXANDRIA_AUTO_BACKUP_HOURS>0` 时按周期自动备份。
 - 登录限流：同一 IP + 邮箱 15 分钟 8 次失败后返回 429；多副本需替换为 Redis 限流。
 - 已启用 CSP、HSTS（HTTPS）、Secure Cookie、X-Frame-Options、nosniff。
+- 全 API 每 IP 每分钟读写限流（`ALEXANDRIA_RATE_LIMIT_PER_MINUTE`，默认 1200）；登录另有更严格的独立限流。
 - 企业微信 Mock 仅用于联调，生产关闭或限制在内网。
 
 ## 2. 必配环境
