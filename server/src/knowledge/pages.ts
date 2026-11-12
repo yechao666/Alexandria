@@ -3,6 +3,7 @@ import type { Actor, PageRow } from '../types.ts';
 import { newId, nowIso, parseJson, slugify, truncate } from '../lib/ids.ts';
 import { normalizeTitle, snippet, termsString } from './terms.ts';
 import { errors } from '../http/respond.ts';
+import { detectConflicts } from './claims.ts';
 
 export interface PageInput {
   libraryId: string;
@@ -21,6 +22,7 @@ export interface PageInput {
   aliases?: string[];
   readWhen?: string[];
   ownerPersonId?: string | null;
+  supersededBy?: string | null;
   metadata?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   createdBy?: string | null;
@@ -336,6 +338,7 @@ export interface PagePatch {
   aliases?: string[];
   readWhen?: string[];
   ownerPersonId?: string | null;
+  supersededBy?: string | null;
   metadata?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   note?: string;
@@ -381,6 +384,7 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
   if (patch.aliases !== undefined) set('aliases', JSON.stringify(patch.aliases));
   if (patch.readWhen !== undefined) set('read_when', JSON.stringify(patch.readWhen));
   if (patch.ownerPersonId !== undefined) set('owner_person_id', patch.ownerPersonId);
+  if (patch.supersededBy !== undefined) set('superseded_by', patch.supersededBy);
   if (patch.metadata !== undefined) set('metadata', JSON.stringify(patch.metadata));
   set('version', page.version + 1);
   set('updated_by', actor?.person.id ?? null);
@@ -483,4 +487,110 @@ export function pageContext(db: Db, page: PageRow, maxChars = 12000, sourceIds?:
 
 export function searchSnippet(page: PageRow, tokens: string[]): string {
   return snippet(`${page.summary} ${page.body}`, tokens, 200);
+}
+
+/**
+ * 将 source 页面合并进 target：迁移来源、主张、链接、属性、评论与别名，
+ * 然后把 source 标记为 archived + superseded_by，保留审计与可回溯性。
+ */
+export function mergePages(
+  db: Db,
+  source: PageRow,
+  target: PageRow,
+  actor: Actor | null,
+): PageRow {
+  if (source.id === target.id) throw new Error('不能把页面合并到自身');
+  if (source.library_id !== target.library_id) throw new Error('只能合并同一知识库内的页面');
+  if (source.class_key !== target.class_key) throw new Error('只能合并同类型页面');
+  const now = nowIso();
+  const sourceData = db.prepare('SELECT * FROM page_sources WHERE page_id = ?').all(source.id) as unknown as {
+    source_id: string;
+    relation: string;
+    locator: string;
+    quote: string;
+  }[];
+  for (const row of sourceData) {
+    db.prepare(
+      'INSERT OR IGNORE INTO page_sources (page_id, source_id, relation, locator, quote) VALUES (?, ?, ?, ?, ?)',
+    ).run(target.id, row.source_id, row.relation, row.locator, row.quote);
+  }
+  db.prepare('UPDATE claims SET page_id = ? WHERE page_id = ?').run(target.id, source.id);
+  db.prepare('UPDATE comments SET page_id = ? WHERE page_id = ?').run(target.id, source.id);
+  const outgoing = db.prepare('SELECT * FROM links WHERE from_page_id = ?').all(source.id) as unknown as {
+    to_page_id: string;
+    relation: string;
+    origin: string;
+    weight: number;
+  }[];
+  for (const link of outgoing) {
+    if (link.to_page_id === target.id) continue;
+    db.prepare(
+      'INSERT OR IGNORE INTO links (id, library_id, from_page_id, to_page_id, relation, origin, weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(newId('lnk'), target.library_id, target.id, link.to_page_id, link.relation, link.origin, link.weight, now);
+  }
+  const incoming = db.prepare('SELECT * FROM links WHERE to_page_id = ?').all(source.id) as unknown as {
+    from_page_id: string;
+    relation: string;
+    origin: string;
+    weight: number;
+  }[];
+  for (const link of incoming) {
+    if (link.from_page_id === target.id) continue;
+    db.prepare(
+      'INSERT OR IGNORE INTO links (id, library_id, from_page_id, to_page_id, relation, origin, weight, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(newId('lnk'), target.library_id, link.from_page_id, target.id, link.relation, link.origin, link.weight, now);
+  }
+  db.prepare('DELETE FROM links WHERE from_page_id = ? OR to_page_id = ?').run(source.id, source.id);
+  const properties = db.prepare('SELECT * FROM page_properties WHERE page_id = ?').all(source.id) as unknown as {
+    key: string;
+    value: string;
+  }[];
+  for (const property of properties) {
+    db.prepare('INSERT OR IGNORE INTO page_properties (page_id, key, value) VALUES (?, ?, ?)').run(target.id, property.key, property.value);
+  }
+  db.prepare('DELETE FROM page_properties WHERE page_id = ?').run(source.id);
+  db.prepare('DELETE FROM page_sources WHERE page_id = ?').run(source.id);
+
+  const sourceTags = parseJson<string[]>(source.tags, []);
+  const targetTags = parseJson<string[]>(target.tags, []);
+  const sourceAliases = parseJson<string[]>(source.aliases, []);
+  const targetAliases = parseJson<string[]>(target.aliases, []);
+  const sourceRead = parseJson<string[]>(source.read_when, []);
+  const targetRead = parseJson<string[]>(target.read_when, []);
+  const mergedTags = [...new Set([...targetTags, ...sourceTags])];
+  const mergedAliases = [...new Set([...targetAliases, ...sourceAliases, source.title])];
+  const mergedRead = [...new Set([...targetRead, ...sourceRead])];
+  const updated = updatePage(
+    db,
+    target,
+    {
+      tags: mergedTags,
+      aliases: mergedAliases,
+      readWhen: mergedRead,
+      body: `${target.body.trim()}\n\n## 合并自\n- 已合并 [[${source.slug}|${source.title}]] 的全部来源、主张与关联。`,
+      metadata: {
+        ...parseJson<Record<string, unknown>>(target.metadata, {}),
+        mergedPages: [
+          ...((parseJson<Record<string, unknown>>(target.metadata, {}).mergedPages as string[] | undefined) ?? []),
+          source.id,
+        ],
+      },
+      note: `合并 ${source.title}`,
+    },
+    actor,
+  );
+  updatePage(
+    db,
+    source,
+    {
+      status: 'archived',
+      supersededBy: target.id,
+      metadata: { ...parseJson<Record<string, unknown>>(source.metadata, {}), mergedInto: target.id, mergedAt: now },
+      note: `合并到 ${target.title}`,
+    },
+    actor,
+  );
+  db.prepare('DELETE FROM page_fts WHERE page_id = ?').run(source.id);
+  detectConflicts(db, target.id);
+  return updated;
 }

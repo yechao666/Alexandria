@@ -112,3 +112,26 @@ test('文献级 ACL 可限制并定向共享', async () => {
     body: JSON.stringify({ visibility: 'inherit', grants: [] }),
   });
 });
+
+test('重复页面可以合并并保留归档指针', async () => {
+  const create = async (title: string) =>
+    j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, classKey: 'concept', body: `## 定义\n${title}`, status: 'draft' }),
+    });
+  const source = await create('合并测试重复页 A');
+  const target = await create('合并测试重复页 B');
+  const merged = await j<{ ok: boolean; mergedInto: string }>(`/api/pages/${source.page.id}/merge`, admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ targetId: target.page.id }),
+  });
+  assert.equal(merged.ok, true);
+  assert.equal(merged.mergedInto, target.page.id);
+  const archived = ctx.db.prepare('SELECT status, superseded_by FROM pages WHERE id = ?').get(source.page.id) as unknown as { status: string; superseded_by: string };
+  assert.equal(archived.status, 'archived');
+  assert.equal(archived.superseded_by, target.page.id);
+  const targetRow = ctx.db.prepare('SELECT aliases FROM pages WHERE id = ?').get(target.page.id) as unknown as { aliases: string };
+  assert.match(targetRow.aliases, /合并测试重复页 A/);
+});

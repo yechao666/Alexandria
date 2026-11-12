@@ -5,7 +5,7 @@ import { requireLibrary, effectivePageRole, effectiveSourceRole, resourceGrants 
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
-import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef } from '../knowledge/pages.ts';
+import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef, mergePages } from '../knowledge/pages.ts';
 import { relatedPages } from '../knowledge/search.ts';
 import { canEdit, pageAccess, pageListDto, parseList } from './helpers.ts';
 import type { PageRow } from '../types.ts';
@@ -333,6 +333,29 @@ export function registerPageRoutes(router: Router): void {
     for (const grant of valid) insert.run(newId('rgrant'), 'page', page.id, grant.subjectType, grant.subjectId, grant.role, actor.person.id, nowIso());
     audit(rc.app.db, { actor, action: 'page.access.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { visibility, grants: valid.length } });
     rc.json({ ok: true, visibility, grants: resourceGrants(rc.app.db, 'page', page.id) });
+  });
+
+  router.post('/api/pages/:id/merge', async (rc) => {
+    const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'editor');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要页面所有者权限');
+    const body = await rc.body<{ targetId?: string }>();
+    const targetId = String(body.targetId ?? '').trim();
+    if (!targetId) throw errors.badRequest('需要 targetId');
+    const { page: target, role: targetRole } = pageAccess(rc, targetId, 'editor');
+    if (!actor.person.isAdmin && targetRole !== 'owner') throw errors.forbidden('需要目标页面所有者权限');
+    if (page.id === target.id) throw errors.badRequest('不能合并到自身');
+    if (page.library_id !== target.library_id) throw errors.badRequest('只能合并同一知识库内的页面');
+    if (page.class_key !== target.class_key) throw errors.badRequest('只能合并同类型页面');
+    const merged = mergePages(rc.app.db, page, target, actor);
+    audit(rc.app.db, {
+      actor,
+      action: 'page.merge',
+      targetType: 'page',
+      targetId: target.id,
+      libraryId: library.id,
+      detail: { sourceId: page.id, sourceTitle: page.title, targetId: target.id, targetTitle: target.title },
+    });
+    rc.json({ ok: true, page: pageListDto(rc.app.db, merged), mergedInto: target.id });
   });
 
 }

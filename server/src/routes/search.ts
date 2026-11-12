@@ -3,7 +3,7 @@ import { requireActor } from '../http/auth.ts';
 import { effectivePageRole } from '../domain/access.ts';
 import { requireLibrary, visibleLibraries } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
-import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes } from '../knowledge/search.ts';
+import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes, hierarchyForLibrary } from '../knowledge/search.ts';
 import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { getPage, pageToView } from '../knowledge/pages.ts';
@@ -151,6 +151,31 @@ export function registerSearchRoutes(router: Router): void {
       limit: rc.queryInt('limit', 400),
     });
     rc.json({ ...graph, libraryId: library.id });
+  });
+
+  router.get('/api/libraries/:id/hierarchy', (rc) => {
+    const actor = requireActor(rc);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!);
+    rc.json({ ...hierarchyForLibrary(rc.app.db, actor, library.id), libraryId: library.id });
+  });
+
+  router.get('/api/graph/hierarchy', (rc) => {
+    const actor = requireActor(rc);
+    const libraryRef = rc.query('library') || rc.query('libraryId');
+    if (libraryRef) {
+      const { library } = requireLibrary(rc.app.db, actor, libraryRef);
+      rc.json({ ...hierarchyForLibrary(rc.app.db, actor, library.id), libraryId: library.id });
+      return;
+    }
+    const libraries = visibleLibraries(rc.app.db, actor).slice(0, 8);
+    const nodes: unknown[] = [];
+    const edges: unknown[] = [];
+    for (const library of libraries) {
+      const tree = hierarchyForLibrary(rc.app.db, actor, library.id);
+      nodes.push(...(tree.nodes as Record<string, unknown>[]).map((node) => ({ ...node, libraryId: library.id, libraryName: library.name })));
+      edges.push(...(tree.edges as unknown[]));
+    }
+    rc.json({ nodes: nodes.slice(0, 400), edges, libraryId: null });
   });
 
   router.get('/api/libraries/:id/facets', (rc) => {

@@ -484,3 +484,56 @@ export function rebuildIndexes(db: Db): { pages: number; sources: number } {
   }
   return { pages: pages.length, sources: sources.length };
 }
+
+/** 层级视图：基于 broader-than 边构建可读的知识树，权限过滤后返回。 */
+export function hierarchyForLibrary(
+  db: Db,
+  actor: Actor,
+  libraryId: string,
+): { nodes: unknown[]; edges: unknown[]; roots: string[] } {
+  const libraries = accessibleLibraries(db, actor);
+  if (!libraries.has(libraryId)) return { nodes: [], edges: [], roots: [] };
+  const pages = (db.prepare('SELECT * FROM pages WHERE library_id = ?').all(libraryId) as unknown as PageRow[])
+    .filter((page) => Boolean(effectivePageRole(db, actor, page)));
+  const ids = new Set(pages.map((page) => page.id));
+  const edges = (db
+    .prepare("SELECT from_page_id, to_page_id, relation FROM links WHERE library_id = ? AND relation IN ('broader-than','parent-of','depends-on')")
+    .all(libraryId) as unknown as { from_page_id: string; to_page_id: string; relation: string }[])
+    .filter((edge) => ids.has(edge.from_page_id) && ids.has(edge.to_page_id));
+  const parent = new Map<string, string>();
+  for (const edge of edges) {
+    if (edge.relation === 'broader-than' || edge.relation === 'parent-of') {
+      if (!parent.has(edge.from_page_id)) parent.set(edge.from_page_id, edge.to_page_id);
+    }
+  }
+  const roots = pages.filter((page) => !parent.has(page.id)).map((page) => page.id);
+  const level = new Map<string, number>();
+  const visit = (id: string, depth: number, seen: Set<string>) => {
+    if (seen.has(id) || depth > 16) return;
+    level.set(id, Math.min(level.get(id) ?? 99, depth));
+    seen.add(id);
+    for (const child of edges.filter((edge) => edge.to_page_id === id && (edge.relation === 'broader-than' || edge.relation === 'parent-of'))) {
+      visit(child.from_page_id, depth + 1, seen);
+    }
+  };
+  roots.forEach((id) => visit(id, 0, new Set()));
+  for (const page of pages) if (!level.has(page.id)) level.set(page.id, 0);
+  return {
+    nodes: pages
+      .map((page) => ({
+        id: page.id,
+        title: page.title,
+        slug: page.slug,
+        classKey: page.class_key,
+        status: page.status,
+        confidence: page.confidence,
+        level: level.get(page.id) ?? 0,
+        parentId: parent.get(page.id) ?? null,
+        color: pageToView(db, page).classColor,
+        className: pageToView(db, page).className,
+      }))
+      .sort((a, b) => a.level - b.level || String(a.title).localeCompare(String(b.title), 'zh-Hans-CN')),
+    edges,
+    roots,
+  };
+}

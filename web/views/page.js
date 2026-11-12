@@ -86,8 +86,9 @@ export async function renderPage(ref) {
               ${page.creatorName ? `<span>创建者 ${esc(page.creatorName)}</span>` : ''}
               <span class="mono">${esc(page.slug)}</span>
             </div>
-            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a><button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
+            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a>${page.classKey !== 'source' ? `<button class="btn btn-sm" id="merge-page">${icon('layers', 14)} 合并重复</button>` : ''}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
           </header>
+          ${page.supersededBy ? `<div class="callout small" style="margin:14px 0">此页已合并到 <a href="#/page/${encodeURIComponent(page.supersededBy)}">目标页面</a>；历史内容仍保留。</div>` : ''}
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
         </article>
         <aside class="rail">
@@ -114,6 +115,35 @@ export async function mountPage(ref) {
   const detail = await api(`/api/pages/${encodeURIComponent(ref)}`);
   const page = detail.page;
   const libraryDetail = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}`).catch(() => null);
+
+  document.getElementById('merge-page')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}/pages?class=${encodeURIComponent(page.classKey)}&limit=200`);
+      const candidates = (data.pages ?? []).filter((item) => item.id !== page.id);
+      if (!candidates.length) {
+        toast('同类型下没有可合并的页面', 'info');
+        return;
+      }
+      const options = candidates.map((item) => `<option value="${esc(item.id)}">${esc(item.title)} · ${esc(item.slug)}</option>`).join('');
+      openModal({
+        title: '合并重复页面',
+        body: `<p class="small muted">把当前页面「${esc(page.title)}」的来源、主张、链接、属性与评论迁移到目标页，并保留归档记录。此操作不可自动撤销。</p><div class="field" style="margin-top:12px"><label>合并到</label><select class="select" id="merge-target">${options}</select></div>`,
+        footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-clay" id="confirm-merge">确认合并</button>`,
+        onMount: (modal) => {
+          modal.querySelector('#confirm-merge')?.addEventListener('click', async () => {
+            const targetId = modal.querySelector('#merge-target')?.value;
+            if (!targetId || !confirm('确认把当前页面合并到目标页？')) return;
+            try {
+              const result = await api(`/api/pages/${encodeURIComponent(page.id)}/merge`, { method: 'POST', body: JSON.stringify({ targetId }) });
+              closeModal();
+              toast('页面已合并', 'success');
+              go(`#/page/${encodeURIComponent(result.mergedInto)}`);
+            } catch (error) { toast(error.message, 'error'); }
+          });
+        },
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  });
 
   document.getElementById('page-access')?.addEventListener('click', async () => {
     try {
