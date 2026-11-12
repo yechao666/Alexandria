@@ -362,6 +362,93 @@ export function registerReviewRoutes(router: Router): void {
     rc.json({ ok: true, assignee: personId });
   });
 
+  router.post('/api/review/conflicts/bulk', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{ ids?: string[]; resolution?: string; note?: string }>();
+    const resolution = String(body.resolution ?? '');
+    if (resolution !== 'keep' && resolution !== 'dismiss') throw errors.badRequest('裁决动作应为 keep 或 dismiss');
+    const ids = [...new Set(Array.isArray(body.ids) ? body.ids.map(String) : [])].slice(0, 50);
+    if (!ids.length) throw errors.badRequest('请选择冲突主张');
+    let resolved = 0;
+    let skipped = 0;
+    const libraryIds = new Set<string>();
+    for (const id of ids) {
+      try {
+        const claim = rc.app.db.prepare('SELECT * FROM claims WHERE id = ?').get(id) as unknown as
+          | { id: string; page_id: string; subject: string; predicate: string; object: string; status: string }
+          | undefined;
+        if (!claim || claim.status !== 'conflicted') { skipped += 1; continue; }
+        const { page } = pageAccess(rc, claim.page_id, 'editor');
+        requireLibrary(rc.app.db, actor, page.library_id, 'editor');
+        libraryIds.add(page.library_id);
+        const rivals = rc.app.db
+          .prepare("SELECT id, page_id FROM claims WHERE subject = ? AND predicate = ? AND status = 'conflicted' AND id <> ?")
+          .all(claim.subject, claim.predicate, claim.id) as unknown as { id: string; page_id: string }[];
+        const keep = resolution === 'keep';
+        rc.app.db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(keep ? 'active' : 'ignored', claim.id);
+        for (const rival of rivals) rc.app.db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(keep ? 'resolved' : 'active', rival.id);
+        for (const pageId of new Set([page.id, ...rivals.map((rival) => rival.page_id)])) {
+          rc.app.db
+            .prepare("UPDATE pages SET review_status = 'unreviewed', review_note = ?, updated_at = ? WHERE id = ? AND review_status = 'approved'")
+            .run(`批量矛盾裁决：${keep ? '采用' : '驳回'}`, nowIso(), pageId);
+        }
+        resolved += 1;
+      } catch {
+        skipped += 1;
+      }
+    }
+    audit(rc.app.db, { actor, action: 'review.conflicts.bulk', targetType: 'claim', targetId: ids.join(','), libraryId: [...libraryIds][0] ?? null, detail: { resolution, resolved, skipped } });
+    rc.json({ ok: true, resolution, resolved, skipped, summary: reviewSummary(rc.app.db, actor) });
+  });
+
+  router.get('/api/review/analytics', (rc) => {
+    const actor = requireActor(rc);
+    const days = Math.max(1, Math.min(365, rc.queryInt('days', 30)));
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+    const libraries = visibleLibraries(rc.app.db, actor);
+    const libraryName = new Map(libraries.map((library) => [library.id, library.name]));
+    const pages = (rc.app.db.prepare('SELECT * FROM pages').all() as unknown as PageRow[]).filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
+    const byStatus = new Map<string, number>();
+    const byClass = new Map<string, number>();
+    const byLibrary = new Map<string, { pending: number; approved: number; conflicts: number }>();
+    const byAssignee = new Map<string, number>();
+    const confidence = { low: 0, medium: 0, high: 0 };
+    for (const page of pages) {
+      byStatus.set(page.review_status, (byStatus.get(page.review_status) ?? 0) + 1);
+      byClass.set(page.class_key, (byClass.get(page.class_key) ?? 0) + 1);
+      const entry = byLibrary.get(page.library_id) ?? { pending: 0, approved: 0, conflicts: 0 };
+      if (page.review_status !== 'approved') entry.pending += 1;
+      else if (page.reviewed_at && page.reviewed_at >= cutoff) entry.approved += 1;
+      const conflicts = pageConflicts(rc.app.db, page.id);
+      entry.conflicts += conflicts;
+      byLibrary.set(page.library_id, entry);
+      if (page.review_assignee) byAssignee.set(page.review_assignee, (byAssignee.get(page.review_assignee) ?? 0) + 1);
+      if (page.confidence < 0.55) confidence.low += 1;
+      else if (page.confidence < 0.75) confidence.medium += 1;
+      else confidence.high += 1;
+    }
+    const assignees = [...byAssignee.entries()].map(([id, count]) => ({
+      id,
+      name: (rc.app.db.prepare('SELECT name FROM persons WHERE id = ?').get(id) as unknown as { name: string } | undefined)?.name ?? id,
+      count,
+    })).sort((a, b) => b.count - a.count);
+    const recentApprovals = rc.app.db
+      .prepare("SELECT id, title, reviewed_at FROM pages WHERE review_status = 'approved' AND reviewed_at >= ? ORDER BY reviewed_at DESC LIMIT 10")
+      .all(cutoff) as unknown as { id: string; title: string; reviewed_at: string }[];
+    rc.json({
+      days,
+      total: pages.length,
+      pending: pages.filter((page) => page.review_status !== 'approved').length,
+      approvedInPeriod: recentApprovals.length,
+      byStatus: [...byStatus.entries()].map(([key, count]) => ({ key, count })),
+      byClass: [...byClass.entries()].map(([key, count]) => ({ key, count })),
+      byLibrary: [...byLibrary.entries()].map(([id, value]) => ({ id, name: libraryName.get(id) ?? id, ...value })),
+      byAssignee: assignees,
+      confidence,
+      recentApprovals,
+    });
+  });
+
 }
 
 export { normalizeTitle };

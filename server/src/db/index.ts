@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -44,6 +44,7 @@ export function migrate(db: Db): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_pages_visibility ON pages(library_id, visibility)');
   const reviewColumns = db.prepare('PRAGMA table_info(pages)').all() as unknown as { name: string }[];
   if (!reviewColumns.some((column) => column.name === 'review_assignee')) db.exec('ALTER TABLE pages ADD COLUMN review_assignee TEXT REFERENCES persons(id) ON DELETE SET NULL');
+  if (!reviewColumns.some((column) => column.name === 'review_reminded_at')) db.exec('ALTER TABLE pages ADD COLUMN review_reminded_at TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_pages_review_assignee ON pages(review_assignee, review_status)');
   db.exec(`CREATE TABLE IF NOT EXISTS job_events (
     id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES ingest_jobs(id) ON DELETE CASCADE,

@@ -35,3 +35,13 @@ test('备份完成后会校验数据库并写入 manifest', () => {
     rmSync(backup.target, { recursive: true, force: true });
   }
 });
+
+test('校对 SLA 超时会提醒负责人', () => {
+  const page = ctx.db.prepare("SELECT id, title FROM pages WHERE review_status <> 'approved' LIMIT 1").get() as unknown as { id: string; title: string };
+  const old = new Date(Date.now() - 20 * 86_400_000).toISOString();
+  ctx.db.prepare("UPDATE pages SET review_assignee = 'usr_lin', review_reminded_at = NULL, updated_at = ? WHERE id = ?").run(old, page.id);
+  const result = runMaintenance(ctx.db, ctx.env);
+  assert.ok(result.reviewReminders >= 1);
+  const note = ctx.db.prepare("SELECT title FROM notifications WHERE person_id = 'usr_lin' AND kind = 'review' ORDER BY created_at DESC LIMIT 1").get() as unknown as { title: string } | undefined;
+  assert.match(note?.title ?? '', /校对超时提醒/);
+});

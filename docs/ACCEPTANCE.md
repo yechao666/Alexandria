@@ -29,6 +29,8 @@
 | 图谱路径 | 类型过滤与两点最短关联路径 | `graphPath`、`tests/enterprise.test.ts` |
 | 校对指派 | 按 assignee/conflicts/置信度筛选；指派通知 | `review.test.ts` |
 | 冲突裁决 | 校对台冲突弹窗逐条 keep/dismiss；有冲突页面禁止批量批准 | `review.ts`、`tests/enterprise.test.ts` |
+| 校对报表 | 待校对/批准/矛盾/负责人/置信度分布 | `review/analytics`、`tests/enterprise.test.ts` |
+| 校对 SLA | 超过 SLA 的指派页每日提醒 | `maintenance.test.ts` |
 | 批量校对 | 无矛盾页面批量批准/退回，最多 50 页 | `review/bulk`、`tests/enterprise.test.ts` |
 | 实体/事实/图谱 | DSH 抽取概念、实体、事实、上下位关系；重复页合并、手动层级、层级图谱 | `dsh-engine.ts`、`pages.ts`、`tests/enterprise.test.ts` |
 | 账户体系 | 本地密码、Cookie 会话、API Key、管理员、WeCom 身份映射 | `schema.sql`、`routes/auth.ts`、`tests/wecom.test.ts` |

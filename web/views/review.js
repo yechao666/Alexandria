@@ -88,13 +88,26 @@ export function mountReview() {
     const openConflicts = async () => {
       try {
         const data = await api('/api/review/conflicts');
-        const rows = (data.conflicts ?? []).map((conflict) => `<div class="review-note" style="margin-bottom:10px"><div class="between"><a href="#/page/${encodeURIComponent(conflict.pageId)}"><b>${esc(conflict.pageTitle)}</b></a><span class="badge clay">${esc(conflict.predicate)}</span></div><div style="margin-top:5px">${esc(conflict.text)}</div><div class="small faint" style="margin-top:4px">${esc(conflict.libraryName)} · ${esc(conflict.subject)}</div><div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" data-claim-resolution="keep" data-claim-id="${esc(conflict.claimId)}">采用此说法</button><button class="btn btn-sm btn-ghost" data-claim-resolution="dismiss" data-claim-id="${esc(conflict.claimId)}">驳回</button></div></div>`).join('');
+        const rows = (data.conflicts ?? []).map((conflict) => `<div class="review-note" style="margin-bottom:10px"><div class="between"><span><input type="checkbox" data-conflict-select="${esc(conflict.claimId)}" aria-label="选择冲突"> <a href="#/page/${encodeURIComponent(conflict.pageId)}"><b>${esc(conflict.pageTitle)}</b></a></span><span class="badge clay">${esc(conflict.predicate)}</span></div><div style="margin-top:5px">${esc(conflict.text)}</div><div class="small faint" style="margin-top:4px">${esc(conflict.libraryName)} · ${esc(conflict.subject)}</div><div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" data-claim-resolution="keep" data-claim-id="${esc(conflict.claimId)}">采用此说法</button><button class="btn btn-sm btn-ghost" data-claim-resolution="dismiss" data-claim-id="${esc(conflict.claimId)}">驳回</button></div></div>`).join('');
         openModal({
           title: '冲突中心',
           wide: true,
-          body: `<p class="small muted">所有当前可见知识库中的矛盾主张；裁决会解除同主语/谓语下的冲突状态。</p><div style="max-height:520px;overflow:auto;margin-top:12px">${rows || '<div class="rail-empty">没有待裁决矛盾</div>'}</div>`,
+          body: `<p class="small muted">所有当前可见知识库中的矛盾主张；裁决会解除同主语/谓语下的冲突状态。</p><div class="row wrap" style="margin-top:10px"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="select-all-conflicts"> 全选</label><button class="btn btn-sm btn-clay" id="bulk-conflict-keep">批量采用</button><button class="btn btn-sm" id="bulk-conflict-dismiss">批量驳回</button></div><div style="max-height:480px;overflow:auto;margin-top:10px">${rows || '<div class="rail-empty">没有待裁决矛盾</div>'}</div>`,
           footer: `<button class="btn" data-close-modal>关闭</button>`,
           onMount: (modal) => {
+            modal.querySelector('#select-all-conflicts')?.addEventListener('change', (event) => { modal.querySelectorAll('[data-conflict-select]').forEach((input) => { input.checked = event.target.checked; }); });
+            const bulkConflicts = async (resolution) => {
+              const ids = [...modal.querySelectorAll('[data-conflict-select]:checked')].map((input) => input.dataset.conflictSelect);
+              if (!ids.length) return toast('请先选择冲突', 'error');
+              try {
+                const result = await api('/api/review/conflicts/bulk', { method: 'POST', body: JSON.stringify({ ids, resolution }) });
+                toast(`已裁决 ${result.resolved} 条${result.skipped ? `，跳过 ${result.skipped} 条` : ''}`, 'success');
+                closeModal();
+                openConflicts();
+              } catch (error) { toast(error.message, 'error'); }
+            };
+            modal.querySelector('#bulk-conflict-keep')?.addEventListener('click', () => bulkConflicts('keep'));
+            modal.querySelector('#bulk-conflict-dismiss')?.addEventListener('click', () => bulkConflicts('dismiss'));
             modal.querySelectorAll('[data-claim-resolution]').forEach((button) => button.addEventListener('click', async () => {
               try {
                 await api(`/api/claims/${encodeURIComponent(button.dataset.claimId)}/resolve`, { method: 'POST', body: { resolution: button.dataset.claimResolution } });

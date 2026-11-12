@@ -279,6 +279,7 @@ CREATE TABLE IF NOT EXISTS pages (
   status         TEXT NOT NULL DEFAULT 'active',
   visibility     TEXT NOT NULL DEFAULT 'inherit',
   review_assignee TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  review_reminded_at TEXT,
   review_status  TEXT NOT NULL DEFAULT 'unreviewed',
   review_note    TEXT NOT NULL DEFAULT '',
   reviewed_by    TEXT REFERENCES persons(id) ON DELETE SET NULL,

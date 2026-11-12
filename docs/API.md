@@ -218,6 +218,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | PATCH | `/api/pages/:id/review-assignee` | 指派/取消校对负责人 |
 | GET | `/api/review?assignee=me&conflicts=1&confidenceMax=` | 校对筛选 |
 | GET | `/api/review/conflicts` | 当前可见矛盾主张列表 |
+| GET | `/api/review/analytics?days=30` | 待校对/批准/矛盾/负责人报表 |
 | POST | `/api/review/bulk` | 批量批准/退回（无矛盾页面） |
 | POST | `/api/pages/:id/review` | editor | `{action: approve|request_changes|reopen|archive, note, confidence?}` |
 | POST | `/api/claims/:id/resolve` | editor | `{resolution: keep|dismiss, note}` |

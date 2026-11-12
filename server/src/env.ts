@@ -13,6 +13,7 @@ export interface Env {
   maxUploadBytes: number;
   trashRetentionDays: number;
   auditRetentionDays: number;
+  reviewSlaDays: number;
   autoBackupHours: number;
   maintenanceIntervalMinutes: number;
   dsh: {
@@ -85,6 +86,7 @@ export function loadEnv(root: string): Env {
     maxUploadBytes: Number(process.env.ALEXANDRIA_MAX_UPLOAD_MB ?? 80) * 1024 * 1024,
     trashRetentionDays: Number(process.env.ALEXANDRIA_TRASH_RETENTION_DAYS ?? 30),
     auditRetentionDays: Number(process.env.ALEXANDRIA_AUDIT_RETENTION_DAYS ?? 180),
+    reviewSlaDays: Number(process.env.ALEXANDRIA_REVIEW_SLA_DAYS ?? 7),
     autoBackupHours: Number(process.env.ALEXANDRIA_AUTO_BACKUP_HOURS ?? 0),
     maintenanceIntervalMinutes: Number(process.env.ALEXANDRIA_MAINTENANCE_INTERVAL_MINUTES ?? 60),
     dsh: {

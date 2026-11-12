@@ -357,3 +357,33 @@ test('批量批准会跳过有矛盾主张的页面', async () => {
   assert.equal(result.approved, 0);
   assert.equal(result.skipped, 1);
 });
+
+test('冲突中心支持批量采纳/驳回', async () => {
+  const created = await j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '冲突中心批量测试', classKey: 'concept', body: '## 定义\n批量冲突', status: 'draft' }),
+  });
+  const now = new Date().toISOString();
+  const insert = ctx.db.prepare("INSERT INTO claims (id, page_id, text, subject, predicate, object, confidence, status, created_at) VALUES (?, ?, ?, '批量主语', '批量谓语', ?, 0.5, 'conflicted', ?)");
+  insert.run('claim_bulk_a', created.page.id, '说法 A', '宾语 A', now);
+  insert.run('claim_bulk_b', created.page.id, '说法 B', '宾语 B', now);
+  const result = await j<{ resolved: number; skipped: number }>('/api/review/conflicts/bulk', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: ['claim_bulk_a', 'claim_bulk_b'], resolution: 'keep' }),
+  });
+  assert.equal(result.resolved, 1);
+  assert.equal(result.skipped, 1);
+  const statuses = ctx.db.prepare("SELECT id, status FROM claims WHERE id IN ('claim_bulk_a','claim_bulk_b') ORDER BY id").all() as unknown as { id: string; status: string }[];
+  assert.equal(statuses[0].status, 'active');
+  assert.equal(statuses[1].status, 'resolved');
+});
+
+test('校对报表返回待校对、矛盾与负责人分布', async () => {
+  const report = await j<{ total: number; pending: number; byLibrary: { conflicts: number }[]; byAssignee: unknown[] }>('/api/review/analytics?days=30', admin.token);
+  assert.ok(report.total > 0);
+  assert.ok(report.pending >= 0);
+  assert.ok(Array.isArray(report.byLibrary));
+  assert.ok(Array.isArray(report.byAssignee));
+});
