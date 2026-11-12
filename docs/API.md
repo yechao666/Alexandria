@@ -32,6 +32,10 @@
 
 创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
 
+### GET/POST `/api/wecom/callback`
+
+企业微信官方加密 XML 回调：GET 用于 URL 验证（`echostr` 解密），POST 接收加密消息并返回加密被动回复。需要配置 Callback Token 与 EncodingAESKey；签名不匹配返回 403。
+
 ### POST `/api/integrations/wecom/im`
 
 WeCom Mock / 内网 JSON 回调入口：`{senderWecomId, senderName?, text, chatId?}`。按 `wecom_userid` 映射成员，支持 `/ask`、`/search`、`/help`，返回 `{reply, citations?, link?}`。生产环境应使用企微加密 XML 回调。

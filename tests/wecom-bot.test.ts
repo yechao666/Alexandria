@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { closeServer, createTestContext, startTestServer } from './helpers.ts';
+import { encryptWeCom, wecomSignature } from '../server/src/domain/wecom-crypto.ts';
 // @ts-ignore wecom-mock is a plain ESM fixture outside this package
 import { createMockWeCom } from '../../wecom-mock/src/server.mjs';
 
@@ -17,6 +18,31 @@ ctx.env.wecom.publicUrl = base;
 ctx.env.wecom.mock = true;
 mock.config.callbackUrl = `${base}/api/integrations/wecom/im`;
 mock.config.callbackMode = 'json';
+
+test('企业微信加密 XML 回调可以完成验证与被动回复', async () => {
+  const echo = encryptWeCom('echo-ok-123', ctx.env.wecom.encodingAesKey, ctx.env.wecom.corpId);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = 'nonce-test';
+  const signature = wecomSignature(ctx.env.wecom.callbackToken, timestamp, nonce, echo);
+  const verify = await fetch(
+    `${base}/api/wecom/callback?timestamp=${timestamp}&nonce=${nonce}&msg_signature=${signature}&echostr=${encodeURIComponent(echo)}`,
+  );
+  assert.equal(verify.status, 200);
+  assert.equal(await verify.text(), 'echo-ok-123');
+
+  mock.config.callbackUrl = `${base}/api/wecom/callback`;
+  mock.config.callbackMode = 'wecom';
+  const response = await fetch(`${mockBase}/api/mock/chats/chat_lin_bot/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ senderId: 'LinWei', text: '知识编译是什么？' }),
+  });
+  const data = (await response.json()) as { reply: string; mode?: string };
+  assert.equal(response.status, 200);
+  assert.equal(data.mode, 'wecom');
+  assert.match(data.reply, /Alexandria/);
+  assert.match(data.reply, /知识编译/);
+});
 
 test.after(async () => {
   await mock.close();

@@ -56,6 +56,7 @@ export async function renderAdmin(tab = 'teams') {
               <dt>AgentID</dt><dd>${esc(wecom.agentId ?? '未配置')}</dd>
               <dt>OAuth 回调</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.callbackUrl ?? '—')}</dd>
               <dt>机器人回调</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.imCallbackUrl ?? '—')}</dd>
+              <dt>加密回调</dt><dd class="mono" style="font-size:10px;word-break:break-all">${esc(wecom.encryptedCallbackUrl ?? '—')}</dd>
               <dt>能力</dt><dd>${wecom.capabilities.map((item) => `<span class="badge outline">${esc(item)}</span>`).join(' ')}</dd>
             </div>
             ${isAdmin ? `<form id="wecom-form" class="form-grid" style="margin-top:14px">
@@ -66,6 +67,8 @@ export async function renderAdmin(tab = 'teams') {
               ${textField({ label: 'Authorize Base URL', name: 'authorizeBase', value: wecom.authorizeBase ?? '' })}
               ${textField({ label: 'Public URL', name: 'publicUrl', value: wecom.publicUrl ?? '' })}
               ${selectField({ label: '模式', name: 'mode', value: wecom.mode ?? 'mock', options: [{ value: 'mock', label: 'Mock（本地联调）' }, { value: 'wecom', label: '生产（企业微信）' }] })}
+              ${textField({ label: '回调 Token', name: 'callbackToken', type: 'password', placeholder: wecom.callbackTokenConfigured ? '已配置，留空不修改' : '仅写入 meta，不回显' })}
+              ${textField({ label: 'EncodingAESKey', name: 'encodingAesKey', type: 'password', placeholder: wecom.aesKeyConfigured ? '已配置，留空不修改' : '43 位，仅写入 meta' })}
             </form>
             <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" id="save-wecom">保存配置</button><button class="btn btn-sm" id="sync-wecom">生成同步计划</button></div>` : ''}
           </div>

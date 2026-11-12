@@ -18,6 +18,8 @@ export interface Env {
     corpId: string;
     agentId: string;
     secret: string;
+    callbackToken: string;
+    encodingAesKey: string;
     publicUrl: string;
     mock: boolean;
   };
@@ -60,6 +62,9 @@ export function loadEnv(root: string): Env {
       corpId: process.env.ALEXANDRIA_WECOM_CORP_ID?.trim() || 'wwmockcorp',
       agentId: process.env.ALEXANDRIA_WECOM_AGENT_ID?.trim() || '1000002',
       secret: process.env.ALEXANDRIA_WECOM_SECRET?.trim() || 'mock-secret',
+      callbackToken: process.env.ALEXANDRIA_WECOM_CALLBACK_TOKEN?.trim() || 'mock-token',
+      encodingAesKey:
+        process.env.ALEXANDRIA_WECOM_ENCODING_AES_KEY?.trim() || 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
       publicUrl: wecomPublicUrl,
       mock: process.env.ALEXANDRIA_WECOM_MODE === 'mock' || wecomBase.includes('127.0.0.1:4800') || wecomBase.includes('localhost:4800'),
     },

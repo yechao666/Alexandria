@@ -6,7 +6,14 @@ import { actorFor } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { getWecomConfig, wecomConfigured, wecomAccessToken, wecomUserInfo } from '../domain/wecom.ts';
 import { newId, nowIso, randomToken } from '../lib/ids.ts';
-import { searchKnowledge, answerKnowledge } from '../knowledge/search.ts';
+import { answerWecomText } from '../domain/wecom-bot.ts';
+import {
+  buildWecomEncryptedReply,
+  buildWecomReplyXml,
+  decryptWeCom,
+  parseWecomXml,
+  verifyWecomSignature,
+} from '../domain/wecom-crypto.ts';
 
 function redirect(rc: RequestContext, location: string, headers: Record<string, string> = {}): void {
   rc.res.statusCode = 302;
@@ -114,7 +121,7 @@ export function registerWecomAuthRoutes(router: Router): void {
 
   /**
    * WeCom Mock / 自定义 IM 的 JSON 回调入口。
-   * 生产环境应使用企微加密 XML 回调；JSON 模式用于本地 mock 与内网联调。
+   * 生产环境使用下方加密 XML 回调；JSON 模式用于本地 mock 与内网联调。
    */
   router.post('/api/integrations/wecom/im', async (rc) => {
     const body = await rc.body<{
@@ -125,58 +132,75 @@ export function registerWecomAuthRoutes(router: Router): void {
       kind?: string;
     }>();
     const senderId = String(body.senderWecomId ?? '').trim();
-    const text = String(body.text ?? '').trim();
     if (!senderId) throw errors.badRequest('缺少 senderWecomId');
-    const personRow = rc.app.db
-      .prepare("SELECT * FROM persons WHERE lower(wecom_userid) = lower(?) AND status = 'active'")
-      .get(senderId) as unknown as Record<string, unknown> | undefined;
-    if (!personRow) {
-      rc.json({ reply: `企业微信账号 ${senderId} 尚未绑定 Alexandria 成员，请联系管理员在「团队与权限 → 成员目录」完成绑定。` });
+    const result = answerWecomText(rc.app.db, rc.app.env, {
+      senderWecomId: senderId,
+      text: String(body.text ?? ''),
+      chatId: body.chatId,
+    });
+    rc.json({
+      reply: result.reply,
+      mode: result.mode,
+      citations: result.citations,
+      link: `/#/search?q=${encodeURIComponent(String(body.text ?? '').replace(/^\/(ask|search|s)\s+/i, ''))}`,
+    });
+  });
+
+  /** 企业微信官方加密 XML 回调：GET 验证 + POST 消息。 */
+  router.get('/api/wecom/callback', (rc) => {
+    const config = getWecomConfig(rc.app.db, rc.app.env);
+    const timestamp = rc.query('timestamp');
+    const nonce = rc.query('nonce');
+    const signature = rc.query('msg_signature');
+    const echostr = rc.query('echostr');
+    if (!verifyWecomSignature(config.callbackToken, timestamp, nonce, echostr, signature)) {
+      throw errors.forbidden('企业微信回调签名校验失败');
+    }
+    try {
+      const plain = decryptWeCom(echostr, config.encodingAesKey, config.corpId);
+      rc.res.statusCode = 200;
+      rc.res.setHeader('content-type', 'text/plain; charset=utf-8');
+      rc.res.end(plain);
+    } catch (error) {
+      throw errors.badRequest(`回调验证失败：${(error as Error).message}`);
+    }
+  });
+
+  router.post('/api/wecom/callback', async (rc) => {
+    const config = getWecomConfig(rc.app.db, rc.app.env);
+    const raw = (await rc.rawBody(2 * 1024 * 1024)).toString('utf8');
+    const encrypted = raw.match(/<Encrypt>\s*(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?\s*<\/Encrypt>/)?.[1]?.trim() ?? '';
+    if (!encrypted) throw errors.badRequest('缺少 Encrypt 内容');
+    if (!verifyWecomSignature(config.callbackToken, rc.query('timestamp'), rc.query('nonce'), encrypted, rc.query('msg_signature'))) {
+      throw errors.forbidden('企业微信回调签名校验失败');
+    }
+    let inboundXml = '';
+    try {
+      inboundXml = decryptWeCom(encrypted, config.encodingAesKey, config.corpId);
+    } catch (error) {
+      throw errors.badRequest(`回调解密失败：${(error as Error).message}`);
+    }
+    const inbound = parseWecomXml(inboundXml);
+    if (inbound.MsgType && inbound.MsgType !== 'text') {
+      const replyXml = buildWecomReplyXml({ toUser: inbound.FromUserName ?? '', fromUser: config.corpId, content: '暂只支持文本消息。' });
+      rc.res.statusCode = 200;
+      rc.res.setHeader('content-type', 'text/xml; charset=utf-8');
+      rc.res.end(buildWecomEncryptedReply({ replyXml, token: config.callbackToken, encodingAesKey: config.encodingAesKey, corpId: config.corpId }));
       return;
     }
-    const person = {
-      id: String(personRow.id),
-      email: String(personRow.email),
-      name: String(personRow.name),
-      title: String(personRow.title ?? ''),
-      avatarColor: String(personRow.avatar_color ?? 'clay'),
-      isAdmin: Boolean(personRow.is_admin),
-    };
-    const actor = actorFor(rc.app.db, person);
-    let command = 'ask';
-    let query = text;
-    if (/^\/(search|s)\s+/i.test(text)) {
-      command = 'search';
-      query = text.replace(/^\/(search|s)\s+/i, '').trim();
-    } else if (/^\/ask\s+/i.test(text)) {
-      query = text.replace(/^\/ask\s+/i, '').trim();
-    } else if (/^\/(help|帮助)\s*$/i.test(text) || !text) {
-      rc.json({
-        reply: '【Alexandria】可用指令：\n/ask 知识编译是什么？\n/search 本体论\n也可以直接提问；回答来自已编译知识页并带引用。',
-      });
-      return;
-    }
-    if (!query) {
-      rc.json({ reply: '【Alexandria】请输入问题，或发送 /help 查看指令。' });
-      return;
-    }
-    const link = `/#/search?q=${encodeURIComponent(query)}`;
-    if (command === 'search') {
-      const hits = searchKnowledge(rc.app.db, actor, query, { limit: 5 });
-      const lines = hits.length
-        ? hits.map((hit, index) => `${index + 1}. ${hit.title}〔${hit.libraryName}〕\n   ${hit.snippet.slice(0, 90)}`).join('\n')
-        : '没有命中的知识页。';
-      audit(rc.app.db, { actor, action: 'wecom.im.search', targetType: 'search', detail: { query, hits: hits.length, senderId } });
-      rc.json({ reply: `【Alexandria】检索「${query}」：\n${lines}`, hits: hits.length, link });
-      return;
-    }
-    const answer = answerKnowledge(rc.app.db, actor, query, { limit: 5 });
-    const citations = answer.citations.map((citation, index) => `[${index + 1}] ${citation.title} · ${citation.libraryName}`).join('\n');
-    const reply = answer.citations.length
-      ? `【Alexandria】${answer.answer.replace(/\n\n以上结论.*$/s, '').slice(0, 1200)}\n\n引用：\n${citations}`
-      : '【Alexandria】知识库中暂未找到与此问题直接相关的已编译知识。可以上传资料或换一种问法。';
-    audit(rc.app.db, { actor, action: 'wecom.im.ask', targetType: 'search', detail: { query, citations: answer.citations.length, senderId, chatId: body.chatId ?? null } });
-    rc.json({ reply, mode: answer.mode, citations: answer.citations, link });
+    const result = answerWecomText(rc.app.db, rc.app.env, {
+      senderWecomId: inbound.FromUserName ?? '',
+      text: inbound.Content ?? '',
+      chatId: inbound.ChatId,
+    });
+    const replyXml = buildWecomReplyXml({
+      toUser: inbound.FromUserName ?? '',
+      fromUser: config.corpId,
+      content: result.reply,
+    });
+    rc.res.statusCode = 200;
+    rc.res.setHeader('content-type', 'text/xml; charset=utf-8');
+    rc.res.end(buildWecomEncryptedReply({ replyXml, token: config.callbackToken, encodingAesKey: config.encodingAesKey, corpId: config.corpId }));
   });
 
   // 供管理员查看当前 WeCom 配置（不返回 Secret）

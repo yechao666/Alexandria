@@ -239,7 +239,7 @@ cd ../alexandria && node server/src/main.ts
    - `/help`
 3. Alexandria 会按 `senderWecomId` 映射本地成员，按该成员权限检索已编译知识，返回带引用的回答。
 
-> 生产环境应使用企业微信加密 XML 回调；JSON 回调用于本地 Mock 与内网联调。
+> 生产环境使用企业微信加密 XML 回调：`GET/POST /api/wecom/callback`（签名校验、AES-256-CBC 解密、被动回复加密）。JSON 回调保留给本地 Mock 与内网联调。
 
 ![企业微信机器人问答](docs/screenshots/17-wecom-bot.png)
 
@@ -267,7 +267,7 @@ cd ../alexandria && node server/src/main.ts
 
 1. 扫描 PDF 页面渲染 OCR、图片版面分析、表格结构恢复。
 2. 附件在线预览、评论 @ 提醒、知识页责任人轮值。
-3. 企业微信加密 XML 回调、通讯录增量同步与离职停用。
+3. 通讯录增量同步、离职停用与部门负责人映射。
 4. 跨库受控引用与知识联邦检索。
 5. 编译质量评测集：引用准确率、矛盾关闭率、孤儿页比例。
 6. 可选 LLM 编译增强（需保留来源锚点与人工验收）。

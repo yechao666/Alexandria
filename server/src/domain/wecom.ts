@@ -9,6 +9,8 @@ export interface WecomConfig {
   corpId: string;
   agentId: string;
   secret: string;
+  callbackToken: string;
+  encodingAesKey: string;
   publicUrl: string;
   mock: boolean;
 }
@@ -49,6 +51,8 @@ export function getWecomConfig(db: Db, env: Env): WecomConfig {
     corpId: meta(db, 'wecom_corp_id') || env.wecom.corpId,
     agentId: meta(db, 'wecom_agent_id') || env.wecom.agentId,
     secret: meta(db, 'wecom_secret') || env.wecom.secret,
+    callbackToken: meta(db, 'wecom_callback_token') || env.wecom.callbackToken,
+    encodingAesKey: meta(db, 'wecom_encoding_aes_key') || env.wecom.encodingAesKey,
     publicUrl: (meta(db, 'wecom_public_url') || env.wecom.publicUrl).replace(/\/+$/, ''),
     mock,
   };

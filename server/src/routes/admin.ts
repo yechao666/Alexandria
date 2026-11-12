@@ -251,6 +251,9 @@ export function registerAdminRoutes(router: Router): void {
       publicUrl: config.publicUrl,
       callbackUrl: `${config.publicUrl}/api/auth/wecom/callback`,
       imCallbackUrl: `${config.publicUrl}/api/integrations/wecom/im`,
+      encryptedCallbackUrl: `${config.publicUrl}/api/wecom/callback`,
+      callbackTokenConfigured: Boolean(config.callbackToken),
+      aesKeyConfigured: Boolean(config.encodingAesKey),
       teams,
       persons,
       capabilities: ['oauth-login', 'department-sync', 'user-sync', 'bot-notify'],
@@ -271,6 +274,8 @@ export function registerAdminRoutes(router: Router): void {
     if (body.corpId !== undefined) put('wecom_corp_id', body.corpId);
     if (body.secret !== undefined && String(body.secret).trim()) put('wecom_secret', body.secret);
     if (body.agentId !== undefined) put('wecom_agent_id', body.agentId);
+    if (body.callbackToken !== undefined && String(body.callbackToken).trim()) put('wecom_callback_token', body.callbackToken);
+    if (body.encodingAesKey !== undefined && String(body.encodingAesKey).trim()) put('wecom_encoding_aes_key', body.encodingAesKey);
     if (body.baseUrl !== undefined) put('wecom_base_url', body.baseUrl);
     if (body.authorizeBase !== undefined) put('wecom_authorize_base', body.authorizeBase);
     if (body.publicUrl !== undefined) put('wecom_public_url', body.publicUrl);
