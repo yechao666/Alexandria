@@ -34,7 +34,7 @@ function pageDetail(rc: RequestContext, page: PageRow) {
     .prepare(
       `SELECT pp.key, pp.value, op.name, op.type, op.options
          FROM page_properties pp
-         LEFT JOIN ontology_properties op ON op.library_id = ? AND op.class_key = ? AND op.key = pp.key
+         LEFT JOIN ontology_properties op ON op.library_id = ? AND op.key = pp.key AND (op.class_key = ? OR op.class_key IS NULL)
         WHERE pp.page_id = ?`,
     )
     .all(page.library_id, page.class_key, page.id) as unknown as {
