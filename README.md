@@ -58,6 +58,8 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ![全局检索](docs/screenshots/21-search.png)
 
+![安全审计](docs/screenshots/22-security.png)
+
 | 能力 | 实现 |
 | --- | --- |
 | **分库** | 每个知识库独立的本体、目录树、权限、检索范围 |
