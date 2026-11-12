@@ -164,7 +164,7 @@ export function registerAgentRoutes(router: Router): void {
         metadata: view.metadataObj,
         properties: properties.map((property) => ({ key: property.key, value: (() => { try { return JSON.parse(property.value); } catch { return property.value; } })() })),
       },
-      context: body.includeContext === false ? undefined : pageContext(rc.app.db, page),
+      context: body.includeContext === false ? undefined : pageContext(rc.app.db, page, 12000, sources.map((source) => String(source.id))),
       claims,
       sources,
       links,

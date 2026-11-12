@@ -81,7 +81,7 @@ function pageDetail(rc: RequestContext, page: PageRow, role: import('../types.ts
       options: parseJson<string[]>(property.options, []),
     })),
     revisions,
-    context: pageContext(rc.app.db, page),
+    context: pageContext(rc.app.db, page, 12000, visibleSources.map((source) => source.id)),
   };
 }
 
@@ -124,8 +124,11 @@ export function registerPageRoutes(router: Router): void {
   });
 
   router.get('/api/pages/:id/context', (rc) => {
-    const { page } = pageAccess(rc, rc.params.id!);
-    rc.json({ context: pageContext(rc.app.db, page), page: pageListDto(rc.app.db, page) });
+    const { actor, page } = pageAccess(rc, rc.params.id!);
+    const sourceIds = (rc.app.db.prepare('SELECT s.* FROM sources s JOIN page_sources ps ON ps.source_id = s.id WHERE ps.page_id = ?').all(page.id) as unknown as import('../types.ts').SourceRow[])
+      .filter((source) => Boolean(effectiveSourceRole(rc.app.db, actor, source)))
+      .map((source) => source.id);
+    rc.json({ context: pageContext(rc.app.db, page, 12000, sourceIds), page: pageListDto(rc.app.db, page) });
   });
 
   router.post('/api/libraries/:id/pages', async (rc) => {

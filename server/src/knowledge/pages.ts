@@ -452,13 +452,22 @@ export function attachSource(
   ).run(pageId, sourceId, relation, locator, truncate(quote, 500));
 }
 
-export function pageContext(db: Db, page: PageRow, maxChars = 12000): string {
-  const sources = db
-    .prepare(
-      `SELECT s.title, ps.locator, ps.quote FROM page_sources ps JOIN sources s ON s.id = ps.source_id
-        WHERE ps.page_id = ?`,
-    )
-    .all(page.id) as unknown as { title: string; locator: string; quote: string }[];
+export function pageContext(db: Db, page: PageRow, maxChars = 12000, sourceIds?: string[]): string {
+  const sources = sourceIds
+    ? (sourceIds.length
+        ? (db
+            .prepare(
+              `SELECT s.title, ps.locator, ps.quote FROM page_sources ps JOIN sources s ON s.id = ps.source_id
+                WHERE ps.page_id = ? AND s.id IN (${sourceIds.map(() => '?').join(',')})`,
+            )
+            .all(page.id, ...sourceIds) as unknown as { title: string; locator: string; quote: string }[])
+        : [])
+    : (db
+        .prepare(
+          `SELECT s.title, ps.locator, ps.quote FROM page_sources ps JOIN sources s ON s.id = ps.source_id
+            WHERE ps.page_id = ?`,
+        )
+        .all(page.id) as unknown as { title: string; locator: string; quote: string }[]);
   const claims = db
     .prepare('SELECT text FROM claims WHERE page_id = ? AND status <> ? ORDER BY confidence DESC LIMIT 12')
     .all(page.id, 'ignored') as unknown as { text: string }[];
