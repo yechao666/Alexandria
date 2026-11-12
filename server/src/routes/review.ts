@@ -21,6 +21,7 @@ export interface ReviewItem {
   conflicts: number;
   sources: number;
   reasons: string[];
+  assigneeName: string | null;
 }
 
 function pageConflicts(db: Db, pageId: string): number {
@@ -40,7 +41,7 @@ function pageSources(db: Db, pageId: string): number {
 export function reviewQueue(
   db: Db,
   actor: Actor,
-  options: { libraryId?: string; status?: string; limit?: number } = {},
+  options: { libraryId?: string; status?: string; limit?: number; conflictsOnly?: boolean; confidenceMax?: number; assignee?: string; classKey?: string } = {},
 ): ReviewItem[] {
   const libraries = visibleLibraries(db, actor).filter((library) => !options.libraryId || library.id === options.libraryId);
   if (options.libraryId && !libraries.length) throw errors.notFound('知识库不存在');
@@ -56,8 +57,13 @@ export function reviewQueue(
     for (const page of rows) {
       if (!effectivePageRole(db, actor, page)) continue;
       if (options.status && options.status !== 'all' && page.review_status !== options.status) continue;
+      if (options.classKey && page.class_key !== options.classKey) continue;
+      if (options.confidenceMax !== undefined && page.confidence > options.confidenceMax) continue;
+      if (options.assignee === 'me' && page.review_assignee !== actor.person.id) continue;
+      if (options.assignee && options.assignee !== 'me' && page.review_assignee !== options.assignee) continue;
       const view = pageToView(db, page);
       const conflicts = pageConflicts(db, page.id);
+      if (options.conflictsOnly && conflicts === 0) continue;
       const reasons: string[] = [];
       if (page.review_status === 'unreviewed') reasons.push('待首次校对');
       if (page.review_status === 'changes_requested') reasons.push('要求修改');
@@ -76,6 +82,9 @@ export function reviewQueue(
         conflicts,
         sources: pageSources(db, page.id),
         reasons,
+        assigneeName: page.review_assignee
+          ? ((db.prepare('SELECT name FROM persons WHERE id = ?').get(page.review_assignee) as unknown as { name: string } | undefined)?.name ?? null)
+          : null,
       });
     }
   }
@@ -129,6 +138,10 @@ export function registerReviewRoutes(router: Router): void {
       libraryId,
       status: rc.query('status') || 'all',
       limit: rc.queryInt('limit', 100),
+      conflictsOnly: rc.query('conflicts') === '1',
+      confidenceMax: rc.query('confidenceMax') ? Number(rc.query('confidenceMax')) : undefined,
+      assignee: rc.query('assignee') || undefined,
+      classKey: rc.query('class') || undefined,
     });
     rc.json({ items, summary: reviewSummary(rc.app.db, actor) });
   });
@@ -140,6 +153,10 @@ export function registerReviewRoutes(router: Router): void {
       libraryId: library.id,
       status: rc.query('status') || 'all',
       limit: rc.queryInt('limit', 100),
+      conflictsOnly: rc.query('conflicts') === '1',
+      confidenceMax: rc.query('confidenceMax') ? Number(rc.query('confidenceMax')) : undefined,
+      assignee: rc.query('assignee') || undefined,
+      classKey: rc.query('class') || undefined,
     });
     rc.json({ items, summary: reviewSummary(rc.app.db, actor) });
   });
@@ -314,6 +331,35 @@ export function registerReviewRoutes(router: Router): void {
     }
     audit(rc.app.db, { actor, action: 'review.bulk', targetType: 'page', targetId: ids.join(','), detail: { action, approved, skipped } });
     rc.json({ ok: true, action, approved, skipped });
+  });
+
+  router.patch('/api/pages/:id/review-assignee', async (rc) => {
+    const actor = requireActor(rc);
+    const body = await rc.body<{ personId?: string | null }>();
+    const { page, library, role } = pageAccess(rc, rc.params.id!, 'editor');
+    if (role === 'viewer') throw errors.forbidden('需要编辑权限');
+    const personId = body.personId ? String(body.personId) : null;
+    if (personId) {
+      const person = rc.app.db.prepare("SELECT id, name FROM persons WHERE id = ? AND status = 'active'").get(personId) as unknown as { id: string; name: string } | undefined;
+      if (!person) throw errors.badRequest('指派成员不存在');
+      rc.app.db.prepare('UPDATE pages SET review_assignee = ? WHERE id = ?').run(personId, page.id);
+      if (personId !== actor.person.id) {
+        await notifyPerson(rc.app.db, rc.app.env, {
+          personId,
+          actorId: actor.person.id,
+          kind: 'review',
+          title: `你被指派校对「${page.title}」`,
+          body: '请确认定义、来源与矛盾后批准或退回。',
+          link: `/#/page/${encodeURIComponent(page.id)}`,
+          libraryId: library.id,
+          pageId: page.id,
+        });
+      }
+    } else {
+      rc.app.db.prepare('UPDATE pages SET review_assignee = NULL WHERE id = ?').run(page.id);
+    }
+    audit(rc.app.db, { actor, action: 'page.review.assign', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { assignee: personId } });
+    rc.json({ ok: true, assignee: personId });
   });
 
 }

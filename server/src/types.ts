@@ -47,6 +47,7 @@ export interface PageRow {
   body: string;
   status: string;
   visibility: string;
+  review_assignee: string | null;
   review_status: string;
   review_note: string;
   reviewed_by: string | null;

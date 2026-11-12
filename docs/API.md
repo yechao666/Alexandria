@@ -215,6 +215,9 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/libraries/:id/review` | viewer | 单库队列 |
 | GET | `/api/review/summary` | 登录 | 待校对 / 退回 / 矛盾计数 |
 | GET | `/api/review/conflicts` | 登录 | 冲突主张列表 |
+| PATCH | `/api/pages/:id/review-assignee` | 指派/取消校对负责人 |
+| GET | `/api/review?assignee=me&conflicts=1&confidenceMax=` | 校对筛选 |
+| GET | `/api/review/conflicts` | 当前可见矛盾主张列表 |
 | POST | `/api/review/bulk` | 批量批准/退回（无矛盾页面） |
 | POST | `/api/pages/:id/review` | editor | `{action: approve|request_changes|reopen|archive, note, confidence?}` |
 | POST | `/api/claims/:id/resolve` | editor | `{resolution: keep|dismiss, note}` |

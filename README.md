@@ -84,7 +84,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **维护** | 过期会话/挑战清理、回收站/审计保留期、备份完整性校验、可选自动备份 |
 | **对象存储备份** | 可选 S3 兼容上传，SigV4 签名，备份目录递归同步 |
 | **可移植** | 知识页/整库导出 LLM Wiki 风格 Markdown（frontmatter + 主张 + 来源 + 链接） |
-| **校对台** | 草稿/退回/矛盾队列；单页/批量批准、退回、撤回校对、逐条裁决主张 |
+| **校对台** | 草稿/退回/矛盾队列；指派、筛选、批量批准/退回、冲突中心逐条裁决 |
 | **任务中心** | worker 队列执行解析/OCR/索引/DSH 编译；分步事件、耗时、失败重试、排队取消 |
 | **运行状态** | 队列、内容规模、安全事件、SQLite/WAL、备份与进程资源；数据体检/恢复脚本 |
 | **实体治理** | 重复建议、合并审批流、归档指针、别名回填；手动设置上位概念 |
@@ -257,7 +257,7 @@ cd ../alexandria && node server/src/main.ts
 - [设计方案](docs/DESIGN.md)：架构、数据模型、编译、实体/事实、组织层级、资源 ACL、任务、企业微信。
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
-- [验收报告](docs/ACCEPTANCE.md)：需求映射、93 项测试证据与已知边界。
+- [验收报告](docs/ACCEPTANCE.md)：需求映射、95 项测试证据与已知边界。
 - [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
 - [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
 - **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。

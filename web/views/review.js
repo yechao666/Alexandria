@@ -11,6 +11,8 @@ import {
   toast,
   go,
   emptyState,
+  openModal,
+  closeModal,
 } from '../assets/core.js';
 
 const FILTERS = [
@@ -22,10 +24,16 @@ const FILTERS = [
 export async function renderReview(params) {
   const libraryRef = params.get('library') ?? '';
   const status = params.get('status') ?? 'all';
+  const conflictsOnly = params.get('conflicts') === '1';
+  const confidenceMax = params.get('confidenceMax') ?? '';
+  const mine = params.get('assignee') === 'me';
   const library = state.libraries.find((item) => item.slug === libraryRef || item.id === libraryRef);
   const query = new URLSearchParams();
   if (library) query.set('library', library.id);
   if (status !== 'all') query.set('status', status);
+  if (conflictsOnly) query.set('conflicts', '1');
+  if (confidenceMax) query.set('confidenceMax', confidenceMax);
+  if (mine) query.set('assignee', 'me');
   const data = await api(`/api/review${query.toString() ? `?${query.toString()}` : ''}`);
   const items = data.items ?? [];
   const summary = data.summary ?? {};
@@ -46,15 +54,15 @@ export async function renderReview(params) {
       <div class="stat-cell"><div class="label">队列总量</div><div class="value">${summary.pending ?? 0}</div><div class="sub">草稿 ${summary.drafts ?? 0} 页</div></div>
     </div>
     <div class="list-toolbar">
-      <div class="row wrap"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="select-all-reviews"> 全选</label><button class="btn btn-sm btn-primary" id="bulk-approve">批量批准</button><button class="btn btn-sm" id="bulk-return">批量退回</button>${FILTERS.map((filter) => `<button class="btn btn-sm ${status === filter.key ? 'btn-primary' : ''}" data-review-status="${filter.key}">${filter.label}</button>`).join('')}</div>
-      <select class="select" id="review-library" style="margin-left:auto;width:auto"><option value="">全部知识库</option>${state.libraries.map((item) => `<option value="${esc(item.slug)}" ${library && item.id === library.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select>
+      <div class="row wrap"><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="select-all-reviews"> 全选</label><button class="btn btn-sm btn-primary" id="bulk-approve">批量批准</button><button class="btn btn-sm" id="bulk-return">批量退回</button><button class="btn btn-sm btn-clay" id="conflict-center">冲突中心</button>${FILTERS.map((filter) => `<button class="btn btn-sm ${status === filter.key ? 'btn-primary' : ''}" data-review-status="${filter.key}">${filter.label}</button>`).join('')}</div>
+      <select class="select" id="review-confidence" style="width:auto"><option value="">全部置信度</option><option value="0.55" ${confidenceMax === '0.55' ? 'selected' : ''}>≤ 55%</option><option value="0.7" ${confidenceMax === '0.7' ? 'selected' : ''}>≤ 70%</option></select><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="review-conflicts" ${conflictsOnly ? 'checked' : ''}> 仅看矛盾</label><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="review-mine" ${mine ? 'checked' : ''}> 我的指派</label><select class="select" id="review-library" style="margin-left:auto;width:auto"><option value="">全部知识库</option>${state.libraries.map((item) => `<option value="${esc(item.slug)}" ${library && item.id === library.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select>
     </div>
     <div class="review-list">${cards || emptyState('队列已清空', '没有等待校对的知识页。新的编译结果会自动进入这里。', '<a class="btn btn-sm" href="#/">回到总览</a>')}</div>`;
 }
 
 function reviewCard(item) {
   const page = item.page;
-  return `<div class="review-card">
+  return `<div class="review-card" data-assigned="${item.assigneeName ? '1' : '0'}">
     <div class="review-main">
       <div class="row wrap" style="align-items:center;gap:7px"><input type="checkbox" data-review-select="${esc(page.id)}" aria-label="选择页面">${classBadge(page)}${reviewBadge(item.reviewStatus)}${statusBadge(page.status)}<span class="small faint">${esc(item.library.name)}</span></div>
       <a href="#/page/${encodeURIComponent(page.id)}" class="review-title">${esc(page.title)}</a>
@@ -65,9 +73,10 @@ function reviewCard(item) {
       <div class="review-metric"><b>${Math.round(Number(page.confidence) * 100)}%</b><span>置信度</span></div>
       <div class="review-metric"><b>${item.sources}</b><span>来源</span></div>
       <div class="review-metric"><b>${item.conflicts}</b><span>矛盾</span></div>
+      ${item.assigneeName ? `<div class="badge outline">校对：${esc(item.assigneeName)}</div>` : ''}
       <div class="small faint">${timeAgo(page.updatedAt)}</div>
       <div class="btn-row" style="margin-top:10px">
-        <button class="btn btn-sm btn-ghost" data-open-review="${esc(page.id)}">打开</button>
+        <button class="btn btn-sm btn-ghost" data-open-review="${esc(page.id)}">打开</button>${item.conflicts ? `<button class="btn btn-sm btn-clay" data-conflicts-review="${esc(page.id)}">冲突 ${item.conflicts}</button>` : ''}<button class="btn btn-sm btn-ghost" data-assign-review="${esc(page.id)}">${item.assigneeName ? '取消指派' : '分配给我'}</button>
         ${item.reviewStatus !== 'approved' ? `<button class="btn btn-sm btn-clay" data-approve-review="${esc(page.id)}">批准</button><button class="btn btn-sm" data-changes-review="${esc(page.id)}">退回</button>` : ''}
       </div>
     </div>
@@ -75,6 +84,55 @@ function reviewCard(item) {
 }
 
 export function mountReview() {
+  document.getElementById('conflict-center')?.addEventListener('click', async () => {
+    const openConflicts = async () => {
+      try {
+        const data = await api('/api/review/conflicts');
+        const rows = (data.conflicts ?? []).map((conflict) => `<div class="review-note" style="margin-bottom:10px"><div class="between"><a href="#/page/${encodeURIComponent(conflict.pageId)}"><b>${esc(conflict.pageTitle)}</b></a><span class="badge clay">${esc(conflict.predicate)}</span></div><div style="margin-top:5px">${esc(conflict.text)}</div><div class="small faint" style="margin-top:4px">${esc(conflict.libraryName)} · ${esc(conflict.subject)}</div><div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" data-claim-resolution="keep" data-claim-id="${esc(conflict.claimId)}">采用此说法</button><button class="btn btn-sm btn-ghost" data-claim-resolution="dismiss" data-claim-id="${esc(conflict.claimId)}">驳回</button></div></div>`).join('');
+        openModal({
+          title: '冲突中心',
+          wide: true,
+          body: `<p class="small muted">所有当前可见知识库中的矛盾主张；裁决会解除同主语/谓语下的冲突状态。</p><div style="max-height:520px;overflow:auto;margin-top:12px">${rows || '<div class="rail-empty">没有待裁决矛盾</div>'}</div>`,
+          footer: `<button class="btn" data-close-modal>关闭</button>`,
+          onMount: (modal) => {
+            modal.querySelectorAll('[data-claim-resolution]').forEach((button) => button.addEventListener('click', async () => {
+              try {
+                await api(`/api/claims/${encodeURIComponent(button.dataset.claimId)}/resolve`, { method: 'POST', body: { resolution: button.dataset.claimResolution } });
+                toast(button.dataset.claimResolution === 'keep' ? '已采用' : '已驳回', 'success');
+                closeModal();
+                openConflicts();
+              } catch (error) { toast(error.message, 'error'); }
+            }));
+          },
+        });
+      } catch (error) { toast(error.message, 'error'); }
+    };
+    openConflicts();
+  });
+
+  document.querySelectorAll('[data-conflicts-review]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      const detail = await api(`/api/pages/${encodeURIComponent(button.dataset.conflictsReview)}`);
+      const conflicts = (detail.claims ?? []).filter((claim) => claim.status === 'conflicted');
+      const rows = conflicts.map((claim) => `<div class="review-note" style="margin-bottom:10px"><div>${esc(claim.text)}</div><div class="small faint" style="margin-top:4px">${esc(claim.subject)} · ${esc(claim.predicate)} · ${Math.round(Number(claim.confidence) * 100)}%</div><div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" data-claim-resolution="keep" data-claim-id="${esc(claim.id)}">采用此说法</button><button class="btn btn-sm btn-ghost" data-claim-resolution="dismiss" data-claim-id="${esc(claim.id)}">驳回</button></div></div>`).join('');
+      openModal({
+        title: `冲突裁决 · ${detail.page.title}`,
+        wide: true,
+        body: `<p class="small muted">矛盾不会自动覆盖；请逐条采纳或驳回，裁决后再回到校对台批准页面。</p><div style="margin-top:12px">${rows || '<div class="rail-empty">当前没有矛盾主张</div>'}</div>`,
+        footer: `<button class="btn" data-close-modal>关闭</button>`,
+        onMount: (modal) => {
+          modal.querySelectorAll('[data-claim-resolution]').forEach((action) => action.addEventListener('click', async () => {
+            try {
+              await api(`/api/claims/${encodeURIComponent(action.dataset.claimId)}/resolve`, { method: 'POST', body: { resolution: action.dataset.claimResolution } });
+              toast(action.dataset.claimResolution === 'keep' ? '已采用' : '已驳回', 'success');
+              closeModal();
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            } catch (error) { toast(error.message, 'error'); }
+          }));
+        },
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  }));
   document.getElementById('select-all-reviews')?.addEventListener('change', (event) => {
     document.querySelectorAll('[data-review-select]').forEach((input) => { input.checked = event.target.checked; });
   });
@@ -101,6 +159,23 @@ export function mountReview() {
       go(`#/review${params.toString() ? `?${params.toString()}` : ''}`);
     });
   });
+  const updateFilter = (key, value) => {
+    const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
+    if (value === '' || value === false) params.delete(key); else params.set(key, String(value));
+    go(`#/review${params.toString() ? `?${params.toString()}` : ''}`);
+  };
+  document.getElementById('review-confidence')?.addEventListener('change', (event) => updateFilter('confidenceMax', event.currentTarget.value));
+  document.getElementById('review-conflicts')?.addEventListener('change', (event) => updateFilter('conflicts', event.currentTarget.checked ? '1' : ''));
+  document.getElementById('review-mine')?.addEventListener('change', (event) => updateFilter('assignee', event.currentTarget.checked ? 'me' : ''));
+  document.querySelectorAll('[data-assign-review]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      const card = button.closest('.review-card');
+      const already = card?.dataset.assigned === '1';
+      await api(`/api/pages/${encodeURIComponent(button.dataset.assignReview)}/review-assignee`, { method: 'PATCH', body: { personId: already ? null : state.me?.person?.id } });
+      toast(already ? '已取消指派' : '已分配给你', 'success');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch (error) { toast(error.message, 'error'); }
+  }));
   document.getElementById('review-library')?.addEventListener('change', (event) => {
     const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
     if (event.currentTarget.value) params.set('library', event.currentTarget.value);

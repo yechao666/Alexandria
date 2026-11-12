@@ -322,3 +322,38 @@ test('校对台支持批量批准无矛盾页面', async () => {
   });
   assert.equal(result.approved, 2);
 });
+
+test('校对队列支持指派与筛选', async () => {
+  const created = await j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '指派校对测试页', classKey: 'concept', body: '## 定义\n指派', status: 'draft' }),
+  });
+  await j(`/api/pages/${created.page.id}/review-assignee`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ personId: 'usr_lin' }),
+  });
+  const queue = await j<{ items: { page: { id: string }; assigneeName: string | null }[] }>('/api/review?assignee=me&limit=100', admin.token);
+  const item = queue.items.find((entry) => entry.page.id === created.page.id);
+  assert.ok(item);
+  assert.equal(item.assigneeName, '林知远');
+});
+
+test('批量批准会跳过有矛盾主张的页面', async () => {
+  const created = await j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '冲突批量测试页', classKey: 'concept', body: '## 定义\n冲突', status: 'draft' }),
+  });
+  ctx.db
+    .prepare("INSERT INTO claims (id, page_id, text, subject, predicate, object, confidence, status, created_at) VALUES ('claim_conflict_test', ?, '冲突主张', '测试', '定义', '冲突', 0.5, 'conflicted', ?)")
+    .run(created.page.id, new Date().toISOString());
+  const result = await j<{ approved: number; skipped: number }>('/api/review/bulk', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [created.page.id], action: 'approve' }),
+  });
+  assert.equal(result.approved, 0);
+  assert.equal(result.skipped, 1);
+});
