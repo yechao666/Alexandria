@@ -16,6 +16,8 @@
 | 分库 / 分类组织 | 知识库 → 目录树（书架/分类/主题）→ 知识页/文献；分类号与计数 | `schema.sql`、`routes/libraries.ts`、`web/views/library.js` |
 | 团队与组织架构绑定 | 团队树、成员、团队负责人、库 owner team、个人/团队/组织授权 | `domain/access.ts`、`tests/permissions.test.ts` |
 | 严格权限 | 组织层级（上级读下级/下级不可反查）+ 库/页面/文献 ACL + 定向共享；私有库与受限资源 404 | `domain/access.ts`、`tests/permissions.test.ts`、`tests/enterprise.test.ts` |
+| 任务可观察 | `job_events` 记录解析/OCR/索引/DSH 编译步骤、耗时；任务中心、重试、取消 | `ingest/pipeline.ts`、`routes/sources.ts`、`tests/enterprise.test.ts` |
+| 实体/事实/图谱 | DSH 抽取概念、实体、事实、上下位关系；写入页面/主张/图谱 | `knowledge/dsh-engine.ts`、`tests/dsh-engine.test.ts` |
 | 账户体系 | 本地密码、Cookie 会话、API Key、管理员、WeCom 身份映射 | `schema.sql`、`routes/auth.ts`、`tests/wecom.test.ts` |
 | 企业微信打通 | OAuth 登录、通讯录同步、离职停用、加密 XML 回调、JSON 机器人问答、应用消息通知 | `routes/wecom.ts`、`domain/wecom.ts`、`tests/wecom*.test.ts` |
 | 核心上传/处理/索引/检索 | 上传 → 解析/OCR → 编译 → FTS5/图谱索引 → 检索/知识合成 | `tests/formats.test.ts`、`tests/knowledge.test.ts`、`tests/api.test.ts` |

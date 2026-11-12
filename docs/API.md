@@ -309,6 +309,14 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | POST | `/api/agent/read` | `{pageId | slug, library?}` |
 | POST | `/api/agent/graph` | `{libraryId, classKey?, limit?}` |
 | POST | `/api/agent/ingest` | `{libraryId, filename, text | base64, title?, nodeId?}` |
+| GET | `/api/tasks` | 当前成员可见的处理任务列表（含步骤事件） |
+| GET | `/api/jobs/:id` | 任务详情、日志与 `events[]` |
+| POST | `/api/jobs/:id/cancel` | 取消排队中的任务 |
+| GET | `/api/search/facets` | 库/类型/标签分面（权限过滤） |
+| GET | `/api/pages/:id/access` | 页面访问策略 |
+| PATCH | `/api/pages/:id/access` | 设置页面 visibility 与个人/团队共享 |
+| GET | `/api/sources/:id/access` | 文献访问策略 |
+| PATCH | `/api/sources/:id/access` | 设置文献 visibility 与个人/团队共享 |
 | GET | `/api/pages/:id/markdown` | LLM Wiki 风格页面 Markdown |
 | GET | `/api/libraries/:id/export.md` | 整库 Markdown bundle |
 | POST | `/api/agent/compile` | `{sourceId}` |

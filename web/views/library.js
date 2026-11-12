@@ -274,8 +274,47 @@ export async function openSource(sourceId) {
             ${log ? `<div class="small faint" style="margin:16px 0 6px">处理日志</div><div class="timeline">${log}</div>` : ''}
           </div>
         </div>`,
-      footer: `<a class="btn" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('external', 14)} 原始文件</a>${data.canEdit ? `<button class="btn" id="reprocess-source">${icon('refresh', 14)} 重新编译</button>` : ''}<button class="btn btn-primary" data-close-modal>关闭</button>`,
+      footer: `<a class="btn" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('external', 14)} 原始文件</a>${data.canEdit ? `<button class="btn" id="reprocess-source">${icon('refresh', 14)} 重新编译</button>` : ''}${source.canManageAccess ? `<button class="btn" id="source-access">${icon('lock', 14)} 访问策略</button>` : ''}<button class="btn btn-primary" data-close-modal>关闭</button>`,
       onMount: (modal) => {
+        modal.querySelector('#source-access')?.addEventListener('click', async () => {
+          try {
+            const access = await api(`/api/sources/${encodeURIComponent(source.id)}/access`);
+            const subjects = [
+              ...(state.people ?? []).map((person) => ({ type: 'person', id: person.id, name: person.name, sub: person.title ?? '成员' })),
+              ...(state.teams ?? []).map((team) => ({ type: 'team', id: team.id, name: team.name, sub: '团队' })),
+            ];
+            const grants = new Map((access.grants ?? []).map((grant) => [`${grant.subjectType}:${grant.subjectId}`, grant.role]));
+            const rows = subjects.map((subject) => {
+              const key = `${subject.type}:${subject.id}`;
+              const checked = grants.has(key);
+              const role = grants.get(key) ?? 'viewer';
+              return `<label class="rail-item" style="display:flex;gap:8px;align-items:center;padding:7px 0"><input type="checkbox" data-source-subject="${subject.type}:${subject.id}" ${checked ? 'checked' : ''}><span style="flex:1">${esc(subject.name)} <span class="faint">· ${esc(subject.sub)}</span></span><select class="select" data-source-role="${subject.type}:${subject.id}" style="width:92px"><option value="viewer" ${role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${role === 'editor' ? 'selected' : ''}>可编辑</option></select></label>`;
+            }).join('');
+            openModal({
+              title: '文献访问控制',
+              body: `<div class="field"><label>可见性</label><select class="select" id="source-visibility"><option value="inherit" ${access.visibility === 'inherit' ? 'selected' : ''}>继承知识库权限</option><option value="restricted" ${access.visibility === 'restricted' ? 'selected' : ''}>受限：仅所有者与共享对象</option><option value="private" ${access.visibility === 'private' ? 'selected' : ''}>私有：仅文献所有者与共享对象</option></select></div><div class="small faint" style="margin:12px 0 4px">共享给</div><div style="max-height:340px;overflow:auto">${rows}</div>`,
+              footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-source-access">保存访问策略</button>`,
+              onMount: (inner) => {
+                inner.querySelector('#save-source-access')?.addEventListener('click', async () => {
+                  const visibility = inner.querySelector('#source-visibility')?.value ?? 'inherit';
+                  const grantsToSave = [];
+                  inner.querySelectorAll('[data-source-subject]').forEach((input) => {
+                    if (!input.checked) return;
+                    const [subjectType, ...rest] = input.dataset.sourceSubject.split(':');
+                    const role = inner.querySelector(`[data-source-role="${input.dataset.sourceSubject}"]`)?.value ?? 'viewer';
+                    grantsToSave.push({ subjectType, subjectId: rest.join(':'), role });
+                  });
+                  try {
+                    await api(`/api/sources/${encodeURIComponent(source.id)}/access`, { method: 'PATCH', body: JSON.stringify({ visibility, grants: grantsToSave }) });
+                    closeModal();
+                    toast('文献访问策略已更新', 'success');
+                    window.dispatchEvent(new HashChangeEvent('hashchange'));
+                  } catch (error) { toast(error.message, 'error'); }
+                });
+              },
+            });
+          } catch (error) { toast(error.message, 'error'); }
+        });
         modal.querySelector('#reprocess-source')?.addEventListener('click', async () => {
           try {
             await api(`/api/sources/${encodeURIComponent(source.id)}/reprocess`, { method: 'POST' });

@@ -14,7 +14,7 @@
 - **图书馆式组织**：分库、目录、文献与知识页分离；权限可继承、可审计。
 - **非 RAG 检索**：默认使用词法 + 图谱 + 元数据；不依赖查询期向量切块。
 - **文档能力**：覆盖 Word / PDF / PPT / Excel / TeX / 图片 / RTF / WPS / Markdown 等。
-- **团队与权限**：账号、组织架构、团队、库级授权；企业微信 Mock OAuth 与通讯录同步已接入。
+- **团队与权限**：账号、组织架构、团队、库级授权、组织层级向下可见、页面/文献 ACL 与定向共享；企业微信 Mock OAuth 与通讯录同步已接入。
 - **智能体原生**：后台用本机 DSH headless 做语义编译、检索重排与合成；外部 DSH 也可通过 API + 技能维护知识。
 - **本地优先**：Node + SQLite + 文件系统，零外部服务可运行。
 
@@ -33,7 +33,7 @@
 1. **知识先于检索**：页面是事实源；FTS 与图是派生索引，可重建。
 2. **入库时理解，查询时导航**：理解成本前移一次；查询尽量做定位与合成。
 3. **保留不确定性**：矛盾保留双方，标记 `conflicted`；草稿标记 `draft`；置信度可追踪。
-4. **权限先于结果**：先计算可见库集合，再进入检索；私有库隐藏存在性。
+4. **权限先于结果**：先计算可见库集合，再对页面/文献做资源级 ACL；私有库、受限资源统一隐藏存在性。
 5. **确定性底座 + 本机 DSH 语义层**：存储/索引/权限由确定性代码负责；语义编译、检索重排、答案合成默认由本机 DSH 完成，失败回退规则/词法/图谱。
 6. **失败要显式**：格式不支持、解析降级、编译失败都进入文献状态与任务日志。
 7. **可回溯**：原始文件、来源锚点、页面版本、审计事件齐全。
@@ -102,6 +102,8 @@
 | `sources` | sha256, kind, status, extracted_text, metadata | 原始馆藏；同库哈希去重 |
 | `source_assets` | kind, storage_path, thumbnail_path, ocr_text | 内嵌图片 / 附件 |
 | `ingest_jobs` | stage, progress, log, pages_created, conflicts | 异步编译任务 |
+| `job_events` | step, status, message, progress, duration_ms | 解析/OCR/索引/DSH 编译步骤事件 |
+| `resource_grants` | resource_type/id, subject, role | 页面/文献定向 ACL |
 | `pages` | class_key, slug, body, status, review_status, confidence, tags, aliases, read_when | 原子知识页；含校对状态 |
 | `page_sources` | relationship, locator, quote | 页面到来源的锚点 |
 | `claims` | subject, predicate, object, confidence, status | 结构化主张 |
@@ -279,7 +281,24 @@ queryTokens
 
 ---
 
-## 9. 权限模型
+## 9. 权限模型与任务
+
+### 9.1 组织层级
+
+- 团队树由 `teams.parent_id` 表达；负责人由 `lead_person_id` 与 `team_members.role=lead` 表达。
+- 负责人的可见范围 = 自己团队 + 下级团队（递归 CTE），下级团队库默认 `viewer`；普通成员不继承上级权限。
+- 显式 `library_grants` / `resource_grants` 可以覆盖层级，实现“上级共享给指定人员”。
+
+### 9.2 资源 ACL
+
+- `pages.visibility` / `sources.visibility`：`inherit`、`restricted`、`private`。
+- `resource_grants`：个人或团队的 viewer/editor。
+- 所有列表、搜索、图谱、导出、评论、审核、Agent API 都经 `effectivePageRole` / `effectiveSourceRole`。
+
+### 9.3 任务可观察性
+
+- 上传 → `ingest_jobs` + `job_events`：queued、extract、assets、index、compile、done/failed。
+- 事件记录步骤状态、消息、进度、耗时；管理端/任务中心可追踪，失败可重试，排队可取消。
 
 | 主体 | 解析方式 | 结果 |
 | --- | --- | --- |

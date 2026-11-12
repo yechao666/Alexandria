@@ -37,6 +37,8 @@ function sourceView(rc: RequestContext, source: SourceRow, actor?: import('../ty
     size: source.size,
     kind: source.kind,
     status: source.status,
+    visibility: source.visibility,
+    canManageAccess: Boolean(actor && (actor.person.isAdmin || effectiveSourceRole(rc.app.db, actor, source) === 'owner')),
     pageCount: source.page_count,
     wordCount: source.word_count,
     excerpt: source.excerpt,
