@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from './env.ts';
 import { migrate, openDatabase } from './db/index.ts';
+import { resumeQueuedJobs } from './ingest/queue.ts';
 import { createRouter } from './routes/index.ts';
 import { createHttpServer } from './http/server.ts';
 import type { AppContext } from './http/context.ts';
@@ -19,6 +20,8 @@ mkdirSync(env.thumbnailsDir, { recursive: true });
 
 const db = openDatabase(env.dbPath);
 migrate(db);
+const resumed = resumeQueuedJobs(db, env);
+if (resumed) console.log(`[ingest] 恢复 ${resumed} 个排队任务`);
 
 const personCount = db.prepare('SELECT COUNT(*) AS c FROM persons').get() as unknown as { c: number };
 if (Number(personCount.c) === 0) {

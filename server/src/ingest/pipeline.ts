@@ -11,6 +11,7 @@ import { wordCount } from '../knowledge/terms.ts';
 import { compileSource } from '../knowledge/compiler.ts';
 import { dshCompileSource } from '../knowledge/dsh-engine.ts';
 import { dshAvailable } from '../knowledge/dsh-runtime.ts';
+import { enqueueJob } from './queue.ts';
 import { indexSource } from '../knowledge/pages.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
@@ -153,7 +154,7 @@ export function ingestBuffer(db: Db, env: Env, libraryId: string, input: IngestI
     detail: { filename, size: input.buffer.length, jobId },
   });
 
-  if (input.defer !== false) setImmediate(() => processJob(db, env, jobId));
+  if (input.defer !== false) enqueueJob(db, env, jobId);
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as unknown as SourceRow;
   return { source, jobId, duplicate: false };
 }
@@ -164,7 +165,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     | undefined;
   if (!job || !job.source_id) return;
   const jobCompiler = job.compiler ?? 'rule';
-  if (job.status === 'running' || job.status === 'succeeded') return;
+  if (job.status === 'running' || job.status === 'succeeded' || job.status === 'cancelled') return;
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(job.source_id) as unknown as SourceRow | undefined;
   if (!source) {
     setJob(db, jobId, { status: 'failed', error: '文献记录不存在', finished_at: nowIso() });
@@ -369,7 +370,7 @@ export function reprocessSource(db: Db, env: Env, sourceId: string): string {
      VALUES (?, ?, ?, 'queued', 'queued', 0, 'rule', '[]', ?)`,
   ).run(jobId, source.library_id, source.id, nowIso());
   db.prepare("UPDATE sources SET status = 'queued', error = NULL WHERE id = ?").run(source.id);
-  setImmediate(() => processJob(db, env, jobId));
+  enqueueJob(db, env, jobId);
   return jobId;
 }
 

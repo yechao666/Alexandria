@@ -518,7 +518,10 @@ export function registerLibraryRoutes(router: Router): void {
     const actor = requireActor(rc);
     const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
     const rows = rc.app.db
-      .prepare('SELECT * FROM audit_events WHERE library_id = ? ORDER BY created_at DESC LIMIT 100')
+      .prepare(
+        `SELECT a.*, p.name AS actor_name FROM audit_events a LEFT JOIN persons p ON p.id = a.actor_id
+          WHERE a.library_id = ? ORDER BY a.created_at DESC LIMIT 100`,
+      )
       .all(library.id) as unknown as Record<string, unknown>[];
     rc.json({
       events: rows.map((row) => ({ ...row, detail: parseJson<Record<string, unknown>>(String(row.detail ?? '{}'), {}) })),

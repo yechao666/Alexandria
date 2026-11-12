@@ -8,7 +8,8 @@ import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { extOf } from '../extract/index.ts';
-import { ingestBuffer, processJob, reprocessSource, sourceDownloadName } from '../ingest/pipeline.ts';
+import { ingestBuffer, reprocessSource, sourceDownloadName } from '../ingest/pipeline.ts';
+import { enqueueJob, queueSnapshot } from '../ingest/queue.ts';
 import { sendBinary } from '../http/static.ts';
 import { canEdit, pageListDto, sourceAccess } from './helpers.ts';
 import type { SourceRow } from '../types.ts';
@@ -232,8 +233,8 @@ export function registerSourceRoutes(router: Router): void {
     if (!job) throw errors.notFound('任务不存在');
     const { role } = requireLibrary(rc.app.db, actor, job.library_id, 'editor');
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
-    processJob(rc.app.db, rc.app.env, job.id);
-    rc.json({ ok: true });
+    enqueueJob(rc.app.db, rc.app.env, job.id);
+    rc.json({ ok: true, queued: true });
   });
 
   router.get('/api/libraries/:id/jobs', (rc) => {
@@ -272,6 +273,7 @@ export function registerSourceRoutes(router: Router): void {
       )
       .all(...params, limit) as unknown as Record<string, unknown>[];
     rc.json({
+      queue: queueSnapshot(),
       tasks: rows.map((job) => ({
         ...job,
         log: parseJson<string[]>(String(job.log ?? '[]'), []),

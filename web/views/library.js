@@ -364,7 +364,7 @@ function settingsTab(detail, library, color) {
               { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
             ] })}
           </form>
-          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a></div>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button>` : ''}</div>
         </div>
       </div>
       <div class="panel">
@@ -392,6 +392,13 @@ function settingsTab(detail, library, color) {
 }
 
 function bindLibrarySettings(library, detail) {
+  document.getElementById('library-audit')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/audit`);
+      const rows = (data.events ?? []).slice(0, 60).map((event) => `<tr><td class="mono" style="font-size:10px">${esc(new Date(event.created_at).toLocaleString('zh-CN'))}</td><td>${esc(event.actor_name ?? '系统')}</td><td><code>${esc(event.action)}</code></td><td class="small muted">${esc(JSON.stringify(event.detail ?? {}).slice(0, 120))}</td></tr>`).join('');
+      openModal({ title: '审计日志', wide: true, body: `<div class="panel" style="box-shadow:none"><div class="panel-body" style="padding:0;max-height:480px;overflow:auto"><table class="org-table"><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>详情</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted" style="padding:18px">暂无审计记录</td></tr>'}</tbody></table></div></div>` });
+    } catch (error) { toast(error.message, 'error'); }
+  });
   document.getElementById('save-library')?.addEventListener('click', async () => {
     const form = document.getElementById('library-settings-form');
     if (!form) return;

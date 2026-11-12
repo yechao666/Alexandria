@@ -67,7 +67,8 @@ data/
 
 - DSH 编译/重排属于同步阻塞调用：单次约数秒；大批量入库建议错峰，观察任务中心耗时。
 - FTS5 中文单字/双字切分适合中小规模；十万级页面建议增加独立索引服务或 PGroonga/Meilisearch 适配层。
-- 单进程任务执行；生产多副本需要外部队列（Redis/SQS）与共享数据库，当前版本未实现。
+- 资料处理使用 worker_threads 队列（`ALEXANDRIA_INGEST_CONCURRENCY`，默认 1），避免 DSH 编译阻塞 HTTP；进程重启时会恢复排队任务。
+- 多节点/高可用仍需外部队列（Redis/SQS）、共享数据库与对象存储，当前版本未实现。
 - 页面/文献 ACL 在应用层过滤；所有新增查询必须走 `effectivePageRole` / `effectiveSourceRole`，并补充权限测试。
 
 ## 6. 监控与审计
