@@ -128,6 +128,14 @@ test('读写 API Key 可以创建知识页并读取上下文', async () => {
   assert.match(read.data.context, /智能体/);
 });
 
+test('未显式传 limit 时使用默认分页而非 1 条', async () => {
+  const { token } = await login(base, 'lin@alex.dev');
+  const search = await j<{ hits: unknown[] }>('/api/search?q=%E7%9F%A5%E8%AF%86', { token });
+  assert.ok(search.data.hits.length > 1, '默认 limit 应生效');
+  const sources = await j<{ sources: unknown[] }>('/api/libraries/lib_eng/sources', { token });
+  assert.ok(sources.data.sources.length > 1, '文献列表默认 limit 应生效');
+});
+
 test('检索接口返回信号分解，查询接口返回引用', async () => {
   const { token } = await login(base, 'lin@alex.dev');
   const search = await j<{ hits: { signals: Record<string, number> }[] }>('/api/search?q=%E7%9F%A5%E8%AF%86%E7%BC%96%E8%AF%91', { token });
