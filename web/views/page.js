@@ -9,6 +9,7 @@ import {
   statusBadge,
   confidence,
   reviewBadge,
+  avatar,
   toast,
   go,
   libraryColor,
@@ -88,6 +89,7 @@ export async function renderPage(ref) {
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
           <div class="rail-card"><div class="title">来源 <span>${sourcesAttached.length}</span></div><div class="rail-list">${sources || '<div class="rail-empty">该页尚未关联文献</div>'}</div></div>
           ${propertyRows ? `<div class="rail-card"><div class="title">本体属性</div><div class="property-list">${propertyRows}</div></div>` : ''}
+          <div class="rail-card" id="comments-card"><div class="title">评论 <span id="comment-count">0</span></div><div class="comment-list" id="comments-list"><div class="rail-empty">加载中…</div></div><form class="comment-form" id="comment-form"><textarea class="textarea" name="body" rows="2" placeholder="补充来源、指出问题，或 @同事…"></textarea><button class="btn btn-sm btn-primary" type="submit">发表评论</button></form></div>
           <div class="rail-card"><div class="title">结构化主张 <span>${detail.claims?.length ?? 0}</span></div><div>${claims || '<div class="rail-empty">暂无主张</div>'}</div></div>
           <div class="rail-card"><div class="title">关联 <span>${(detail.links?.outbound?.length ?? 0) + (detail.links?.inbound?.length ?? 0)}</span></div><div class="rail-list">${outbound}${inbound}${!outbound && !inbound ? '<div class="rail-empty">尚未建立关联</div>' : ''}</div></div>
           ${readWhen ? `<div class="rail-card"><div class="title">何时读这一页</div><div class="rail-list">${readWhen}</div></div>` : ''}
@@ -150,6 +152,51 @@ export async function mountPage(ref) {
         toast(error.message, 'error');
       }
     });
+  });
+  const commentsList = document.getElementById('comments-list');
+  const commentCount = document.getElementById('comment-count');
+  const renderComments = (comments) => {
+    if (!commentsList) return;
+    if (commentCount) commentCount.textContent = String(comments.length);
+    commentsList.innerHTML = comments.length
+      ? comments.map((comment) => {
+          const canResolve = detail.canEdit || comment.authorId === state.me?.person?.id;
+          return `<div class="comment-item ${comment.status === 'resolved' ? 'resolved' : ''}"><div class="comment-head">${avatar({ name: comment.authorName, avatarColor: comment.authorColor }, 'sm')}<b>${esc(comment.authorName)}</b><span>${timeAgo(comment.createdAt)}</span>${comment.status === 'resolved' ? '<span class="badge jade">已解决</span>' : ''}</div><div class="comment-body">${esc(comment.body)}</div>${canResolve && comment.status !== 'resolved' ? `<div class="comment-actions"><button class="btn btn-sm btn-ghost" data-resolve-comment="${esc(comment.id)}">标为解决</button></div>` : ''}</div>`;
+        }).join('')
+      : '<div class="rail-empty">还没有评论；校对意见可以留在这里。</div>';
+    commentsList.querySelectorAll('[data-resolve-comment]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        try {
+          await api(`/api/comments/${encodeURIComponent(button.dataset.resolveComment)}`, { method: 'PATCH', body: JSON.stringify({ status: 'resolved' }) });
+          await loadComments();
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    });
+  };
+  const loadComments = async () => {
+    try {
+      const data = await api(`/api/pages/${encodeURIComponent(page.id)}/comments`);
+      renderComments(data.comments ?? []);
+    } catch {
+      if (commentsList) commentsList.innerHTML = '<div class="rail-empty">评论加载失败</div>';
+    }
+  };
+  await loadComments();
+  document.getElementById('comment-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = event.currentTarget.querySelector('textarea');
+    const body = input?.value.trim();
+    if (!body) return;
+    try {
+      await api(`/api/pages/${encodeURIComponent(page.id)}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+      input.value = '';
+      await loadComments();
+      toast('评论已发布', 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+    }
   });
   document.getElementById('page-graph');
   try {

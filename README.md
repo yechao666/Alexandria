@@ -63,6 +63,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记 |
 | **校对台** | 草稿/退回/矛盾队列；批准、要求修改、撤回校对、逐条裁决主张 |
+| **协作与通知** | 页面评论、解决标记、站内通知、企业微信应用消息推送 |
 | **企业微信** | 已接 Mock OAuth 登录与通讯录同步；生产可切换 QYAPI/授权域名 |
 
 ### 知识编译 vs 查询期 RAG
@@ -213,6 +214,17 @@ cd ../alexandria && node server/src/main.ts
 - API：`GET /api/libraries/:id/properties`、`POST /api/libraries/:id/properties`、`PATCH/DELETE /api/properties/:id`。
 
 ![本体属性表单](docs/screenshots/14-ontology.png)
+
+## 评论与通知
+
+- 知识页右侧「评论」卡片支持发表、解决；负责人、创建者与父评论作者会收到站内通知；
+- 顶部铃铛显示未读数量，`#/notifications` 集中处理；
+- 通知同时通过企业微信应用消息推送（需绑定 wecom_userid），失败不影响主流程；
+- 校对退回/通过也会产生通知。
+
+![通知](docs/screenshots/15-notifications.png)
+
+![页面评论](docs/screenshots/16-comments.png)
 
 ## 校对流程
 

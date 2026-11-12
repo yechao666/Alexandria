@@ -269,6 +269,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
             <input name="q" placeholder="搜索知识、文献、概念…" autocomplete="off" aria-label="搜索">
             <kbd>⌘K</kbd>
           </form>
+          <a class="icon-btn notif-btn hide-sm" href="#/notifications" title="通知" aria-label="通知">${icon('bell', 17)}${Number(state.bootstrap?.stats?.notificationsUnread ?? 0) > 0 ? `<span class="notif-dot">${state.bootstrap.stats.notificationsUnread}</span>` : ''}</a>
           <a class="btn btn-sm hide-sm" href="#/upload">${icon('upload', 14)} 上传</a>
         </header>
         <main class="content" id="content">${content ?? ''}</main>

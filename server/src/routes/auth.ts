@@ -8,6 +8,7 @@ import { parseJson } from '../lib/ids.ts';
 import { libraryCounts, nodeTree, serializeLibrary, teamTree } from './helpers.ts';
 import { reviewSummary } from './review.ts';
 import { getWecomConfig, wecomConfigured } from '../domain/wecom.ts';
+import { unreadNotificationCount } from '../domain/notifications.ts';
 import type { LibraryRow, PageRow } from '../types.ts';
 
 export function mePayload(rc: RequestContext) {
@@ -134,6 +135,7 @@ export function registerAuthRoutes(router: Router): void {
         members: people.length,
         reviewPending: review.pending,
         conflicts: review.conflicts,
+        notificationsUnread: unreadNotificationCount(rc.app.db, actor.person.id),
       },
       review,
       classes: classDistribution,

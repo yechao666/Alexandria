@@ -19,6 +19,7 @@ import { renderGraph, mountGraphView } from './views/graph.js';
 import { renderAdmin, mountAdmin } from './views/admin.js';
 import { renderAgent, mountAgent } from './views/agent.js';
 import { renderReview, mountReview } from './views/review.js';
+import { renderNotifications, mountNotifications } from './views/notifications.js';
 
 const app = document.getElementById('app');
 let routeSeq = 0;
@@ -225,6 +226,15 @@ async function route() {
       renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '校对台' }], active: 'review' });
       document.title = '校对台 · Alexandria';
       mountReview();
+      return;
+    }
+    if (parts[0] === 'notifications') {
+      setContent(loading());
+      const html = await renderNotifications();
+      if (seq !== routeSeq) return;
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '通知' }], active: 'notifications' });
+      document.title = '通知 · Alexandria';
+      mountNotifications();
       return;
     }
     if (parts[0] === 'agent') {

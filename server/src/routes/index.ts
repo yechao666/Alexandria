@@ -9,6 +9,7 @@ import { registerAgentRoutes } from './agent.ts';
 import { registerReviewRoutes } from './review.ts';
 import { registerWecomAuthRoutes } from './wecom.ts';
 import { registerOntologyRoutes } from './ontology.ts';
+import { registerSocialRoutes } from './social.ts';
 
 export function createRouter(): Router {
   const router = new Router();
@@ -22,5 +23,6 @@ export function createRouter(): Router {
   registerReviewRoutes(router);
   registerWecomAuthRoutes(router);
   registerOntologyRoutes(router);
+  registerSocialRoutes(router);
   return router;
 }

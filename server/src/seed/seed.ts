@@ -1030,6 +1030,32 @@ export function seedDatabase(db: Db, env: Env): void {
     if (page && source) attachSource(db, page.id, source.id, 'derived-from', locator, source.excerpt);
   }
 
+  // 演示评论与站内通知：让校对台/评论/通知在首次启动就有真实内容。
+  const reviewPage = db.prepare("SELECT id, owner_person_id FROM pages WHERE slug = 'howtos/requirement-review'").get() as unknown as
+    | { id: string; owner_person_id: string | null }
+    | undefined;
+  if (reviewPage) {
+    const commentId = newId('cmt');
+    const createdAt = nowIso();
+    db.prepare(
+      `INSERT INTO comments (id, library_id, page_id, parent_id, author_id, body, status, created_at, updated_at)
+       VALUES (?, 'lib_product', ?, NULL, 'usr_shen', ?, 'open', ?, ?)`,
+    ).run(commentId, reviewPage.id, '建议补充失败路径与回滚方案的验收标准，避免上线后才发现边界遗漏。', createdAt, createdAt);
+    const target = reviewPage.owner_person_id ?? 'usr_su';
+    db.prepare(
+      `INSERT INTO notifications (id, person_id, actor_id, kind, title, body, link, library_id, page_id, read_at, created_at)
+       VALUES (?, ?, 'usr_shen', 'comment', ?, ?, ?, 'lib_product', ?, NULL, ?)`,
+    ).run(
+      newId('ntf'),
+      target,
+      '《需求评审》有新评论',
+      '沈书言：建议补充失败路径与回滚方案的验收标准。',
+      `/#/page/${reviewPage.id}`,
+      reviewPage.id,
+      createdAt,
+    );
+  }
+
   // 图像 OCR 演示：Pillow 可用时生成一张含中文的图片，再走图片流水线。
   const imagePath = join(env.dataDir, 'seed', 'alexandria-ocr-demo.png');
   if (createDemoImage(imagePath)) {

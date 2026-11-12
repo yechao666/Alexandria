@@ -108,6 +108,8 @@
 | `page_revisions` | version, snapshot, editor_id | 页面历史 |
 | `ontology_properties` | class_key, key, type, options, required | 本体属性定义 |
 | `page_properties` | key, value | 页面属性值 |
+| `comments` | page_id, author_id, body, status, resolved_by | 页面评论与解决状态 |
+| `notifications` | person_id, kind, title, link, read_at | 站内通知 |
 | `audit_events` | action, target, actor, detail | 审计 |
 
 ### 4.4 派生索引
@@ -253,7 +255,14 @@ queryTokens
 | 归档 | `archived + approved` | 说明 |
 | 矛盾裁决 | 采用/驳回；另一侧 `resolved` | 审计 |
 
-### 8.3 队列
+### 8.3 评论与通知
+
+- 页面评论任何可见成员可发表；作者/编辑者可标记解决；
+- 评论、审核退回/通过会写入 `notifications`，并尝试通过企业微信应用消息推送给绑定的 `wecom_userid`；
+- 顶部铃铛与 `#/notifications` 提供未读数、已读与跳转；
+- 通知发送失败只记录警告，不阻塞业务。
+
+### 8.4 队列
 
 `GET /api/review` 聚合所有可见库中 `review_status <> approved` 或 `status = draft` 的页面，附带矛盾数、来源数与原因；前端「校对台」支持按知识库、状态过滤。
 
@@ -302,7 +311,8 @@ WeCom OAuth / 通讯录
 - 管理员配置 CorpID / AgentID / Secret / Base URL / Authorize Base / Public URL（Secret 不回显）；
 - `GET /api/integrations/wecom` 返回映射与回调地址；
 - `POST /api/integrations/wecom/sync` 调 QYAPI 拉取部门与成员，生成 dry-run 计划；`{ apply: true }` 执行绑定/建团队；
-- 本地默认连接 [wecom-mock](../wecom-mock)，生产切换 `ALEXANDRIA_WECOM_MODE=wecom`。
+- 本地默认连接 [wecom-mock](../wecom-mock)，生产切换 `ALEXANDRIA_WECOM_MODE=wecom`；
+- 校对与评论通知会通过 `message/send` 推送应用消息（模板文本，失败不阻塞）。
 
 ### 10.3 待接入
 

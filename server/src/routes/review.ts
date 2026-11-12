@@ -9,6 +9,7 @@ import { nowIso } from '../lib/ids.ts';
 import { getPage, reviewPage, pageToView } from '../knowledge/pages.ts';
 import { pageListDto } from './helpers.ts';
 import { normalizeTitle } from '../knowledge/terms.ts';
+import { notifyPerson } from '../domain/notifications.ts';
 
 export interface ReviewItem {
   page: ReturnType<typeof pageListDto>;
@@ -169,6 +170,19 @@ export function registerReviewRoutes(router: Router): void {
     }
     const updated = reviewPage(rc.app.db, page, action as 'approve' | 'request_changes' | 'reopen' | 'archive', String(body.note ?? ''), actor);
     const conflicts = pageConflicts(rc.app.db, page.id);
+    const target = page.owner_person_id ?? page.created_by;
+    if (target && target !== actor.person.id && (action === 'request_changes' || action === 'approve')) {
+      await notifyPerson(rc.app.db, rc.app.env, {
+        personId: target,
+        actorId: actor.person.id,
+        kind: 'review',
+        title: action === 'approve' ? `《${page.title}》已通过校对` : `《${page.title}》被要求修改`,
+        body: action === 'approve' ? `${actor.person.name} 批准了此页` : `${actor.person.name}：${String(body.note ?? '').slice(0, 160)}`,
+        link: `/#/page/${encodeURIComponent(page.id)}`,
+        libraryId: library.id,
+        pageId: page.id,
+      });
+    }
     audit(rc.app.db, {
       actor,
       action: `page.review.${action}`,

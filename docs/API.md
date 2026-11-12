@@ -191,6 +191,23 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 
 ---
 
+## 评论与通知
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/pages/:id/comments` | viewer | 评论列表 |
+| POST | `/api/pages/:id/comments` | viewer | 发表评论 `{body, parentId?}` |
+| PATCH | `/api/comments/:id` | author/editor | 修改正文或标记 `resolved` |
+| DELETE | `/api/comments/:id` | author/editor | 删除评论 |
+| GET | `/api/notifications?unread=1` | 登录 | 我的通知 |
+| POST | `/api/notifications/:id/read` | 登录 | 标记单条已读 |
+| POST | `/api/notifications/read-all` | 登录 | 全部已读 |
+| GET | `/api/notifications/unread` | 登录 | 未读数 |
+
+评论、审核退回/通过会生成站内通知，并尝试通过企业微信应用消息推送。
+
+---
+
 ## 检索与图谱
 
 | 方法 | 路径 | 说明 |

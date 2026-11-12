@@ -292,6 +292,37 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_page_id);
 CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_page_id);
 
+CREATE TABLE IF NOT EXISTS comments (
+  id          TEXT PRIMARY KEY,
+  library_id  TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  page_id     TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  parent_id   TEXT REFERENCES comments(id) ON DELETE CASCADE,
+  author_id   TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  body        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'open',
+  resolved_by TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  resolved_at TEXT,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_comments_page ON comments(page_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_comments_library ON comments(library_id, created_at);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         TEXT PRIMARY KEY,
+  person_id  TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+  actor_id   TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  kind       TEXT NOT NULL DEFAULT 'info',
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL DEFAULT '',
+  link       TEXT NOT NULL DEFAULT '',
+  library_id TEXT REFERENCES libraries(id) ON DELETE CASCADE,
+  page_id    TEXT REFERENCES pages(id) ON DELETE CASCADE,
+  read_at    TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_person ON notifications(person_id, read_at, created_at);
+
 CREATE TABLE IF NOT EXISTS page_revisions (
   id        TEXT PRIMARY KEY,
   page_id   TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
