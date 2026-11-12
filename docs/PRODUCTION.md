@@ -1,0 +1,87 @@
+# 生产部署与运维手册
+
+> 目标：把 Alexandria 作为组织内部知识基础设施运行，而不是单机演示。当前版本是**单节点 SQLite + 本机 DSH** 架构，适合中小团队；高可用/多节点需要外置数据库与对象存储。
+
+## 1. 进程与端口
+
+```bash
+cd alexandria
+node server/src/main.ts
+```
+
+- 默认监听 `127.0.0.1:4520`；生产放在 Nginx/Caddy 后，仅暴露 HTTPS。
+- 建议使用 launchd / systemd 托管，失败自动重启。
+- 健康检查：`GET /api/health`，关注 `ok`、`dsh`、`llm`。
+- 企业微信 Mock 仅用于联调，生产关闭或限制在内网。
+
+## 2. 必配环境
+
+```bash
+ALEXANDRIA_PORT=4520
+ALEXANDRIA_PUBLIC_URL=https://kb.example.com
+ALEXANDRIA_DATA_DIR=/var/lib/alexandria
+ALEXANDRIA_WEB_DIR=/opt/alexandria/web
+ALEXANDRIA_DSH_ENABLED=true
+ALEXANDRIA_WECOM_MODE=wecom
+ALEXANDRIA_WECOM_CORP_ID=...
+ALEXANDRIA_WECOM_AGENT_ID=...
+ALEXANDRIA_WECOM_SECRET=...
+ALEXANDRIA_WECOM_CALLBACK_TOKEN=...
+ALEXANDRIA_WECOM_ENCODING_AES_KEY=...
+```
+
+- DSH 凭据放在运行用户可读的 `~/.dsh/.credentials.yaml`，或只注入 `DEEPSEEK_API_KEY`；**不要**写入数据库/前端。
+- 企业微信 Secret、Token、EncodingAESKey 通过环境变量或管理端写入 meta；接口不回显 Secret。
+- 生产必须使用企业微信加密 XML 回调 `/api/wecom/callback`，不要使用 JSON Mock 回调。
+
+## 3. 数据与备份
+
+数据目录包含：
+
+```text
+data/
+  alexandria.db        # SQLite 主库（WAL）
+  uploads/             # 原始文件、附件
+  thumbnails/          # 缩略图
+  dsh-home/            # 本机 DSH profile（可重建）
+  seed/                # 演示资产（可删）
+```
+
+备份建议：
+
+1. 用 `sqlite3 data/alexandria.db "VACUUM INTO 'backup.db'"` 或应用停机后复制；
+2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
+3. 备份文件加密后异地保存，保留 30/90 天；
+4. 定期在隔离环境恢复演练。
+
+## 4. 权限上线检查
+
+- 团队树与负责人已按真实组织配置；
+- 知识库 `owner_team_id` 正确；
+- 私有库、受限页面、受限文献的共享对象经过复核；
+- 组织管理员数量最小化；
+- API Key 按“只读/读写”最小权限发放，离职/项目结束及时吊销；
+- 检查 `audit_events` 与 `library_grants`，避免“internal = 全员可见”的旧假设。
+
+## 5. 质量与容量
+
+- DSH 编译/重排属于同步阻塞调用：单次约数秒；大批量入库建议错峰，观察任务中心耗时。
+- FTS5 中文单字/双字切分适合中小规模；十万级页面建议增加独立索引服务或 PGroonga/Meilisearch 适配层。
+- 单进程任务执行；生产多副本需要外部队列（Redis/SQS）与共享数据库，当前版本未实现。
+- 页面/文献 ACL 在应用层过滤；所有新增查询必须走 `effectivePageRole` / `effectiveSourceRole`，并补充权限测试。
+
+## 6. 监控与审计
+
+- 健康检查 + 进程存活；
+- 任务失败率、DSH 超时率、平均编译耗时；
+- 登录失败、API Key 使用、权限变更、导出行为；
+- SQLite 文件大小、WAL 增长、备份成功；
+- 建议把 `/api/tasks` 与 `audit_events` 接入组织日志平台（当前无内置告警）。
+
+## 7. 已知边界
+
+- 无多租户隔离、无 SSO（除企业微信/OIDC 预留）、无实时协同；
+- 旧版 DOC/WPS 解析质量依赖 LibreOffice；
+- 纯矢量扫描 PDF 需外部渲染器；
+- Redis 队列、对象存储、全文检索集群未实现；
+- 本手册描述的是当前代码可验证的能力，不替代安全评审与渗透测试。

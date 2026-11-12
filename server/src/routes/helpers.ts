@@ -1,7 +1,7 @@
 import type { Db } from '../db/index.ts';
 import type { RequestContext } from '../http/context.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary, effectivePageRole, effectiveSourceRole, roleAtLeast } from '../domain/access.ts';
+import { requireLibrary, getLibrary, effectivePageRole, effectiveSourceRole, roleAtLeast } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
 import { getPage } from '../knowledge/pages.ts';
 import type { Actor, LibraryRow, PageRow } from '../types.ts';
@@ -234,7 +234,8 @@ export function pageAccess(rc: RequestContext, pageId: string, level: 'viewer' |
   const actor = requireActor(rc);
   const page = getPage(rc.app.db, pageId);
   if (!page) throw errors.notFound('知识页不存在');
-  const { library } = requireLibrary(rc.app.db, actor, page.library_id);
+  const library = getLibrary(rc.app.db, page.library_id);
+  if (!library) throw errors.notFound('知识页不存在');
   const role = effectivePageRole(rc.app.db, actor, page);
   if (!role) throw errors.notFound('知识页不存在');
   if (!roleAtLeast(role, level)) throw errors.forbidden(level === 'viewer' ? '无权访问该知识页' : '需要更高的知识页权限');
@@ -246,7 +247,8 @@ export function sourceAccess(rc: RequestContext, sourceId: string, level: 'viewe
   const actor = requireActor(rc);
   const source = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as unknown as import('../types.ts').SourceRow | undefined;
   if (!source) throw errors.notFound('文献不存在');
-  const { library } = requireLibrary(rc.app.db, actor, source.library_id);
+  const library = getLibrary(rc.app.db, source.library_id);
+  if (!library) throw errors.notFound('文献不存在');
   const role = effectiveSourceRole(rc.app.db, actor, source);
   if (!role) throw errors.notFound('文献不存在');
   if (!roleAtLeast(role, level)) throw errors.forbidden(level === 'viewer' ? '无权访问该文献' : '需要更高的文献权限');

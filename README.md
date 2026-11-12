@@ -233,6 +233,7 @@ cd ../alexandria && node server/src/main.ts
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
 - [验收报告](docs/ACCEPTANCE.md)：需求映射、69 项测试证据与已知边界。
+- [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
 
 ## 本体属性

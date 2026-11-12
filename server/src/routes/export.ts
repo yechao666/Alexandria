@@ -1,6 +1,6 @@
 import type { Router } from '../http/router.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary, effectivePageRole } from '../domain/access.ts';
+import { requireLibrary, effectivePageRole, effectiveSourceRole } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
 import { pageToView } from '../knowledge/pages.ts';
 import { pageAccess } from './helpers.ts';
@@ -11,7 +11,7 @@ function yaml(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-function pageMarkdown(db: import('../db/index.ts').Db, page: PageRow): string {
+function pageMarkdown(db: import('../db/index.ts').Db, page: PageRow, actor?: import('../types.ts').Actor): string {
   const view = pageToView(db, page);
   const claims = db
     .prepare(
@@ -31,11 +31,20 @@ function pageMarkdown(db: import('../db/index.ts').Db, page: PageRow): string {
       `SELECT s.id, s.title, s.filename, ps.relation FROM page_sources ps JOIN sources s ON s.id = ps.source_id WHERE ps.page_id = ?`,
     )
     .all(page.id) as unknown as { id: string; title: string; filename: string; relation: string }[];
+  const visibleSources = actor
+    ? sources.filter((source) => Boolean(effectiveSourceRole(db, actor, db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as import('../types.ts').SourceRow)))
+    : sources;
   const links = db
     .prepare(
       `SELECT p.slug, p.title, l.relation FROM links l JOIN pages p ON p.id = l.to_page_id WHERE l.from_page_id = ? ORDER BY l.weight DESC`,
     )
     .all(page.id) as unknown as { slug: string; title: string; relation: string }[];
+  const visibleLinks = actor
+    ? links.filter((link) => {
+        const target = db.prepare('SELECT * FROM pages WHERE slug = ? AND library_id = ?').get(link.slug, page.library_id) as unknown as PageRow | undefined;
+        return Boolean(target && effectivePageRole(db, actor, target));
+      })
+    : links;
   const lines = [
     '---',
     `title: ${yaml(page.title)}`,
@@ -47,8 +56,8 @@ function pageMarkdown(db: import('../db/index.ts').Db, page: PageRow): string {
     `tags: ${yaml(view.tagsList)}`,
     `aliases: ${yaml(view.aliasesList)}`,
     `read_when: ${yaml(view.readWhenList)}`,
-    `sources: ${yaml(sources.map((source) => ({ id: source.id, title: source.title, filename: source.filename, relation: source.relation })))}`,
-    `links: ${yaml(links.map((link) => ({ slug: link.slug, title: link.title, relation: link.relation })))}`,
+    `sources: ${yaml(visibleSources.map((source) => ({ id: source.id, title: source.title, filename: source.filename, relation: source.relation })))}`,
+    `links: ${yaml(visibleLinks.map((link) => ({ slug: link.slug, title: link.title, relation: link.relation })))}`,
     'claims:',
     ...claims.map(
       (claim) =>
@@ -66,7 +75,7 @@ export function registerExportRoutes(router: Router): void {
   router.get('/api/pages/:id/markdown', (rc) => {
     const actor = requireActor(rc);
     const { page } = pageAccess(rc, rc.params.id!);
-    const markdown = pageMarkdown(rc.app.db, page);
+    const markdown = pageMarkdown(rc.app.db, page, actor);
     const filename = `${page.slug.replace(/\//g, '-')}.md`;
     rc.res.statusCode = 200;
     rc.res.setHeader('content-type', 'text/markdown; charset=utf-8');
@@ -100,7 +109,7 @@ export function registerExportRoutes(router: Router): void {
     const bundle = visiblePages
       .map(
         (page) =>
-          `\n<!-- alexandria:page slug=${yaml(page.slug)} -->\n\n${pageMarkdown(rc.app.db, page)}\n`,
+          `\n<!-- alexandria:page slug=${yaml(page.slug)} -->\n\n${pageMarkdown(rc.app.db, page, actor)}\n`,
       )
       .join('\n---\n');
     rc.res.statusCode = 200;

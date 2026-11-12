@@ -516,7 +516,7 @@ export function registerLibraryRoutes(router: Router): void {
 
   router.get('/api/libraries/:id/audit', (rc) => {
     const actor = requireActor(rc);
-    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
     const rows = rc.app.db
       .prepare('SELECT * FROM audit_events WHERE library_id = ? ORDER BY created_at DESC LIMIT 100')
       .all(library.id) as unknown as Record<string, unknown>[];

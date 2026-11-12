@@ -94,7 +94,7 @@ export async function renderAdmin(tab = 'teams') {
     : '<div class="empty">企业微信集成信息不可用</div>';
 
   const bodies = {
-    teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
+    teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="callout small" style="margin-bottom:14px">组织层级策略：上级负责人可只读下级团队知识库；下级成员默认看不到上级团队内容，需显式共享。</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
     people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>企微 ID</th><th>角色</th><th></th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
     wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
@@ -180,10 +180,10 @@ export function mountAdmin(tab = 'teams') {
 }
 
 function teamCard(team, isAdmin) {
-  return `<div class="team-card">
+  return `<div class="team-card" style="margin-left:${Math.min(3, Number(team.depth ?? 0)) * 18}px">
     <div class="head">
       <span class="avatar jade">${esc(team.name.slice(0, 2))}</span>
-      <div style="min-width:0"><div class="name">${esc(team.name)}</div><div class="desc">${esc(team.description || '—')}</div></div>
+      <div style="min-width:0"><div class="name">${esc(team.name)} ${team.depth ? '<span class="badge outline">下级</span>' : '<span class="badge jade">顶级</span>'}</div><div class="desc">${esc(team.description || '—')}</div></div>
       <div style="margin-left:auto" class="row">${team.wecomDeptId ? `<span class="badge outline">企微 ${esc(team.wecomDeptId)}</span>` : ''}${isAdmin ? `<button class="btn btn-sm btn-ghost" data-member-team="${esc(team.id)}">成员</button>` : ''}</div>
     </div>
     <div style="padding:0 16px 14px"><div class="member-chips">${team.members.map((member) => `<span class="member-chip">${avatar(member, 'sm')}${esc(member.name)}<span class="role">${member.role === 'lead' ? '负责人' : '成员'}</span></span>`).join('') || '<span class="faint small">暂无成员</span>'}</div></div>

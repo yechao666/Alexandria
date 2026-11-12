@@ -230,7 +230,7 @@ export function registerSourceRoutes(router: Router): void {
       | { id: string; library_id: string; status: string }
       | undefined;
     if (!job) throw errors.notFound('任务不存在');
-    const { role } = requireLibrary(rc.app.db, actor, job.library_id);
+    const { role } = requireLibrary(rc.app.db, actor, job.library_id, 'editor');
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     processJob(rc.app.db, rc.app.env, job.id);
     rc.json({ ok: true });
@@ -286,7 +286,7 @@ export function registerSourceRoutes(router: Router): void {
       | { id: string; library_id: string; status: string; source_id: string | null }
       | undefined;
     if (!job) throw errors.notFound('任务不存在');
-    const { role } = requireLibrary(rc.app.db, actor, job.library_id);
+    const { role } = requireLibrary(rc.app.db, actor, job.library_id, 'editor');
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     if (job.status !== 'queued') throw errors.conflict('只有排队中的任务可以取消');
     rc.app.db.prepare("UPDATE ingest_jobs SET status = 'cancelled', stage = 'cancelled', finished_at = ? WHERE id = ?").run(nowIso(), job.id);
@@ -314,6 +314,7 @@ export function registerSourceRoutes(router: Router): void {
 
   router.patch('/api/sources/:id/access', async (rc) => {
     const { actor, source, library, role } = sourceAccess(rc, rc.params.id!, 'viewer');
+    if (actor.viaApiKey && actor.apiScope === 'read') throw errors.forbidden('只读 API Key 不能修改访问策略');
     if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要文献所有者权限');
     const body = await rc.body<{ visibility?: string; grants?: { subjectType?: string; subjectId?: string; role?: string }[] }>();
     const visibility = ['inherit', 'restricted', 'private'].includes(String(body.visibility)) ? String(body.visibility) : source.visibility;

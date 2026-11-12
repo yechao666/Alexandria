@@ -303,6 +303,7 @@ export function registerPageRoutes(router: Router): void {
 
   router.patch('/api/pages/:id/access', async (rc) => {
     const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'viewer');
+    if (actor.viaApiKey && actor.apiScope === 'read') throw errors.forbidden('只读 API Key 不能修改访问策略');
     if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要知识页所有者权限');
     const body = await rc.body<{
       visibility?: string;
