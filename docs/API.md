@@ -337,6 +337,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/admin/security` | 安全事件（管理员） |
 | GET/POST/DELETE | `/api/search/saved` | 保存检索 |
 | GET | `/api/pages/:id/access` | 页面访问策略 |
+| GET | `/api/pages/:id/access-audit` | 有效访问名单与原因（管理员/页面所有者） |
 | GET | `/api/libraries/:id/merge-suggestions` | 重复页合并建议 |
 | POST | `/api/pages/:id/merge` | 合并同类型重复页 |
 | POST | `/api/pages/:id/parent` | 设置/清除上位概念 |

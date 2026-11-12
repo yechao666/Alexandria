@@ -1,7 +1,7 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
 import { requireActor } from '../http/auth.ts';
-import { requireLibrary, effectivePageRole, effectiveSourceRole, resourceGrants } from '../domain/access.ts';
+import { requireLibrary, effectivePageRole, effectiveSourceRole, resourceGrants, actorFor, effectiveRole } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { securityEvent, requestIp, grantRecipients } from '../domain/security.ts';
 import { notifyPerson } from '../domain/notifications.ts';
@@ -406,6 +406,36 @@ export function registerPageRoutes(router: Router): void {
     }
     audit(rc.app.db, { actor, action: 'page.hierarchy.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { parentId } });
     rc.json({ ok: true, parentId });
+  });
+
+  router.get('/api/pages/:id/access-audit', (rc) => {
+    const { actor, page, library, role } = pageAccess(rc, rc.params.id!, 'viewer');
+    if (!actor.person.isAdmin && role !== 'owner') throw errors.forbidden('需要知识页所有者权限');
+    const grants = resourceGrants(rc.app.db, 'page', page.id);
+    const libraryRole = requireLibrary(rc.app.db, actor, library.id).role;
+    const people = rc.app.db.prepare("SELECT * FROM persons WHERE status = 'active' ORDER BY name").all() as unknown as Record<string, unknown>[];
+    const rows = people.map((row) => {
+      const person = {
+        id: String(row.id),
+        email: String(row.email),
+        name: String(row.name),
+        title: String(row.title ?? ''),
+        avatarColor: String(row.avatar_color ?? 'slate'),
+        isAdmin: Boolean(row.is_admin),
+      };
+      const subject = actorFor(rc.app.db, person);
+      const effective = effectivePageRole(rc.app.db, subject, page);
+      let reason = 'none';
+      if (effective) {
+        if (person.isAdmin) reason = '组织管理员';
+        else if (grants.some((grant) => (grant.subjectType === 'person' && grant.subjectId === person.id) || (grant.subjectType === 'team' && subject.teamIds.includes(grant.subjectId)))) reason = '页面/团队定向共享';
+        else if (page.owner_person_id === person.id || page.created_by === person.id) reason = '页面所有者';
+        else if (page.visibility === 'inherit') reason = effectiveRole(rc.app.db, subject, library) === 'owner' ? '知识库所有者' : effectiveRole(rc.app.db, subject, library) === 'editor' ? '知识库成员' : '知识库只读';
+        else reason = '知识库所有者继承';
+      }
+      return { ...person, role: effective ?? null, reason };
+    });
+    rc.json({ pageId: page.id, visibility: page.visibility, grants, actorRole: libraryRole, people: rows.filter((row) => row.role) });
   });
 
 }

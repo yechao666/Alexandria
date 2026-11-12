@@ -212,3 +212,10 @@ test('安全审计与权限变更通知可用', async () => {
     body: JSON.stringify({ visibility: 'inherit', grants: [] }),
   });
 });
+
+test('管理员可以查看页面有效访问名单与原因', async () => {
+  const audit = await j<{ people: { email: string; role: string; reason: string }[] }>('/api/pages/concepts%2Fknowledge-compilation/access-audit', admin.token);
+  assert.ok(audit.people.some((person) => person.email === 'lin@alex.dev'));
+  const denied = await fetch(`${base}/api/pages/concepts%2Fknowledge-compilation/access-audit`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+});

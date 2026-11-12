@@ -192,9 +192,17 @@ export async function mountPage(ref) {
           <option value="inherit" ${access.visibility === 'inherit' ? 'selected' : ''}>继承知识库权限</option>
           <option value="restricted" ${access.visibility === 'restricted' ? 'selected' : ''}>受限：仅所有者与共享对象</option>
           <option value="private" ${access.visibility === 'private' ? 'selected' : ''}>私有：仅页面所有者与共享对象</option>
-        </select></div><div class="small faint" style="margin:12px 0 4px">共享给</div><div style="max-height:340px;overflow:auto">${rows}</div>`,
+        </select></div><div style="margin:12px 0 4px"><button class="btn btn-sm" id="audit-page-access">${icon('users', 14)} 查看谁可以访问</button></div><div id="page-access-audit"></div><div class="small faint" style="margin:12px 0 4px">共享给</div><div style="max-height:340px;overflow:auto">${rows}</div>`,
         footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-page-access">保存访问策略</button>`,
         onMount: (modal) => {
+          modal.querySelector('#audit-page-access')?.addEventListener('click', async () => {
+            try {
+              const audit = await api(`/api/pages/${encodeURIComponent(page.id)}/access-audit`);
+              const target = modal.querySelector('#page-access-audit');
+              const rowsHtml = (audit.people ?? []).map((person) => `<tr><td>${esc(person.name)}</td><td>${esc(person.email)}</td><td>${person.role ?? '—'}</td><td class="small muted">${esc(person.reason)}</td></tr>`).join('');
+              if (target) target.innerHTML = `<div class="panel" style="box-shadow:none;margin-top:8px"><div class="panel-body" style="padding:0;max-height:220px;overflow:auto"><table class="org-table"><thead><tr><th>成员</th><th>邮箱</th><th>角色</th><th>原因</th></tr></thead><tbody>${rowsHtml || '<tr><td colspan="4" class="muted" style="padding:12px">当前没有可见成员</td></tr>'}</tbody></table></div></div>`;
+            } catch (error) { toast(error.message, 'error'); }
+          });
           modal.querySelector('#save-page-access')?.addEventListener('click', async () => {
             const visibility = modal.querySelector('#page-visibility')?.value ?? 'inherit';
             const grantsToSave = [];
