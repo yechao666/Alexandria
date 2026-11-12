@@ -32,6 +32,7 @@ export function mountNotifications() {
   document.getElementById('read-all-notifications')?.addEventListener('click', async () => {
     try {
       await api('/api/notifications/read-all', { method: 'POST' });
+      if (state.bootstrap?.stats) state.bootstrap.stats.notificationsUnread = 0;
       toast('已全部标记为已读', 'success');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     } catch (error) {
@@ -41,7 +42,8 @@ export function mountNotifications() {
   document.querySelectorAll('[data-read-notification]').forEach((button) => {
     button.addEventListener('click', async () => {
       try {
-        await api(`/api/notifications/${encodeURIComponent(button.dataset.readNotification)}/read`, { method: 'POST' });
+        const result = await api(`/api/notifications/${encodeURIComponent(button.dataset.readNotification)}/read`, { method: 'POST' });
+        if (state.bootstrap?.stats) state.bootstrap.stats.notificationsUnread = result.unread ?? 0;
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       } catch (error) {
         toast(error.message, 'error');
