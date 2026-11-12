@@ -1,11 +1,11 @@
 import type { Router } from '../http/router.ts';
 import type { RequestContext } from '../http/context.ts';
-import { authenticate, hashToken, login, logout, sessionCookie, createSession } from '../http/auth.ts';
+import { authenticate, hashToken, login, logout, sessionCookie, createSession, currentSessionHash } from '../http/auth.ts';
 import { rateLimit, resetRateLimit, rateLimitKey } from '../domain/rate-limit.ts';
 import { securityEvent, requestIp } from '../domain/security.ts';
 import { notifyAdmins } from '../domain/notifications.ts';
 import { generateTotpSecret, totpUri, verifyTotp, passwordPolicyError } from '../domain/totp.ts';
-import { randomToken } from '../lib/ids.ts';
+import { newId, nowIso, randomToken } from '../lib/ids.ts';
 import { hashPassword, verifyPassword } from '../lib/password.ts';
 import { requireActor } from '../http/auth.ts';
 import { errors } from '../http/respond.ts';
@@ -91,12 +91,20 @@ export function registerAuthRoutes(router: Router): void {
     if (!challenge || challenge.expires_at <= new Date().toISOString()) throw errors.unauthorized('验证码已过期，请重新登录');
     const person = rc.app.db.prepare("SELECT * FROM persons WHERE id = ? AND status = 'active'").get(challenge.person_id) as unknown as Record<string, unknown> | undefined;
     if (!person?.totp_secret) throw errors.unauthorized('该账号未启用 2FA');
-    if (!verifyTotp(String(person.totp_secret), code)) {
+    const totpOk = verifyTotp(String(person.totp_secret), code);
+    if (!totpOk) {
+      const normalized = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const recovery = rc.app.db.prepare('SELECT * FROM recovery_codes WHERE person_id = ? AND code_hash = ? AND used_at IS NULL').get(String(person.id), hashToken(normalized)) as unknown as { id: string } | undefined;
+      if (recovery) {
+        rc.app.db.prepare('UPDATE recovery_codes SET used_at = ? WHERE id = ?').run(nowIso(), recovery.id);
+        securityEvent(rc.app.db, { kind: 'login.2fa_recovery', severity: 'warning', subject: String(person.email), ip: requestIp(rc) });
+      } else {
       const attempts = Number(challenge.attempts) + 1;
       rc.app.db.prepare('UPDATE login_challenges SET attempts = ? WHERE token_hash = ?').run(attempts, hashToken(challengeToken));
       securityEvent(rc.app.db, { kind: 'login.2fa_failed', severity: 'warning', subject: String(person.email), ip: requestIp(rc), detail: { attempts } });
       if (attempts >= 6) rc.app.db.prepare('DELETE FROM login_challenges WHERE token_hash = ?').run(hashToken(challengeToken));
       throw errors.unauthorized('验证码不正确');
+      }
     }
     rc.app.db.prepare('DELETE FROM login_challenges WHERE token_hash = ?').run(hashToken(challengeToken));
     const session = createSession(rc.app.db, String(person.id), rc.app.env.sessionTtlHours, rc);
@@ -129,8 +137,15 @@ export function registerAuthRoutes(router: Router): void {
     if (!row.totp_secret) throw errors.badRequest('请先生成 2FA 密钥');
     if (!verifyTotp(row.totp_secret, String(body.code ?? ''))) throw errors.unauthorized('验证码不正确');
     rc.app.db.prepare('UPDATE persons SET totp_enabled = 1 WHERE id = ?').run(actor.person.id);
+    rc.app.db.prepare('DELETE FROM recovery_codes WHERE person_id = ?').run(actor.person.id);
+    const recoveryCodes: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      const code = `${randomToken(4).toUpperCase()}-${randomToken(4).toUpperCase()}`;
+      recoveryCodes.push(code);
+      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/-/g, '')), nowIso());
+    }
     securityEvent(rc.app.db, { kind: '2fa.enable', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
-    rc.json({ ok: true });
+    rc.json({ ok: true, recoveryCodes });
   });
 
   router.post('/api/auth/2fa/disable', async (rc) => {
@@ -142,6 +157,54 @@ export function registerAuthRoutes(router: Router): void {
     rc.app.db.prepare('UPDATE persons SET totp_enabled = 0, totp_secret = NULL WHERE id = ?').run(actor.person.id);
     securityEvent(rc.app.db, { kind: '2fa.disable', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
     rc.json({ ok: true });
+  });
+
+  router.get('/api/auth/sessions', (rc) => {
+    const actor = requireActor(rc);
+    const current = currentSessionHash(rc);
+    const rows = rc.app.db
+      .prepare('SELECT token_hash, created_at, expires_at, ip, user_agent FROM sessions WHERE person_id = ? ORDER BY created_at DESC')
+      .all(actor.person.id) as unknown as Record<string, unknown>[];
+    rc.json({
+      sessions: rows.map((row) => ({
+        id: String(row.token_hash),
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        ip: row.ip,
+        userAgent: row.user_agent,
+        current: row.token_hash === current,
+      })),
+    });
+  });
+
+  router.delete('/api/auth/sessions/:id', (rc) => {
+    const actor = requireActor(rc);
+    const result = rc.app.db.prepare('DELETE FROM sessions WHERE token_hash = ? AND person_id = ?').run(rc.params.id!, actor.person.id);
+    if (Number(result.changes) === 0) throw errors.notFound('会话不存在');
+    securityEvent(rc.app.db, { kind: 'session.revoke', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ ok: true });
+  });
+
+  router.post('/api/auth/sessions/revoke-others', (rc) => {
+    const actor = requireActor(rc);
+    const current = currentSessionHash(rc);
+    const result = rc.app.db.prepare('DELETE FROM sessions WHERE person_id = ? AND token_hash <> ?').run(actor.person.id, current ?? '');
+    securityEvent(rc.app.db, { kind: 'session.revoke_others', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc), detail: { count: Number(result.changes) } });
+    rc.json({ ok: true, revoked: Number(result.changes) });
+  });
+
+  router.post('/api/auth/2fa/recovery-codes', (rc) => {
+    const actor = requireActor(rc);
+    if (actor.viaApiKey) throw errors.forbidden('API Key 不能生成恢复码');
+    const codes: string[] = [];
+    rc.app.db.prepare('DELETE FROM recovery_codes WHERE person_id = ?').run(actor.person.id);
+    for (let i = 0; i < 10; i += 1) {
+      const code = `${randomToken(4).toUpperCase()}-${randomToken(4).toUpperCase()}`;
+      codes.push(code);
+      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/-/g, '')), nowIso());
+    }
+    securityEvent(rc.app.db, { kind: '2fa.recovery_regenerate', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
+    rc.json({ recoveryCodes: codes });
   });
 
   router.post('/api/auth/password', async (rc) => {

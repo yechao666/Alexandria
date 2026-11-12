@@ -131,6 +131,12 @@ export function login(
   return { token, actor: actorFor(rc.app.db, person) };
 }
 
+export function currentSessionHash(rc: RequestContext): string | null {
+  const auth = String(rc.req.headers.authorization ?? '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : cookieToken(rc);
+  return token ? hashToken(token) : null;
+}
+
 export function logout(rc: RequestContext): void {
   const header = String(rc.req.headers.cookie ?? '');
   for (const part of header.split(';')) {

@@ -20,12 +20,13 @@ test('2FA 启用后密码登录需要动态码，验证后建立会话', async (
   const first = await login(base, 'shen@alex.dev');
   const setup = await j<{ secret: string; otpauth: string }>('/api/auth/2fa/setup', first.token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   assert.match(setup.otpauth, /^otpauth:\/\/totp/);
-  const enable = await j<{ ok: boolean }>('/api/auth/2fa/enable', first.token, {
+  const enable = await j<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/enable', first.token, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ code: totpCode(setup.secret) }),
   });
   assert.equal(enable.ok, true);
+  assert.equal(enable.recoveryCodes.length, 10);
   const passwordLogin = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -43,13 +44,17 @@ test('2FA 启用后密码登录需要动态码，验证后建立会话', async (
   const verified = await fetch(`${base}/api/auth/2fa/verify`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ challengeToken: challenge.challengeToken, code: totpCode(setup.secret) }),
+    body: JSON.stringify({ challengeToken: challenge.challengeToken, code: enable.recoveryCodes[0] }),
   });
   const verifiedData = (await verified.json()) as { token: string; person: { email: string } };
   assert.equal(verified.status, 200);
   assert.ok(verifiedData.token);
   const me = await fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${verifiedData.token}` } });
   assert.equal(me.status, 200);
+  const sessions = await j<{ sessions: { current: boolean; id: string }[] }>('/api/auth/sessions', verifiedData.token);
+  assert.ok(sessions.sessions.some((session) => session.current));
+  const revoke = await j<{ revoked: number }>('/api/auth/sessions/revoke-others', verifiedData.token, { method: 'POST' });
+  assert.ok(revoke.revoked >= 0);
   const disable = await j<{ ok: boolean }>('/api/auth/2fa/disable', verifiedData.token, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

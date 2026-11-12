@@ -281,13 +281,14 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
   document.getElementById('security-btn')?.addEventListener('click', async () => {
     const openSecurity = async () => {
       try {
-        const status = await api('/api/auth/2fa');
+        const [status, sessionData] = await Promise.all([api('/api/auth/2fa'), api('/api/auth/sessions').catch(() => ({ sessions: [] }))]);
+        const sessions = (sessionData.sessions ?? []).map((session) => `<div class="between" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small">${session.current ? '<span class="badge jade">当前</span> ' : ''}${escapeHtml(session.ip ?? '未知 IP')}<br><span class="faint" style="font-size:10px">${escapeHtml(session.userAgent ?? '')}</span></span><button class="btn btn-sm btn-ghost" data-revoke-session="${escapeHtml(session.id)}">撤销</button></div>`).join('');
         const twoFactor = status.enabled
           ? `<div class="between"><span>两步验证</span><span class="badge jade">已启用</span></div><div class="field" style="margin-top:12px"><label>输入当前验证码以停用</label><input class="input" id="disable-2fa-code" inputmode="numeric" placeholder="6 位验证码"></div><button class="btn btn-sm" id="disable-2fa">停用两步验证</button>`
           : `<div class="between"><span>两步验证</span><span class="badge outline">未启用</span></div><p class="small muted" style="margin-top:8px">启用后登录需要认证器动态码。</p><button class="btn btn-sm btn-primary" id="setup-2fa">${icon('key', 14)} 启用两步验证</button>`;
         openModal({
           title: '安全设置',
-          body: `<div class="panel" style="box-shadow:none"><div class="panel-head"><h3>账户安全</h3></div><div class="panel-body">${twoFactor}</div></div><div class="panel" style="box-shadow:none;margin-top:12px"><div class="panel-head"><h3>修改密码</h3></div><div class="panel-body"><div class="field"><label>当前密码</label><input class="input" id="current-password" type="password"></div><div class="field" style="margin-top:8px"><label>新密码（至少 10 位，含大小写、数字与符号）</label><input class="input" id="new-password" type="password"></div><button class="btn btn-sm" id="change-password" style="margin-top:10px">更新密码</button></div></div>`,
+          body: `<div class="panel" style="box-shadow:none"><div class="panel-head"><h3>账户安全</h3></div><div class="panel-body">${twoFactor}</div></div><div class="panel" style="box-shadow:none;margin-top:12px"><div class="panel-head"><h3>修改密码</h3></div><div class="panel-body"><div class="field"><label>当前密码</label><input class="input" id="current-password" type="password"></div><div class="field" style="margin-top:8px"><label>新密码（至少 10 位，含大小写、数字与符号）</label><input class="input" id="new-password" type="password"></div><button class="btn btn-sm" id="change-password" style="margin-top:10px">更新密码</button></div></div><div class="panel" style="box-shadow:none;margin-top:12px"><div class="panel-head"><h3>登录会话</h3><button class="btn btn-sm" id="revoke-other-sessions">撤销其他会话</button></div><div class="panel-body">${sessions || '<div class="rail-empty">暂无会话</div>'}</div></div>`,
           footer: `<button class="btn" data-close-modal>关闭</button>`,
           onMount: (modal) => {
             modal.querySelector('#setup-2fa')?.addEventListener('click', async () => {
@@ -301,10 +302,14 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
                   onMount: (inner) => {
                     inner.querySelector('#enable-2fa')?.addEventListener('click', async () => {
                       try {
-                        await api('/api/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code: inner.querySelector('#enable-2fa-code')?.value ?? '' }) });
-                        toast('两步验证已启用', 'success');
+                        const enabled = await api('/api/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code: inner.querySelector('#enable-2fa-code')?.value ?? '' }) });
                         closeModal();
-                        openSecurity();
+                        openModal({
+                          title: '两步验证已启用',
+                          body: `<p class="small muted">请立即保存以下恢复码，每个只能使用一次：</p><div class="mono" style="font-size:12px;background:var(--paper-2);padding:12px;border-radius:8px;line-height:1.9;margin-top:10px">${(enabled.recoveryCodes ?? []).map((code) => escapeHtml(code)).join('<br>')}</div>`,
+                          footer: `<button class="btn btn-primary" data-close-modal>我已保存</button>`,
+                        });
+                        return;
                       } catch (error) { toast(error.message, 'error'); }
                     });
                   },
@@ -318,6 +323,12 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
                 closeModal();
                 openSecurity();
               } catch (error) { toast(error.message, 'error'); }
+            });
+            modal.querySelectorAll('[data-revoke-session]').forEach((button) => button.addEventListener('click', async () => {
+              try { await api(`/api/auth/sessions/${encodeURIComponent(button.dataset.revokeSession)}`, { method: 'DELETE' }); toast('会话已撤销', 'success'); closeModal(); openSecurity(); } catch (error) { toast(error.message, 'error'); }
+            }));
+            modal.querySelector('#revoke-other-sessions')?.addEventListener('click', async () => {
+              try { const result = await api('/api/auth/sessions/revoke-others', { method: 'POST' }); toast(`已撤销 ${result.revoked ?? 0} 个会话`, 'success'); closeModal(); openSecurity(); } catch (error) { toast(error.message, 'error'); }
             });
             modal.querySelector('#change-password')?.addEventListener('click', async () => {
               try {

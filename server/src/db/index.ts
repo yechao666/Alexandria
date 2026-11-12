@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -70,6 +70,11 @@ export function migrate(db: Db): void {
   const personColumns = db.prepare('PRAGMA table_info(persons)').all() as unknown as { name: string }[];
   if (!personColumns.some((column) => column.name === 'totp_secret')) db.exec('ALTER TABLE persons ADD COLUMN totp_secret TEXT');
   if (!personColumns.some((column) => column.name === 'totp_enabled')) db.exec('ALTER TABLE persons ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes (
+    id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_recovery_person ON recovery_codes(person_id, used_at)');
   db.exec(`CREATE TABLE IF NOT EXISTS login_challenges (
     token_hash TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL

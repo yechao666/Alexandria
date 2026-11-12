@@ -42,6 +42,10 @@
 | POST | `/api/auth/2fa/disable` | 用动态码停用 |
 | POST | `/api/auth/2fa/verify` | 密码登录后的第二步验证 |
 | POST | `/api/auth/password` | 修改密码（长度/大小写/数字/符号） |
+| GET | `/api/auth/sessions` | 当前账号会话列表 |
+| DELETE | `/api/auth/sessions/:id` | 撤销指定会话 |
+| POST | `/api/auth/sessions/revoke-others` | 撤销其他会话 |
+| POST | `/api/auth/2fa/recovery-codes` | 重新生成 10 个恢复码 |
 
 ### SCIM 2.0
 

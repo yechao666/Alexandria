@@ -55,6 +55,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_agent TEXT
 );
 
+CREATE TABLE IF NOT EXISTS recovery_codes (
+  id         TEXT PRIMARY KEY,
+  person_id  TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+  code_hash  TEXT NOT NULL,
+  used_at    TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_person ON recovery_codes(person_id, used_at);
+
 CREATE TABLE IF NOT EXISTS login_challenges (
   token_hash TEXT PRIMARY KEY,
   person_id  TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
