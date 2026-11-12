@@ -1,0 +1,11 @@
+node_modules/
+data/*.db
+data/*.db-*
+data/uploads/*
+data/thumbnails/*
+!data/uploads/.gitkeep
+!data/thumbnails/.gitkeep
+.env
+node_modules
+.DS_Store
+data/seed/

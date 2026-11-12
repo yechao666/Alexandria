@@ -1,0 +1,22 @@
+{
+  "name": "alexandria",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Alexandria — 基于 LLM Wiki 理念与本体论的企业知识库",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/src/main.ts",
+    "dev": "node --env-file-if-exists=.env --watch server/src/main.ts",
+    "seed": "node --env-file-if-exists=.env server/src/seed/run-seed.ts --force",
+    "test": "node --test 'tests/**/*.test.ts'",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

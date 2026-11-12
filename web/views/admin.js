@@ -1,0 +1,280 @@
+import {
+  api,
+  state,
+  icon,
+  escapeHtml as esc,
+  timeAgo,
+  avatar,
+  roleBadge,
+  toast,
+  openModal,
+  closeModal,
+  go,
+  textField,
+  selectField,
+  formValues,
+  loadBootstrap,
+} from '../assets/core.js';
+
+const TABS = [
+  { key: 'teams', label: '团队与成员' },
+  { key: 'people', label: '成员目录' },
+  { key: 'wecom', label: '企业微信' },
+  { key: 'keys', label: 'API 密钥' },
+];
+
+export async function renderAdmin(tab = 'teams') {
+  const isAdmin = Boolean(state.me?.person?.isAdmin);
+  const [teamsData, peopleData, wecom, keysData] = await Promise.all([
+    api('/api/teams'),
+    api('/api/people'),
+    api('/api/integrations/wecom').catch(() => null),
+    api('/api/api-keys').catch(() => ({ keys: [] })),
+  ]);
+  const teams = teamsData.teams ?? [];
+  const people = peopleData.people ?? [];
+  const teamCards = flattenTeams(teams).map((team) => teamCard(team, isAdmin)).join('');
+  const peopleRows = people
+    .map(
+      (person) => `<tr><td><div class="row">${avatar(person, 'sm')}<span>${esc(person.name)}</span></div></td><td class="mono" style="font-size:11px">${esc(person.email)}</td><td>${esc(person.title)}</td><td>${person.isAdmin ? '<span class="badge clay">管理员</span>' : '<span class="badge outline">成员</span>'}</td><td class="faint">${esc(person.status ?? 'active')}</td></tr>`,
+    )
+    .join('');
+  const keyRows = (keysData.keys ?? [])
+    .map(
+      (key) => `<tr><td><b>${esc(key.name)}</b></td><td class="mono">${esc(key.prefix)}…</td><td><span class="badge ${key.scope === 'read' ? 'outline' : 'jade'}">${key.scope}</span></td><td class="faint">${key.last_used_at ? timeAgo(key.last_used_at) : '从未使用'}</td><td>${key.revoked_at ? '<span class="badge clay">已吊销</span>' : `<button class="btn btn-sm btn-ghost" data-revoke-key="${esc(key.id)}">吊销</button>`}</td></tr>`,
+    )
+    .join('');
+
+  const wecomBody = wecom
+    ? `<div class="grid grid-2">
+        <div class="panel wecom-card">
+          <div class="panel-head"><h3>企业微信接入</h3><span class="badge ${wecom.configured ? 'jade' : 'ochre'}">${wecom.configured ? '已配置' : '待配置'}</span></div>
+          <div class="panel-body">
+            <p class="muted small">账号体系按“组织统一身份优先”设计：生产环境用企业微信 OAuth 登录，本地开发可接 wecom-mock。人员与团队通过 wecom_userid / wecom_dept_id 绑定。</p>
+            <div class="kv" style="margin-top:12px">
+              <dt>CorpID</dt><dd>${esc(wecom.corpId ?? '未配置')}</dd>
+              <dt>AgentID</dt><dd>${esc(wecom.agentId ?? '未配置')}</dd>
+              <dt>能力</dt><dd>${wecom.capabilities.map((item) => `<span class="badge outline">${esc(item)}</span>`).join(' ')}</dd>
+            </div>
+            ${isAdmin ? `<form id="wecom-form" class="form-grid" style="margin-top:14px">
+              ${textField({ label: 'CorpID', name: 'corpId', value: wecom.corpId ?? '' })}
+              ${textField({ label: 'AgentID', name: 'agentId', value: wecom.agentId ?? '' })}
+              ${textField({ label: 'Secret', name: 'secret', type: 'password', span: true, placeholder: '仅写入 meta，不回显' })}
+            </form>
+            <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" id="save-wecom">保存配置</button><button class="btn btn-sm" id="sync-wecom">生成同步计划</button></div>` : ''}
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>组织映射</h3><span class="small muted">${wecom.teams.length} 个团队 · ${wecom.persons.length} 位成员</span></div>
+          <div class="panel-body" style="padding:0;max-height:360px;overflow:auto"><table class="org-table"><thead><tr><th>团队 / 成员</th><th>企业微信 ID</th><th>状态</th></tr></thead><tbody>
+            ${wecom.teams.map((team) => `<tr><td>${esc(team.name)}</td><td class="mono">${esc(team.wecom_dept_id ?? '—')}</td><td>${team.wecom_dept_id ? '<span class="badge jade">已映射</span>' : '<span class="badge ochre">待建</span>'}</td></tr>`).join('')}
+            ${wecom.persons.slice(0, 20).map((person) => `<tr><td>${esc(person.name)}</td><td class="mono">${esc(person.wecom_userid ?? '—')}</td><td>${person.wecom_userid ? '<span class="badge jade">已绑定</span>' : '<span class="badge outline">未绑定</span>'}</td></tr>`).join('')}
+          </tbody></table></div>
+        </div>
+      </div>`
+    : '<div class="empty">企业微信集成信息不可用</div>';
+
+  const bodies = {
+    teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
+    people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
+      <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>角色</th><th>状态</th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
+    wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知的适配器边界。</div></div><span class="badge outline">分阶段实现</span></div>${wecomBody}`,
+    keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
+      <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>名称</th><th>前缀</th><th>范围</th><th>最近使用</th><th></th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" class="muted" style="padding:18px">还没有 API 密钥</td></tr>'}</tbody></table></div></div>
+      <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>智能体接入</h3><a class="link small" href="#/agent">查看接入指南 ${icon('arrow', 13)}</a></div><div class="panel-body"><div class="endpoint"><span class="method">POST</span><code>/api/agent/search</code><span class="desc">检索知识页与文献</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/ask</code><span class="desc">带引用的知识合成</span></div><div class="endpoint"><span class="method">POST</span><code>/api/agent/page</code><span class="desc">创建或更新知识页</span></div></div></div>`,
+  };
+
+  return `
+    <div class="eyebrow">ORGANIZATION · RBAC · INTEGRATIONS</div>
+    <h1 style="font-size:42px;letter-spacing:-.03em;margin:8px 0 4px">团队与权限</h1>
+    <p class="muted" style="max-width:720px">知识库属于团队，权限按组织、团队、个人三层授予；成员离开团队后自动失去对应访问。所有写入都会进入审计。</p>
+    <div class="admin-layout" style="margin-top:22px">
+      <nav class="admin-nav">${TABS.map((item) => `<button class="${tab === item.key ? 'active' : ''}" data-admin-tab="${item.key}">${item.label}</button>`).join('')}</nav>
+      <div>${bodies[tab] ?? bodies.teams}</div>
+    </div>`;
+}
+
+export function mountAdmin(tab = 'teams') {
+  const isAdmin = Boolean(state.me?.person?.isAdmin);
+  document.querySelectorAll('[data-admin-tab]').forEach((button) => {
+    button.addEventListener('click', () => go(`#/admin?tab=${button.dataset.adminTab}`));
+  });
+  document.querySelectorAll('[data-member-team]').forEach((button) => {
+    button.addEventListener('click', () => openMemberEditor(button.dataset.memberTeam));
+  });
+  document.querySelectorAll('[data-revoke-key]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('确认吊销该密钥？')) return;
+      try {
+        await api(`/api/api-keys/${encodeURIComponent(button.dataset.revokeKey)}`, { method: 'DELETE' });
+        toast('密钥已吊销', 'success');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+  });
+  document.getElementById('new-team')?.addEventListener('click', openTeamEditor);
+  document.getElementById('new-person')?.addEventListener('click', openPersonEditor);
+  document.getElementById('new-key')?.addEventListener('click', openKeyEditor);
+  document.getElementById('save-wecom')?.addEventListener('click', async () => {
+    const form = document.getElementById('wecom-form');
+    if (!form) return;
+    try {
+      await api('/api/integrations/wecom/config', { method: 'POST', body: formValues(form) });
+      toast('配置已保存', 'success');
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+  document.getElementById('sync-wecom')?.addEventListener('click', async () => {
+    try {
+      const result = await api('/api/integrations/wecom/sync', { method: 'POST' });
+      openModal({
+        title: '企业微信同步计划（dry run）',
+        wide: true,
+        body: `<div class="small muted" style="margin-bottom:12px">${esc(result.note)}</div><div class="json" style="font-family:var(--mono);font-size:11px;white-space:pre-wrap;background:var(--paper-2);padding:14px;border-radius:9px;max-height:400px;overflow:auto">${esc(JSON.stringify(result.plan, null, 2))}</div>`,
+        footer: `<button class="btn btn-primary" data-close-modal>知道了</button>`,
+      });
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+}
+
+function teamCard(team, isAdmin) {
+  return `<div class="team-card">
+    <div class="head">
+      <span class="avatar jade">${esc(team.name.slice(0, 2))}</span>
+      <div style="min-width:0"><div class="name">${esc(team.name)}</div><div class="desc">${esc(team.description || '—')}</div></div>
+      <div style="margin-left:auto" class="row">${team.wecomDeptId ? `<span class="badge outline">企微 ${esc(team.wecomDeptId)}</span>` : ''}${isAdmin ? `<button class="btn btn-sm btn-ghost" data-member-team="${esc(team.id)}">成员</button>` : ''}</div>
+    </div>
+    <div style="padding:0 16px 14px"><div class="member-chips">${team.members.map((member) => `<span class="member-chip">${avatar(member, 'sm')}${esc(member.name)}<span class="role">${member.role === 'lead' ? '负责人' : '成员'}</span></span>`).join('') || '<span class="faint small">暂无成员</span>'}</div></div>
+  </div>`;
+}
+
+function flattenTeams(teams, depth = 0, out = []) {
+  for (const team of teams ?? []) {
+    out.push({ ...team, depth });
+    flattenTeams(team.children ?? [], depth + 1, out);
+  }
+  return out;
+}
+
+function openTeamEditor() {
+  const teams = flattenTeams(state.teams).map((team) => ({ value: team.id, label: `${'— '.repeat(team.depth)}${team.name}` }));
+  openModal({
+    title: '新建团队',
+    body: `<form id="team-form" class="form-grid">
+      ${textField({ label: '团队名称', name: 'name' })}
+      ${selectField({ label: '上级团队', name: 'parentId', options: [{ value: '', label: '顶层' }, ...teams] })}
+      ${textField({ label: '说明', name: 'description', span: true })}
+      ${textField({ label: '企业微信部门 ID', name: 'wecomDeptId' })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-team">创建团队</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-team')?.addEventListener('click', async () => {
+        try {
+          await api('/api/teams', { method: 'POST', body: formValues(modal.querySelector('#team-form')) });
+          toast('团队已创建', 'success');
+          closeModal();
+          await loadBootstrap();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openPersonEditor() {
+  openModal({
+    title: '邀请成员',
+    body: `<form id="person-form" class="form-grid">
+      ${textField({ label: '姓名', name: 'name' })}
+      ${textField({ label: '邮箱', name: 'email', type: 'email' })}
+      ${textField({ label: '职位', name: 'title' })}
+      ${textField({ label: '初始密码（至少 8 位）', name: 'password', type: 'password' })}
+      ${selectField({ label: '角色', name: 'role', options: [{ value: 'member', label: '普通成员' }, { value: 'admin', label: '组织管理员' }] })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-person">创建账号</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-person')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#person-form'));
+        try {
+          await api('/api/people', { method: 'POST', body: { ...values, isAdmin: values.role === 'admin' } });
+          toast('成员已创建', 'success');
+          closeModal();
+          await loadBootstrap();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openMemberEditor(teamId) {
+  const team = flattenTeams(state.teams).find((item) => item.id === teamId);
+  const existing = new Set((team?.members ?? []).map((member) => member.id));
+  const options = state.people.filter((person) => !existing.has(person.id)).map((person) => ({ value: person.id, label: `${person.name} · ${person.email}` }));
+  openModal({
+    title: `管理成员 · ${team?.name ?? ''}`,
+    body: `<form id="member-form" class="form-grid">
+      ${selectField({ label: '添加成员', name: 'personId', options: [{ value: '', label: '选择成员' }, ...options], span: true })}
+      ${selectField({ label: '团队角色', name: 'role', options: [{ value: 'member', label: '成员' }, { value: 'lead', label: '负责人' }] })}
+    </form>
+    <div class="hairline"></div>
+    <div class="small faint" style="margin-bottom:8px">当前成员</div>
+    <div class="member-chips">${(team?.members ?? []).map((member) => `<span class="member-chip">${avatar(member, 'sm')}${esc(member.name)}<span class="role">${member.role}</span></span>`).join('') || '<span class="faint">暂无</span>'}</div>`,
+    footer: `<button class="btn" data-close-modal>关闭</button><button class="btn btn-primary" id="save-member">添加</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-member')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#member-form'));
+        if (!values.personId) return;
+        try {
+          await api(`/api/teams/${encodeURIComponent(teamId)}/members`, { method: 'POST', body: values });
+          toast('成员已加入团队', 'success');
+          closeModal();
+          await loadBootstrap();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openKeyEditor() {
+  openModal({
+    title: '创建 API 密钥',
+    body: `<form id="key-form" class="form-grid">
+      ${textField({ label: '名称', name: 'name', placeholder: '例如：DSH 编译智能体', span: true })}
+      ${selectField({ label: '范围', name: 'scope', options: [{ value: 'read', label: '只读：检索与读取' }, { value: 'write', label: '读写：检索、编译、写入' }] })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-key">创建</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-key')?.addEventListener('click', async () => {
+        try {
+          const result = await api('/api/api-keys', { method: 'POST', body: formValues(modal.querySelector('#key-form')) });
+          modal.querySelector('.modal-body').innerHTML = `<div class="error-box" style="background:var(--jade-soft);color:var(--jade);border-color:transparent">密钥只显示一次，请立即复制保存。</div><div class="code-block" style="margin-top:12px;white-space:pre-wrap;word-break:break-all">${esc(result.token)}</div><div class="btn-row" style="margin-top:12px"><button class="btn btn-sm" id="copy-token">复制密钥</button></div>`;
+          modal.querySelector('#copy-token')?.addEventListener('click', async () => {
+            await navigator.clipboard.writeText(result.token).catch(() => {});
+            toast('已复制', 'success');
+          });
+          modal.querySelector('.modal-foot').innerHTML = '<button class="btn btn-primary" id="done-key">我已保存</button>';
+          modal.querySelector('#done-key')?.addEventListener('click', async () => {
+            closeModal();
+            await loadBootstrap();
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
+          });
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}

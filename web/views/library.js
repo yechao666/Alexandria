@@ -1,0 +1,522 @@
+import {
+  api,
+  state,
+  icon,
+  escapeHtml as esc,
+  fmtNumber,
+  timeAgo,
+  libraryColor,
+  roleBadge,
+  classBadge,
+  statusBadge,
+  confidence,
+  openModal,
+  closeModal,
+  toast,
+  go,
+  emptyState,
+  textField,
+  selectField,
+  textArea,
+  formValues,
+  avatar,
+  loadBootstrap,
+} from '../assets/core.js';
+import { mountGraph } from '../assets/graph.js';
+
+const TABS = [
+  { key: 'catalog', label: '目录' },
+  { key: 'pages', label: '知识页' },
+  { key: 'sources', label: '文献' },
+  { key: 'graph', label: '图谱' },
+  { key: 'settings', label: '设置' },
+];
+
+export async function renderLibrary(ref, tab = 'catalog') {
+  const [detail, pagesData, sourcesData] = await Promise.all([
+    api(`/api/libraries/${encodeURIComponent(ref)}`),
+    api(`/api/libraries/${encodeURIComponent(ref)}/pages?limit=400`).catch(() => ({ pages: [], total: 0 })),
+    api(`/api/libraries/${encodeURIComponent(ref)}/sources?limit=300`).catch(() => ({ sources: [], total: 0 })),
+  ]);
+  const library = detail.library;
+  state.currentLibrary = detail;
+  const pages = pagesData.pages ?? [];
+  const sources = sourcesData.sources ?? [];
+  const nodes = flattenNodes(detail.nodes ?? []);
+  const selected = new URLSearchParams(location.hash.split('?')[1] ?? '').get('node') ?? '';
+  const visiblePages = pages.filter((page) => !selected || page.nodeId === selected);
+  const visibleSources = sources.filter((source) => !selected || source.nodeId === selected);
+  const color = libraryColor(library.color);
+
+  const pageCards = visiblePages
+    .map((page) => pageCard(page))
+    .join('');
+  const sourceRows = visibleSources.map((source) => sourceRow(source)).join('');
+  const tabsHtml = TABS.map(
+    (item) => `<button class="tab ${tab === item.key ? 'active' : ''}" data-tab="${item.key}">${item.label}${item.key === 'pages' ? ` <span class="faint">${pages.length}</span>` : item.key === 'sources' ? ` <span class="faint">${sources.length}</span>` : ''}</button>`,
+  ).join('');
+
+  const bodyByTab = {
+    catalog: `
+      <div class="library-layout">
+        ${catalogTree(nodes, detail.nodes, selected)}
+        <div class="content-pad">
+          <div class="list-toolbar">
+            <div class="section-head" style="margin:0;flex:1"><div><h2 style="font-size:22px">${selected ? esc(nodes.find((node) => node.id === selected)?.name ?? '目录') : '全部馆藏'}</h2><div class="sub">知识页 ${visiblePages.length} · 文献 ${visibleSources.length}</div></div></div>
+            <input class="input" id="library-filter" placeholder="筛选标题…" style="width:180px">
+            ${detail.canEdit ? `<button class="btn btn-sm" id="new-page">${icon('plus', 14)} 新建页</button>` : ''}
+          </div>
+          <div class="page-grid" id="page-grid">${pageCards || emptyState('这里还没有知识页', '上传一份资料，Alexandria 会在入库时编译出概念页与文献页。', detail.canEdit ? `<a class="btn btn-clay" href="#/upload/${encodeURIComponent(library.slug)}">${icon('upload', 15)} 上传资料</a>` : '')}</div>
+          <div class="section-head" style="margin-top:28px"><div><h2 style="font-size:20px">文献</h2><div class="sub">原始文件保留，可随时回溯与重编译</div></div>${detail.canEdit ? `<a class="link small" href="#/upload/${encodeURIComponent(library.slug)}">上传 ${icon('plus', 13)}</a>` : ''}</div>
+          <div class="source-list">${sourceRows || '<div class="rail-empty">还没有文献。</div>'}</div>
+        </div>
+      </div>`,
+    pages: `
+      <div class="list-toolbar">
+        <input class="input" id="library-filter" placeholder="筛选知识页…" style="width:260px">
+        <select class="select" id="class-filter"><option value="">全部类型</option>${detail.classes.map((klass) => `<option value="${esc(klass.key)}">${esc(klass.name)}</option>`).join('')}</select>
+        <span class="small faint">${pages.length} 个知识页</span>
+        ${detail.canEdit ? `<button class="btn btn-sm" id="new-page" style="margin-left:auto">${icon('plus', 14)} 新建页</button>` : ''}
+      </div>
+      <div class="page-grid" id="page-grid">${pageCards || emptyState('没有匹配的知识页', '换个类型或关键词试试。')}</div>`,
+    sources: `
+      <div class="list-toolbar">
+        <input class="input" id="library-filter" placeholder="筛选文献…" style="width:260px">
+        <span class="small faint">${sources.length} 份馆藏</span>
+        ${detail.canEdit ? `<a class="btn btn-sm btn-clay" href="#/upload/${encodeURIComponent(library.slug)}" style="margin-left:auto">${icon('upload', 14)} 上传文献</a>` : ''}
+      </div>
+      <div class="source-list" id="source-list">${sourceRows || emptyState('还没有文献', '支持 PDF、Word、PPT、Excel、TeX、RTF、WPS、图片与 Markdown 等格式。')}</div>`,
+    graph: `
+      <div class="between" style="margin-bottom:14px"><div><h2 style="font-size:22px">类型化图谱</h2><div class="sub">节点大小约等于连接度；颜色代表本体类型；点击进入知识页。</div></div><button class="btn btn-sm" id="graph-fit">${icon('refresh', 14)} 重置视图</button></div>
+      <div class="graph-shell"><canvas class="graph-canvas" id="library-graph"></canvas><div class="graph-legend" id="graph-legend"></div></div>`,
+    settings: settingsTab(detail, library, color),
+  };
+
+  return `
+    <div class="library-hero">
+      <div>
+        <div class="row small muted" style="margin-bottom:10px"><a href="#/">总览</a><span>/</span><span>${esc(library.name)}</span></div>
+        <div class="library-title-row">
+          <span class="library-emblem" style="--lib-color:${color}">${icon(library.icon === 'terminal' ? 'terminal' : library.icon === 'flask' ? 'flask' : library.icon === 'lock' ? 'lock' : library.icon === 'compass' ? 'compass' : 'book', 27)}</span>
+          <div>
+            <div class="row" style="gap:8px"><h1>${esc(library.name)}</h1>${roleBadge(detail.role)}${library.visibility === 'private' ? '<span class="badge clay">私有</span>' : ''}</div>
+            <div class="desc">${esc(library.description)}</div>
+            <div class="library-stats">
+              <div><b>${fmtNumber(detail.counts.pages)}</b>知识页</div>
+              <div><b>${fmtNumber(detail.counts.sources)}</b>文献</div>
+              <div><b>${fmtNumber(detail.counts.links)}</b>关联</div>
+              <div><b>${fmtNumber(detail.counts.claims)}</b>主张</div>
+              <div><b>${fmtNumber(detail.counts.conflicts)}</b>待裁决</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        ${detail.canEdit ? `<a class="btn btn-primary" href="#/upload/${encodeURIComponent(library.slug)}">${icon('upload', 15)} 上传资料</a>` : ''}
+        <a class="btn" href="#/search?library=${encodeURIComponent(library.slug)}">${icon('search', 15)} 检索</a>
+      </div>
+    </div>
+    <div class="tabs">${tabsHtml}</div>
+    ${bodyByTab[tab] ?? bodyByTab.catalog}`;
+}
+
+export async function mountLibrary(ref, tab = 'catalog') {
+  document.querySelectorAll('[data-tab]').forEach((button) => {
+    button.addEventListener('click', () => go(`#/library/${encodeURIComponent(ref)}?tab=${button.dataset.tab}`));
+  });
+  const detail = state.currentLibrary;
+  if (!detail) return;
+  const library = detail.library;
+
+  if (tab === 'graph') {
+    const canvas = document.getElementById('library-graph');
+    if (canvas) {
+      try {
+        const graph = await api(`/api/libraries/${encodeURIComponent(library.id)}/graph?limit=300`);
+        drawGraph(canvas, graph);
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    }
+    document.getElementById('graph-fit')?.addEventListener('click', () => location.reload());
+    return;
+  }
+
+  document.getElementById('new-page')?.addEventListener('click', () => openPageEditor(library, detail));
+  document.getElementById('new-node')?.addEventListener('click', () => openNodeEditor(library, detail));
+  document.getElementById('add-grant')?.addEventListener('click', () => openGrantEditor(library, detail));
+  document.getElementById('new-class')?.addEventListener('click', () => openClassEditor(library));
+  bindCatalogTree(ref, tab);
+  bindFilter();
+  bindSourceRows();
+  bindLibrarySettings(library, detail);
+}
+
+function flattenNodes(nodes, depth = 0, out = []) {
+  for (const node of nodes ?? []) {
+    out.push({ id: node.id, name: node.name, depth, pageCount: node.pageCount, sourceCount: node.sourceCount, code: node.code, kind: node.kind });
+    flattenNodes(node.children ?? [], depth + 1, out);
+  }
+  return out;
+}
+
+function catalogTree(flat, tree, selected) {
+  const all = `<div class="catalog-item ${!selected ? 'active' : ''}" data-node=""><span class="code">ALL</span><span>全部</span><span class="count">${flat.reduce((sum, node) => sum + node.pageCount, 0)}</span></div>`;
+  return `<aside class="catalog"><div class="catalog-head">馆藏目录</div>${all}${flat
+    .map(
+      (node) => `<div class="catalog-item ${selected === node.id ? 'active' : ''}" data-node="${esc(node.id)}" style="padding-left:${9 + node.depth * 14}px"><span class="code">${esc(node.code || '·')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(node.name)}</span><span class="count">${node.pageCount}</span></div>`,
+    )
+    .join('')}${tree?.length === 0 ? '<div class="rail-empty">暂无目录</div>' : ''}</aside>`;
+}
+
+function bindCatalogTree(ref, tab) {
+  document.querySelectorAll('[data-node]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const node = item.dataset.node;
+      go(`#/library/${encodeURIComponent(ref)}?tab=${tab}${node ? `&node=${encodeURIComponent(node)}` : ''}`);
+    });
+  });
+}
+
+function bindFilter() {
+  const input = document.getElementById('library-filter');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll('#page-grid .page-card, #source-list .source-row').forEach((card) => {
+      card.style.display = (card.dataset.search ?? card.textContent.toLowerCase()).includes(q) ? '' : 'none';
+    });
+  });
+  const classFilter = document.getElementById('class-filter');
+  if (classFilter) {
+    classFilter.addEventListener('change', () => {
+      const value = classFilter.value;
+      document.querySelectorAll('#page-grid .page-card').forEach((card) => {
+        card.style.display = !value || card.dataset.class === value ? '' : 'none';
+      });
+    });
+  }
+}
+
+function pageCard(page) {
+  return `<a class="page-card" href="#/page/${encodeURIComponent(page.id)}" data-class="${esc(page.classKey)}" data-search="${esc(`${page.title} ${page.summary} ${(page.tags ?? []).join(' ')}`.toLowerCase())}">
+    <div class="top">${classBadge(page)}${page.status !== 'active' ? statusBadge(page.status) : ''}<span class="score" style="margin-left:auto">v${page.version}</span></div>
+    <h3>${esc(page.title)}</h3>
+    <div class="summary">${esc(page.summary || page.tldr || '')}</div>
+    <div class="foot"><span class="tags">${(page.tags ?? []).slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('')}</span><span style="margin-left:auto">${confidence(page.confidence)}</span><span>${timeAgo(page.updatedAt)}</span></div>
+  </a>`;
+}
+
+function sourceRow(source) {
+  const status = source.status === 'ready' ? 'jade' : source.status === 'failed' ? 'clay' : 'ochre';
+  return `<div class="source-row" data-source="${esc(source.id)}" data-search="${esc(`${source.title} ${source.filename}`.toLowerCase())}" style="cursor:pointer">
+    <span class="file-icon">${icon(source.kind === 'image' ? 'image' : 'file', 18)}</span>
+    <span class="info"><span class="name">${esc(source.title)}</span><span class="meta">${esc(source.filename)} · ${esc(source.kind)} · ${fmtNumber(source.wordCount)} 字${source.pageCount ? ` · ${source.pageCount} 页` : ''}</span></span>
+    <span class="badge ${status}">${source.status === 'ready' ? '已编译' : source.status === 'failed' ? '失败' : '处理中'}</span>
+    <span class="faint small">${timeAgo(source.createdAt)}</span>
+    <span class="icon-btn">${icon('chevron', 15)}</span>
+  </div>`;
+}
+
+function bindSourceRows() {
+  document.querySelectorAll('[data-source]').forEach((row) => {
+    row.addEventListener('click', () => openSource(row.dataset.source));
+  });
+}
+
+export async function openSource(sourceId) {
+  try {
+    const data = await api(`/api/sources/${encodeURIComponent(sourceId)}`);
+    const source = data.source;
+    const pages = (source.compiledPages ?? []).map(
+      (page) => `<a class="rail-item" href="#/page/${encodeURIComponent(page.id)}" style="padding:6px 0"><span class="dot" style="background:${libraryColor(page.classColor)}"></span><span>${esc(page.title)} <span class="faint">· ${esc(page.className)}</span></span></a>`,
+    ).join('');
+    const assets = (source.assets ?? [])
+      .map(
+        (asset) => `<a class="rail-item" href="${asset.url}" target="_blank" rel="noopener"><span class="dot" style="background:var(--ochre)"></span><span>${esc(asset.filename)}</span></a>`,
+      )
+      .join('');
+    const log = (source.job?.log ?? []).slice(-14).map((line) => `<div class="timeline-item"><span class="pip"></span><div class="text mono" style="font-size:10.5px">${esc(line)}</div></div>`).join('');
+    openModal({
+      title: source.title,
+      wide: true,
+      body: `
+        <div class="grid grid-2">
+          <div>
+            <div class="chip-row" style="margin-bottom:12px">${statusBadge(source.status)}<span class="badge outline">${esc(source.kind)}</span><span class="badge">${fmtNumber(source.wordCount)} 字</span>${source.pageCount ? `<span class="badge">${source.pageCount} 页</span>` : ''}</div>
+            <div class="kv">
+              <dt>原始文件</dt><dd>${esc(source.filename)}</dd>
+              <dt>大小</dt><dd>${fmtNumber(source.size)} B</dd>
+              <dt>状态</dt><dd>${esc(source.status)}${source.error ? ` · ${esc(source.error)}` : ''}</dd>
+              <dt>入库时间</dt><dd>${esc(new Date(source.createdAt).toLocaleString('zh-CN'))}</dd>
+              <dt>SHA-256</dt><dd class="mono" style="font-size:9.5px;word-break:break-all">${esc(source.sha256)}</dd>
+            </div>
+            <div class="answer-card" style="margin-top:16px;padding:14px"><div class="small muted">摘要</div><div style="margin-top:4px;font-size:13px;line-height:1.7">${esc(source.excerpt || '—')}</div></div>
+            ${assets ? `<div style="margin-top:16px"><div class="small faint" style="margin-bottom:6px">附件与图片</div>${assets}</div>` : ''}
+          </div>
+          <div>
+            <div class="small faint" style="margin-bottom:6px">编译出的知识页</div>
+            <div class="rail-list">${pages || '<div class="rail-empty">尚未编译</div>'}</div>
+            ${log ? `<div class="small faint" style="margin:16px 0 6px">处理日志</div><div class="timeline">${log}</div>` : ''}
+          </div>
+        </div>`,
+      footer: `<a class="btn" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('external', 14)} 原始文件</a>${data.canEdit ? `<button class="btn" id="reprocess-source">${icon('refresh', 14)} 重新编译</button>` : ''}<button class="btn btn-primary" data-close-modal>关闭</button>`,
+      onMount: (modal) => {
+        modal.querySelector('#reprocess-source')?.addEventListener('click', async () => {
+          try {
+            await api(`/api/sources/${encodeURIComponent(source.id)}/reprocess`, { method: 'POST' });
+            toast('已加入编译队列', 'success');
+            closeModal();
+          } catch (error) {
+            toast(error.message, 'error');
+          }
+        });
+      },
+    });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function settingsTab(detail, library, color) {
+  if (!detail.canEdit) {
+    return `<div class="panel panel-pad"><h3>无权修改</h3><p class="muted">你对该知识库只有只读权限。可以联系所有者申请编辑权限。</p></div>`;
+  }
+  const grants = (detail.grants ?? [])
+    .map(
+      (grant) => `<tr><td><span class="badge outline">${grant.subject_type === 'person' ? '个人' : grant.subject_type === 'team' ? '团队' : '组织'}</span></td><td>${esc(grant.subjectName)}</td><td>${roleBadge(grant.role)}</td><td class="faint">${timeAgo(grant.created_at)}</td><td><button class="btn btn-sm btn-ghost" data-revoke="${esc(grant.id)}">移除</button></td></tr>`,
+    )
+    .join('');
+  const classes = (detail.classes ?? [])
+    .map(
+      (klass) => `<tr><td><span class="badge ${klass.color}">${esc(klass.name)}</span></td><td class="mono">${esc(klass.key)}</td><td class="muted">${esc(klass.description)}</td><td>${klass.builtin ? '<span class="badge outline">内置</span>' : ''}</td></tr>`,
+    )
+    .join('');
+  return `
+    <div class="grid grid-2">
+      <div class="panel">
+        <div class="panel-head"><h3>基本信息</h3>${roleBadge(detail.role)}</div>
+        <div class="panel-body">
+          <form id="library-settings-form" class="form-grid">
+            ${textField({ label: '名称', name: 'name', value: library.name })}
+            ${selectField({ label: '可见性', name: 'visibility', value: library.visibility, options: [
+              { value: 'internal', label: '组织内' }, { value: 'private', label: '私有' }, { value: 'public', label: '公开' },
+            ] })}
+            ${textArea({ label: '简介', name: 'description', value: library.description, rows: 3 })}
+            ${selectField({ label: '主色', name: 'color', value: library.color, options: [
+              { value: 'jade', label: '玉' }, { value: 'clay', label: '陶' }, { value: 'ochre', label: '赭' },
+              { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
+            ] })}
+          </form>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>访问授权</h3>${detail.role === 'owner' ? `<button class="btn btn-sm" id="add-grant">${icon('plus', 14)} 授权</button>` : ''}</div>
+        <div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>类型</th><th>对象</th><th>角色</th><th>授予时间</th><th></th></tr></thead><tbody>${grants || '<tr><td colspan="5" class="muted" style="padding:18px">暂无额外授权；团队归属会自动授权。</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>本体类型</h3><div class="row"><span class="small muted">${detail.classes.length} 个类型</span>${detail.canEdit ? `<button class="btn btn-sm" id="new-class">${icon('plus', 14)} 新建类型</button>` : ''}</div></div>
+        <div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>类型</th><th>Key</th><th>说明</th><th></th></tr></thead><tbody>${classes}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>危险区</h3></div>
+        <div class="panel-body">
+          <p class="muted small">删除知识库会同时删除知识页、文献、索引与授权。原始文件目录也会被移除，且不可恢复。</p>
+          <button class="btn btn-danger btn-sm" id="delete-library">删除知识库</button>
+          <div class="hairline"></div>
+          <div class="small faint">库 ID：<span class="mono">${esc(library.id)}</span><br>创建者：${esc(detail.library.created_by ?? '—')}<br>创建时间：${esc(new Date(library.created_at).toLocaleString('zh-CN'))}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindLibrarySettings(library, detail) {
+  document.getElementById('save-library')?.addEventListener('click', async () => {
+    const form = document.getElementById('library-settings-form');
+    if (!form) return;
+    try {
+      await api(`/api/libraries/${encodeURIComponent(library.id)}`, { method: 'PATCH', body: formValues(form) });
+      toast('设置已保存', 'success');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+  document.querySelectorAll('[data-revoke]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('确认移除这条授权？')) return;
+      try {
+        await api(`/api/grants/${encodeURIComponent(button.dataset.revoke)}`, { method: 'DELETE' });
+        toast('授权已移除', 'success');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (error) {
+        toast(error.message, 'error');
+      }
+    });
+  });
+  document.getElementById('delete-library')?.addEventListener('click', async () => {
+    const name = prompt(`输入知识库名称「${library.name}」以确认删除：`);
+    if (name !== library.name) return;
+    try {
+      await api(`/api/libraries/${encodeURIComponent(library.id)}`, { method: 'DELETE' });
+      toast('知识库已删除', 'success');
+      await loadBootstrap();
+      go('#/');
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  });
+}
+
+function drawGraph(canvas, graph) {
+  const legend = document.getElementById('graph-legend');
+  const typeMap = new Map();
+  for (const node of graph.nodes) {
+    typeMap.set(node.classKey, { name: node.className, color: node.color });
+  }
+  if (legend) {
+    legend.innerHTML = [...typeMap.entries()]
+      .map(([key, item]) => `<span class="item"><span class="swatch" style="background:${libraryColor(item.color)}"></span>${esc(item.name)}</span>`)
+      .join('') + `<span class="item"><span class="swatch" style="background:var(--ochre)"></span>草稿</span>`;
+  }
+  mountGraph(canvas, graph, {
+    onSelect: (node) => go(`#/page/${encodeURIComponent(node.id)}`),
+  });
+}
+
+export function openPageEditor(library, detail, page = null) {
+  const classOptions = (detail.classes ?? []).map((klass) => ({ value: klass.key, label: klass.name }));
+  openModal({
+    title: page ? '编辑知识页' : '新建知识页',
+    wide: true,
+    body: `<form id="page-form" class="form-grid">
+      ${textField({ label: '标题', name: 'title', value: page?.title ?? '', placeholder: '一个概念、一个决策、一份方法' })}
+      ${selectField({ label: '本体类型', name: 'classKey', options: classOptions, value: page?.classKey ?? 'concept' })}
+      ${textField({ label: '摘要', name: 'summary', value: page?.summary ?? '', span: true, placeholder: '一句话说明这个页面讲什么' })}
+      ${textField({ label: '一句话结论', name: 'tldr', value: page?.tldr ?? '', span: true })}
+      ${textField({ label: '标签（逗号分隔）', name: 'tags', value: (page?.tags ?? []).join(', ') })}
+      ${textField({ label: '别名（逗号分隔）', name: 'aliases', value: (page?.aliases ?? []).join(', ') })}
+      ${selectField({ label: '状态', name: 'status', value: page?.status ?? 'draft', options: [
+        { value: 'draft', label: '草稿' }, { value: 'active', label: '有效' }, { value: 'stale', label: '陈旧' }, { value: 'archived', label: '归档' },
+      ] })}
+      ${textField({ label: '置信度 0–1', name: 'confidence', value: page?.confidence ?? 0.6, type: 'number' })}
+      ${textArea({ label: '正文（Markdown，可用 [[slug]] 链接）', name: 'body', value: page?.body ?? '', rows: 14 })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-page">${page ? '保存修改' : '创建页面'}</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-page')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#page-form'));
+        const payload = {
+          ...values,
+          tags: values.tags.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
+          aliases: values.aliases.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
+          confidence: Number(values.confidence),
+        };
+        try {
+          if (page) await api(`/api/pages/${encodeURIComponent(page.id)}`, { method: 'PATCH', body: payload });
+          else await api(`/api/libraries/${encodeURIComponent(library.id)}/pages`, { method: 'POST', body: payload });
+          toast(page ? '页面已更新' : '页面已创建', 'success');
+          closeModal();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openNodeEditor(library, detail) {
+  openModal({
+    title: '新建目录',
+    body: `<form id="node-form" class="form-grid">
+      ${textField({ label: '名称', name: 'name', placeholder: '例如：客户案例' })}
+      ${selectField({ label: '父级', name: 'parentId', options: [{ value: '', label: '顶层' }, ...flattenNodes(detail.nodes).map((node) => ({ value: node.id, label: `${'— '.repeat(node.depth)}${node.name}` }))] })}
+      ${selectField({ label: '类型', name: 'kind', options: [{ value: 'section', label: '分类' }, { value: 'shelf', label: '书架' }, { value: 'category', label: '主题' }] })}
+      ${textField({ label: '分类号', name: 'code', placeholder: '例如 A.3' })}
+      ${textField({ label: '说明', name: 'description', span: true })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-node">创建目录</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-node')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#node-form'));
+        try {
+          await api(`/api/libraries/${encodeURIComponent(library.id)}/nodes`, { method: 'POST', body: values });
+          toast('目录已创建', 'success');
+          closeModal();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openGrantEditor(library, detail) {
+  const people = state.people.map((person) => ({ value: `person:${person.id}`, label: `个人 · ${person.name}` }));
+  const teams = state.teams.flatMap((team) => flattenTeamOptions(team));
+  openModal({
+    title: '新增访问授权',
+    body: `<form id="grant-form" class="form-grid">
+      ${selectField({ label: '授权对象', name: 'subject', options: [...people, ...teams, { value: 'org:org', label: '组织 · 全体成员' }], span: true })}
+      ${selectField({ label: '角色', name: 'role', options: [{ value: 'viewer', label: '只读' }, { value: 'editor', label: '编辑' }, { value: 'owner', label: '所有者' }] })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-grant">授予权限</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-grant')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#grant-form'));
+        const [subjectType, subjectId] = String(values.subject).split(':');
+        try {
+          await api(`/api/libraries/${encodeURIComponent(library.id)}/grants`, {
+            method: 'POST',
+            body: { subjectType, subjectId, role: values.role },
+          });
+          toast('权限已授予', 'success');
+          closeModal();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function flattenTeamOptions(team, depth = 0, out = []) {
+  out.push({ value: `team:${team.id}`, label: `${'— '.repeat(depth)}团队 · ${team.name}` });
+  for (const child of team.children ?? []) flattenTeamOptions(child, depth + 1, out);
+  return out;
+}
+
+function openClassEditor(library) {
+  openModal({
+    title: '新建本体类型',
+    body: `<form id="class-form" class="form-grid">
+      ${textField({ label: '显示名称', name: 'name', placeholder: '例如：客户案例' })}
+      ${textField({ label: 'Key（小写字母/数字/-）', name: 'key', placeholder: 'case-study' })}
+      ${selectField({ label: '主色', name: 'color', options: [
+        { value: 'jade', label: '玉' }, { value: 'clay', label: '陶' }, { value: 'ochre', label: '赭' },
+        { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' }, { value: 'plum', label: '梅' },
+      ] })}
+      ${textField({ label: '说明', name: 'description', span: true })}
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-class">创建类型</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-class')?.addEventListener('click', async () => {
+        try {
+          await api(`/api/libraries/${encodeURIComponent(library.id)}/classes`, {
+            method: 'POST',
+            body: { ...formValues(modal.querySelector('#class-form')), schema: { fields: [] } },
+          });
+          toast('本体类型已创建', 'success');
+          closeModal();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
