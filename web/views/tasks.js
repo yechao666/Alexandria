@@ -31,6 +31,7 @@ function taskRow(task) {
 export async function renderTasks() {
   const data = await api('/api/tasks?limit=80').catch(() => ({ tasks: [] }));
   const tasks = data.tasks ?? [];
+  const queue = data.queue ?? { active: 0, pending: 0 };
   const counts = {
     total: tasks.length,
     running: tasks.filter((task) => task.status === 'running' || task.status === 'queued').length,
@@ -39,7 +40,7 @@ export async function renderTasks() {
   };
   return `
     <div class="eyebrow">PIPELINE · DSH · OBSERVABILITY</div>
-    <div class="between" style="margin:8px 0 18px"><div><h1 style="font-size:38px;letter-spacing:-.03em;margin:0">任务中心</h1><div class="sub muted">资料处理被拆成可观察的步骤：解析、OCR、索引、DSH 编译。失败可重试，排队任务可取消。</div></div><a class="btn btn-primary" href="#/upload">${icon('upload', 15)} 上传资料</a></div>
+    <div class="between" style="margin:8px 0 18px"><div><h1 style="font-size:38px;letter-spacing:-.03em;margin:0">任务中心</h1><div class="sub muted">资料处理被拆成可观察的步骤：解析、OCR、索引、DSH 编译。Worker 队列 ${queue.active} 执行 / ${queue.pending} 排队；失败可重试，排队任务可取消。</div></div><a class="btn btn-primary" href="#/upload">${icon('upload', 15)} 上传资料</a></div>
     <div class="grid grid-4" style="margin-bottom:16px">
       <div class="panel panel-pad"><div class="small faint">任务总数</div><div style="font-size:30px;font-weight:650">${counts.total}</div></div>
       <div class="panel panel-pad"><div class="small faint">执行中</div><div style="font-size:30px;font-weight:650;color:var(--ochre)">${counts.running}</div></div>
