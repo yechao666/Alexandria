@@ -21,21 +21,26 @@ export async function renderSearch(params) {
   const q = params.get('q')?.trim() ?? '';
   const libraryRef = params.get('library') ?? '';
   const classKey = params.get('class') ?? '';
+  const tag = params.get('tag') ?? '';
   const library = state.libraries.find((item) => item.slug === libraryRef || item.id === libraryRef);
   let hits = [];
   let answer = null;
   let took = 0;
   let strategy = '';
+  let facets = { tags: [], classes: [], libraries: [] };
   if (q) {
     const query = new URLSearchParams({ q, limit: '30' });
     if (library) query.set('library', library.id);
     if (classKey) query.set('class', classKey);
+    if (tag) query.set('tag', tag);
+    const facetsPromise = api('/api/search/facets').catch(() => ({ tags: [], classes: [], libraries: [] }));
     const searchPromise = api(`/api/search?${query.toString()}`);
     const answerPromise = api('/api/query', {
       method: 'POST',
       body: { q, libraryIds: library ? [library.id] : undefined, limit: 6 },
     }).catch(() => null);
-    const [searchResult, answerResult] = await Promise.all([searchPromise, answerPromise]);
+    const [searchResult, answerResult, facetResult] = await Promise.all([searchPromise, answerPromise, facetsPromise]);
+    facets = facetResult;
     hits = searchResult.hits ?? [];
     took = searchResult.tookMs ?? 0;
     strategy = searchResult.strategy ?? '';
@@ -111,6 +116,7 @@ export async function renderSearch(params) {
           <div class="panel-body">
             <div class="field"><label>知识库</label><select class="select" id="search-library">${libraryOptions.map((option) => `<option value="${esc(option.value)}" ${option.value === libraryRef ? 'selected' : ''}>${esc(option.label)}</option>`).join('')}</select></div>
             <div class="field" style="margin-top:10px"><label>本体类型</label><select class="select" id="search-class"><option value="">全部类型</option>${classOptions.map((item) => `<option value="${esc(item.key)}" ${item.key === classKey ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div>
+            <div class="field" style="margin-top:10px"><label>标签</label><select class="select" id="search-tag"><option value="">全部标签</option>${(facets.tags ?? []).map((item) => `<option value="${esc(item.tag)}" ${item.tag === tag ? 'selected' : ''}>${esc(item.tag)} (${item.count})</option>`).join('')}</select></div>
           </div>
         </div>
         ${answer ? `<div class="panel side-card" style="margin-top:14px">
@@ -138,8 +144,10 @@ export function mountSearch() {
     if (q) params.set('q', q);
     const library = document.getElementById('search-library')?.value;
     const klass = document.getElementById('search-class')?.value;
+    const tag = document.getElementById('search-tag')?.value;
     if (library) params.set('library', library);
     if (klass) params.set('class', klass);
+    if (tag) params.set('tag', tag);
     go(`#/search?${params.toString()}`);
   });
   const applyFilter = () => {
@@ -148,13 +156,16 @@ export function mountSearch() {
     if (!q) return;
     const library = document.getElementById('search-library')?.value;
     const klass = document.getElementById('search-class')?.value;
+    const tag = document.getElementById('search-tag')?.value;
     const next = new URLSearchParams({ q });
     if (library) next.set('library', library);
     if (klass) next.set('class', klass);
+    if (tag) next.set('tag', tag);
     go(`#/search?${next.toString()}`);
   };
   document.getElementById('search-library')?.addEventListener('change', applyFilter);
   document.getElementById('search-class')?.addEventListener('change', applyFilter);
+  document.getElementById('search-tag')?.addEventListener('change', applyFilter);
 }
 
 function plain(text) {

@@ -29,6 +29,7 @@ export function registerAuthRoutes(router: Router): void {
       version: '0.1.0',
       time: new Date().toISOString(),
       llm: Boolean(rc.app.env.llm),
+      dsh: Boolean(rc.app.env.dsh.enabled),
     });
   });
 

@@ -79,3 +79,10 @@ test('页面级访问策略可限制并定向共享给指定成员', async () =>
     body: JSON.stringify({ visibility: 'inherit', grants: [] }),
   });
 });
+
+test('检索分面只统计当前成员可见的知识', async () => {
+  const adminFacets = await j<{ libraries: { id: string }[]; tags: unknown[] }>('/api/search/facets', admin.token);
+  assert.ok(adminFacets.libraries.length >= 3);
+  const guestFacets = await j<{ libraries: { id: string }[] }>('/api/search/facets', guest.token);
+  assert.deepEqual(guestFacets.libraries.map((library) => library.id), ['lib_product']);
+});

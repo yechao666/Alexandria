@@ -89,6 +89,41 @@ export function registerSearchRoutes(router: Router): void {
     rc.json({ ...compiled, answer, mode, query: q });
   });
 
+  router.get('/api/search/facets', (rc) => {
+    const actor = requireActor(rc);
+    const libraries = visibleLibraries(rc.app.db, actor);
+    const ids = libraries.map((library) => library.id);
+    if (!ids.length) {
+      rc.json({ libraries: [], classes: [], tags: [], statuses: [] });
+      return;
+    }
+    const ph = ids.map(() => '?').join(',');
+    const pages = (rc.app.db.prepare(`SELECT * FROM pages WHERE library_id IN (${ph})`).all(...ids) as unknown as PageRow[])
+      .filter((page) => Boolean(effectivePageRole(rc.app.db, actor, page)));
+    const classCounts = new Map<string, number>();
+    const tagCounts = new Map<string, number>();
+    const statusCounts = new Map<string, number>();
+    const libraryCounts = new Map<string, number>();
+    for (const page of pages) {
+      classCounts.set(page.class_key, (classCounts.get(page.class_key) ?? 0) + 1);
+      statusCounts.set(page.status, (statusCounts.get(page.status) ?? 0) + 1);
+      libraryCounts.set(page.library_id, (libraryCounts.get(page.library_id) ?? 0) + 1);
+      for (const tag of parseList(page.tags)) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+    const classNames = new Map(
+      (rc.app.db.prepare(`SELECT library_id, key, name, color FROM ontology_classes WHERE library_id IN (${ph})`).all(...ids) as unknown as { library_id: string; key: string; name: string; color: string }[]).map((row) => [`${row.library_id}:${row.key}`, row]),
+    );
+    rc.json({
+      libraries: libraries.map((library) => ({ id: library.id, name: library.name, slug: library.slug, count: libraryCounts.get(library.id) ?? 0 })),
+      classes: [...classCounts.entries()].map(([key, count]) => {
+        const found = [...classNames.entries()].find(([id]) => id.endsWith(`:${key}`))?.[1];
+        return { key, name: found?.name ?? key, color: found?.color ?? 'slate', count };
+      }).sort((a, b) => b.count - a.count),
+      tags: [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([tag, count]) => ({ tag, count })),
+      statuses: [...statusCounts.entries()].map(([key, count]) => ({ key, count })),
+    });
+  });
+
   router.get('/api/graph', (rc) => {
     const actor = requireActor(rc);
     const library = rc.query('library') || rc.query('libraryId');
