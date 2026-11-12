@@ -294,3 +294,14 @@ test('管理员可以导出安全与审计 CSV', async () => {
   const denied = await fetch(`${base}/api/admin/security/export`, { headers: { authorization: `Bearer ${guest.token}` } });
   assert.equal(denied.status, 403);
 });
+
+test('管理员权限矩阵展示每人对每个库的有效角色', async () => {
+  const matrix = await j<{ libraries: { id: string }[]; persons: { person: { email: string; isAdmin: boolean }; roles: Record<string, string | null> }[] }>('/api/admin/access-matrix', admin.token);
+  assert.ok(matrix.libraries.length >= 3);
+  const adminRow = matrix.persons.find((row) => row.person.email === 'lin@alex.dev');
+  assert.ok(adminRow);
+  assert.equal(adminRow.person.isAdmin, true);
+  assert.equal(adminRow.roles[matrix.libraries[0].id], 'owner');
+  const denied = await fetch(`${base}/api/admin/access-matrix`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(denied.status, 403);
+});

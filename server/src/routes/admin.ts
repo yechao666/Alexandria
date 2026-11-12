@@ -4,6 +4,7 @@ import { errors } from '../http/respond.ts';
 import { hashPassword } from '../lib/password.ts';
 import { newId, nowIso, slugify } from '../lib/ids.ts';
 import { teamTree } from './helpers.ts';
+import { actorFor, effectiveRole, personRowToPerson } from '../domain/access.ts';
 import { audit } from '../domain/audit.ts';
 import { securityEvent, requestIp } from '../domain/security.ts';
 import { queueSnapshot } from '../ingest/queue.ts';
@@ -607,6 +608,28 @@ export function registerAdminRoutes(router: Router): void {
     rc.res.setHeader('content-type', 'text/csv; charset=utf-8');
     rc.res.setHeader('content-disposition', `attachment; filename*=UTF-8''alexandria-security-${days}d.csv`);
     rc.res.end(`\uFEFF${header}\n${body}`);
+  });
+
+  router.get('/api/admin/access-matrix', (rc) => {
+    requireAdmin(rc);
+    const persons = rc.app.db.prepare("SELECT * FROM persons WHERE status = 'active' ORDER BY name").all() as unknown as Record<string, unknown>[];
+    const libraries = rc.app.db.prepare('SELECT id, name, slug, visibility, owner_team_id FROM libraries ORDER BY created_at').all() as unknown as {
+      id: string;
+      name: string;
+      slug: string;
+      visibility: string;
+      owner_team_id: string | null;
+    }[];
+    const rows = persons.map((row) => {
+      const person = personRowToPerson(row);
+      const actor = actorFor(rc.app.db, person);
+      return {
+        person: { id: person.id, name: person.name, email: person.email, title: person.title, isAdmin: person.isAdmin },
+        teams: actor.teamIds,
+        roles: Object.fromEntries(libraries.map((library) => [library.id, effectiveRole(rc.app.db, actor, library as unknown as import('../types.ts').LibraryRow)])),
+      };
+    });
+    rc.json({ libraries, persons: rows });
   });
 
 }

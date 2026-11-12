@@ -339,6 +339,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/search/suggest` | 标题自动补全 |
 | GET | `/api/search/history` | 当前成员检索历史 |
 | GET | `/api/admin/security` | 安全事件（管理员） |
+| GET | `/api/admin/access-matrix` | 成员×知识库有效角色矩阵（管理员） |
 | GET | `/api/admin/observability` | 队列/存储/进程/安全指标（管理员） |
 | GET | `/api/libraries/:id/trash` | 回收站快照列表 |
 | POST | `/api/trash/:id/restore` | 恢复页面 |

@@ -23,11 +23,12 @@ const TABS = [
   { key: 'keys', label: 'API 密钥' },
   { key: 'security', label: '安全审计' },
   { key: 'observability', label: '运行状态' },
+  { key: 'access-matrix', label: '权限矩阵' },
 ];
 
 export async function renderAdmin(tab = 'teams') {
   const isAdmin = Boolean(state.me?.person?.isAdmin);
-  const [teamsData, peopleData, wecom, keysData, syncRunsData, securityData, observability] = await Promise.all([
+  const [teamsData, peopleData, wecom, keysData, syncRunsData, securityData, observability, matrixData] = await Promise.all([
     api('/api/teams'),
     api('/api/people'),
     api('/api/integrations/wecom').catch(() => null),
@@ -35,6 +36,7 @@ export async function renderAdmin(tab = 'teams') {
     api('/api/integrations/wecom/sync-runs').catch(() => ({ runs: [] })),
     api('/api/admin/security?limit=80').catch(() => ({ events: [], counts: [] })),
     api('/api/admin/observability').catch(() => null),
+    api('/api/admin/access-matrix').catch(() => ({ libraries: [], persons: [] })),
   ]);
   const teams = teamsData.teams ?? [];
   const people = peopleData.people ?? [];
@@ -55,6 +57,8 @@ export async function renderAdmin(tab = 'teams') {
     .slice(0, 5)
     .map((run) => `<tr><td>${timeAgo(run.created_at)}</td><td>${run.dry_run ? '预览' : '执行'}</td><td>${run.departments} / ${run.users}</td><td>${run.applied_departments} / ${run.applied_users} / ${run.deactivated}</td></tr>`)
     .join('');
+  const matrixLibraries = matrixData.libraries ?? [];
+  const matrixRows = (matrixData.persons ?? []).map((row) => `<tr><td><b>${esc(row.person.name)}</b><br><span class="faint small">${esc(row.person.email)}</span></td>${matrixLibraries.map((library) => `<td>${row.person.isAdmin ? '<span class="badge clay">admin</span>' : row.roles?.[library.id] ? `<span class="badge ${row.roles[library.id] === 'owner' ? 'clay' : row.roles[library.id] === 'editor' ? 'jade' : 'outline'}">${row.roles[library.id]}</span>` : '<span class="faint">—</span>'}</td>`).join('')}</tr>`).join('');
   const securityEvents = securityData.events ?? [];
   const securityRows = securityEvents.map((event) => {
     const tone = event.severity === 'critical' ? 'clay' : event.severity === 'warning' ? 'ochre' : 'outline';
@@ -108,6 +112,7 @@ export async function renderAdmin(tab = 'teams') {
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>企微 ID</th><th>角色</th><th></th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
     wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
     observability: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">运行状态</h2><div class="sub muted">进程、队列、存储、任务与安全事件；用于日常巡检与容量观察。</div></div><span class="row"><button class="btn btn-sm" id="integrity-check">数据体检</button><span class="badge ${observability ? 'jade' : 'clay'}">${observability ? '采集中' : '不可用'}</span></span></div>${observability ? `<div class="grid grid-3"><div class="panel panel-pad"><div class="small faint">任务队列</div><div style="font-size:28px;font-weight:650">${observability.queue.active} <span style="font-size:13px;color:var(--muted)">执行</span> / ${observability.queue.pending} <span style="font-size:13px;color:var(--muted)">排队</span></div><div class="small muted" style="margin-top:8px">任务：${(observability.jobs ?? []).map((item) => `${esc(item.key)} ${item.c}`).join(' · ') || '暂无'}</div></div><div class="panel panel-pad"><div class="small faint">内容规模</div><div style="font-size:28px;font-weight:650">${observability.counts.pages} <span style="font-size:13px;color:var(--muted)">知识页</span></div><div class="small muted" style="margin-top:8px">${observability.counts.sources} 文献 · ${observability.counts.claims} 主张 · ${observability.counts.links} 关联</div></div><div class="panel panel-pad"><div class="small faint">安全事件（24h）</div><div style="font-size:28px;font-weight:650">${(observability.security ?? []).reduce((sum, item) => sum + Number(item.c), 0)}</div><div class="small muted" style="margin-top:8px">${(observability.security ?? []).map((item) => `${esc(item.key)} ${item.c}`).join(' · ') || '无'}</div></div></div><div class="grid grid-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><h3>存储与备份</h3></div><div class="panel-body"><div class="kv"><dt>SQLite</dt><dd>${Math.round((observability.storage.databaseBytes ?? 0) / 1024 / 1024 * 10) / 10} MB</dd><dt>WAL</dt><dd>${Math.round((observability.storage.walBytes ?? 0) / 1024 / 1024 * 10) / 10} MB</dd><dt>备份</dt><dd>${(observability.storage.backups ?? []).length} 份</dd></div></div></div><div class="panel"><div class="panel-head"><h3>进程</h3></div><div class="panel-body"><div class="kv"><dt>Node</dt><dd class="mono">${esc(observability.process.node)}</dd><dt>平台</dt><dd>${esc(observability.process.platform)}</dd><dt>运行</dt><dd>${Math.round(observability.process.uptimeSeconds / 60)} 分钟</dd><dt>内存</dt><dd>${Math.round((observability.process.memory.rss ?? 0) / 1024 / 1024)} MB RSS</dd></div></div></div></div>` : '<div class="empty">无法读取运行状态</div>'}`,
+    'access-matrix': `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">权限矩阵</h2><div class="sub muted">按人/库展示 effectiveRole（含团队归属、组织层级与显式授权）；仅组织管理员可见。</div></div><span class="badge jade">${matrixRows ? '已计算' : '暂无数据'}</span></div><div class="panel"><div class="panel-body" style="padding:0;overflow:auto"><table class="org-table"><thead><tr><th>成员</th>${matrixLibraries.map((library) => `<th>${esc(library.name)}</th>`).join('')}</tr></thead><tbody>${matrixRows || '<tr><td colspan="5" class="muted" style="padding:18px">暂无成员</td></tr>'}</tbody></table></div></div>`,
     security: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">安全审计</h2><div class="sub muted">登录、API Key、授权/访问策略变更与限流事件；仅组织管理员可见。</div></div><span class="row"><a class="btn btn-sm" href="/api/admin/security/export?days=30">导出安全 CSV</a><a class="btn btn-sm" href="/api/admin/audit/export?days=30">导出审计 CSV</a><span class="badge ${securityData?.counts?.some((item) => item.severity === 'critical') ? 'clay' : 'jade'}">最近 7 天</span></span></div><div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>时间</th><th>级别</th><th>事件</th><th>操作者</th><th>对象</th><th>IP</th></tr></thead><tbody>${securityRows || '<tr><td colspan="6" class="muted" style="padding:18px">暂无安全事件</td></tr>'}</tbody></table></div></div>`,
     keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>名称</th><th>前缀</th><th>范围</th><th>最近使用</th><th></th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" class="muted" style="padding:18px">还没有 API 密钥</td></tr>'}</tbody></table></div></div>
