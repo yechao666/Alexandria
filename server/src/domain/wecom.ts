@@ -38,6 +38,10 @@ function meta(db: Db, key: string): string {
 export function getWecomConfig(db: Db, env: Env): WecomConfig {
   const baseUrl = (meta(db, 'wecom_base_url') || env.wecom.baseUrl).replace(/\/+$/, '');
   const authorizeBase = (meta(db, 'wecom_authorize_base') || env.wecom.authorizeBase).replace(/\/+$/, '');
+  const explicitMode = meta(db, 'wecom_mode');
+  const mock = explicitMode
+    ? explicitMode === 'mock'
+    : env.wecom.mock || baseUrl.includes('127.0.0.1:4800') || baseUrl.includes('localhost:4800');
   return {
     enabled: (meta(db, 'wecom_enabled') || (env.wecom.enabled ? '1' : '0')) === '1',
     baseUrl,
@@ -46,10 +50,7 @@ export function getWecomConfig(db: Db, env: Env): WecomConfig {
     agentId: meta(db, 'wecom_agent_id') || env.wecom.agentId,
     secret: meta(db, 'wecom_secret') || env.wecom.secret,
     publicUrl: (meta(db, 'wecom_public_url') || env.wecom.publicUrl).replace(/\/+$/, ''),
-    mock:
-      (meta(db, 'wecom_mode') || (env.wecom.mock ? 'mock' : 'wecom')) === 'mock' ||
-      baseUrl.includes('127.0.0.1:4800') ||
-      baseUrl.includes('localhost:4800'),
+    mock,
   };
 }
 

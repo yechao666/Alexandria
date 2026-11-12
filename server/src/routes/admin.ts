@@ -16,6 +16,7 @@ function personView(person: Record<string, unknown>): Person & { isAdmin: boolea
     title: String(person.title ?? ''),
     avatarColor: String(person.avatar_color ?? 'clay'),
     isAdmin: Boolean(person.is_admin),
+    wecomUserid: person.wecom_userid ? String(person.wecom_userid) : null,
     status: String(person.status ?? 'active'),
   };
 }

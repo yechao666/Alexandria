@@ -36,7 +36,7 @@ export async function renderAdmin(tab = 'teams') {
   const teamCards = flattenTeams(teams).map((team) => teamCard(team, isAdmin)).join('');
   const peopleRows = people
     .map(
-      (person) => `<tr><td><div class="row">${avatar(person, 'sm')}<span>${esc(person.name)}</span></div></td><td class="mono" style="font-size:11px">${esc(person.email)}</td><td>${esc(person.title)}</td><td>${person.isAdmin ? '<span class="badge clay">管理员</span>' : '<span class="badge outline">成员</span>'}</td><td class="faint">${esc(person.status ?? 'active')}</td></tr>`,
+      (person) => `<tr><td><div class="row">${avatar(person, 'sm')}<span>${esc(person.name)}</span></div></td><td class="mono" style="font-size:11px">${esc(person.email)}</td><td>${esc(person.title)}</td><td class="mono">${esc(person.wecomUserid ?? '—')}</td><td>${person.isAdmin ? '<span class="badge clay">管理员</span>' : '<span class="badge outline">成员</span>'}</td><td>${isAdmin ? `<button class="btn btn-sm btn-ghost" data-bind-wecom="${esc(person.id)}" data-person-name="${esc(person.name)}">绑定企微</button>` : ''}</td></tr>`,
     )
     .join('');
   const keyRows = (keysData.keys ?? [])
@@ -82,7 +82,7 @@ export async function renderAdmin(tab = 'teams') {
   const bodies = {
     teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
     people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
-      <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>角色</th><th>状态</th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
+      <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>姓名</th><th>邮箱</th><th>职位</th><th>企微 ID</th><th>角色</th><th></th></tr></thead><tbody>${peopleRows}</tbody></table></div></div>`,
     wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
     keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
       <div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>名称</th><th>前缀</th><th>范围</th><th>最近使用</th><th></th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" class="muted" style="padding:18px">还没有 API 密钥</td></tr>'}</tbody></table></div></div>
@@ -118,6 +118,9 @@ export function mountAdmin(tab = 'teams') {
         toast(error.message, 'error');
       }
     });
+  });
+  document.querySelectorAll('[data-bind-wecom]').forEach((button) => {
+    button.addEventListener('click', () => openWecomBind(button.dataset.bindWecom, button.dataset.personName));
   });
   document.getElementById('new-team')?.addEventListener('click', openTeamEditor);
   document.getElementById('new-person')?.addEventListener('click', openPersonEditor);
@@ -289,6 +292,34 @@ function openKeyEditor() {
             await loadBootstrap();
             window.dispatchEvent(new HashChangeEvent('hashchange'));
           });
+        } catch (error) {
+          toast(error.message, 'error');
+        }
+      });
+    },
+  });
+}
+
+function openWecomBind(personId, personName) {
+  openModal({
+    title: `绑定企业微信 · ${personName ?? ''}`,
+    body: `<form id="wecom-bind-form" class="form-grid">
+      <div class="field span-2"><label>企业微信 userid</label><input class="input" name="wecomUserid" placeholder="例如 LinWei；留空可解绑"></div>
+      <div class="small faint span-2">绑定后，该员工从企业微信登录时会映射到此本地账号。</div>
+    </form>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-wecom-bind">保存绑定</button>`,
+    onMount: (modal) => {
+      modal.querySelector('#save-wecom-bind')?.addEventListener('click', async () => {
+        const values = formValues(modal.querySelector('#wecom-bind-form'));
+        try {
+          await api(`/api/people/${encodeURIComponent(personId)}`, {
+            method: 'PATCH',
+            body: { wecomUserid: values.wecomUserid ?? '' },
+          });
+          toast('企业微信绑定已更新', 'success');
+          closeModal();
+          await loadBootstrap();
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
         } catch (error) {
           toast(error.message, 'error');
         }
