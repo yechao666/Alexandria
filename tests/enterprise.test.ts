@@ -86,3 +86,29 @@ test('检索分面只统计当前成员可见的知识', async () => {
   const guestFacets = await j<{ libraries: { id: string }[] }>('/api/search/facets', guest.token);
   assert.deepEqual(guestFacets.libraries.map((library) => library.id), ['lib_product']);
 });
+
+test('文献级 ACL 可限制并定向共享', async () => {
+  const sources = await j<{ sources: { id: string }[] }>('/api/libraries/lib_product/sources', admin.token);
+  const sourceId = sources.sources[0].id;
+  const before = await fetch(`${base}/api/sources/${sourceId}`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(before.status, 200);
+  await j(`/api/sources/${sourceId}/access`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'restricted', grants: [] }),
+  });
+  const hidden = await fetch(`${base}/api/sources/${sourceId}`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(hidden.status, 404);
+  await j(`/api/sources/${sourceId}/access`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'restricted', grants: [{ subjectType: 'person', subjectId: 'usr_guest', role: 'viewer' }] }),
+  });
+  const visible = await fetch(`${base}/api/sources/${sourceId}`, { headers: { authorization: `Bearer ${guest.token}` } });
+  assert.equal(visible.status, 200);
+  await j(`/api/sources/${sourceId}/access`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'inherit', grants: [] }),
+  });
+});
