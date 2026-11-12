@@ -34,6 +34,8 @@ const MANIFEST = {
     { name: 'ingest', method: 'POST', path: '/api/agent/ingest', description: '以文本或 base64 资料入库并编译' },
     { name: 'upsert_page', method: 'POST', path: '/api/agent/page', description: '创建或更新知识页' },
     { name: 'lint', method: 'POST', path: '/api/agent/lint', description: '结构体检：孤儿页、断链、失败文献' },
+    { name: 'export_page', method: 'GET', path: '/api/pages/:id/markdown', description: '导出 LLM Wiki 风格 Markdown' },
+    { name: 'export_library', method: 'GET', path: '/api/libraries/:id/export.md', description: '导出整库 Markdown bundle' },
   ],
 };
 

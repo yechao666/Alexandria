@@ -208,6 +208,18 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 
 ---
 
+## 导出
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/pages/:id/markdown` | 单页 Markdown（YAML frontmatter + 正文） |
+| GET | `/api/libraries/:id/export.md` | 整库 Markdown bundle（`alexandria-markdown-bundle-v1`） |
+| GET | `/api/pages/:id/frontmatter` | 结构化 frontmatter + body |
+
+导出保留类型、状态、置信度、标签、别名、read_when、来源、出链与主张，便于交给 LLM 或纳入 git。
+
+---
+
 ## 检索与图谱
 
 | 方法 | 路径 | 说明 |
@@ -286,6 +298,8 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | POST | `/api/agent/read` | `{pageId | slug, library?}` |
 | POST | `/api/agent/graph` | `{libraryId, classKey?, limit?}` |
 | POST | `/api/agent/ingest` | `{libraryId, filename, text | base64, title?, nodeId?}` |
+| GET | `/api/pages/:id/markdown` | LLM Wiki 风格页面 Markdown |
+| GET | `/api/libraries/:id/export.md` | 整库 Markdown bundle |
 | POST | `/api/agent/compile` | `{sourceId}` |
 | POST | `/api/agent/page` | 创建或更新页面 |
 | POST | `/api/agent/lint` | 结构体检 |

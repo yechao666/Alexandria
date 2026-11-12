@@ -62,6 +62,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记 |
+| **可移植** | 知识页/整库导出 LLM Wiki 风格 Markdown（frontmatter + 主张 + 来源 + 链接） |
 | **校对台** | 草稿/退回/矛盾队列；批准、要求修改、撤回校对、逐条裁决主张 |
 | **协作与通知** | 页面评论、解决标记、站内通知、企业微信应用消息推送 |
 | **企业微信** | 已接 Mock OAuth 登录与通讯录同步；生产可切换 QYAPI/授权域名 |
@@ -170,10 +171,13 @@ curl -s http://127.0.0.1:4520/api/agent/search \
 | POST | `/api/agent/search` | 检索知识页 / 文献，返回信号分解 |
 | POST | `/api/agent/ask` | 带引用的知识合成 |
 | POST | `/api/agent/read` | 页面 + 主张 + 来源 + 关联 + context |
+| POST | `/api/agent/ingest` | 文本 / base64 资料入库并编译 |
 | POST | `/api/agent/page` | 创建或更新知识页（保留列表字段） |
 | POST | `/api/agent/compile` | 重新编译文献 |
 | POST | `/api/agent/lint` | 孤儿页 / 断链 / 失败文献 / 草稿 |
 | GET | `/api/agent/skill` | SKILL.md 原文 |
+| GET | `/api/pages/:id/markdown` | LLM Wiki 风格页面 Markdown |
+| GET | `/api/libraries/:id/export.md` | 整库 Markdown bundle |
 
 完整接口见 [docs/API.md](docs/API.md)，工作流见 [skills/alexandria/SKILL.md](skills/alexandria/SKILL.md)。
 

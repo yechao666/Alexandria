@@ -136,6 +136,51 @@ test('未显式传 limit 时使用默认分页而非 1 条', async () => {
   assert.ok(sources.data.sources.length > 1, '文献列表默认 limit 应生效');
 });
 
+test('读写 API Key 可以通过 Agent API 入库文本并编译', async () => {
+  const { token } = await login(base, 'lin@alex.dev');
+  const key = await j<{ token: string }>('/api/api-keys', { method: 'POST', token, body: JSON.stringify({ name: 'ingest-test', scope: 'write' }) });
+  const ingested = await j<{ jobId: string; source: { id: string } }>('/api/agent/ingest', {
+    method: 'POST',
+    token: key.data.token,
+    body: JSON.stringify({
+      libraryId: 'lib_eng',
+      filename: 'agent-ingest.md',
+      title: '智能体入库验证',
+      text: '# 智能体入库\n\n## 概念\n智能体入库验证是指通过 Agent API 提交资料并由流水线编译。\n\n## 要点\n- 使用只读密钥应被拒绝。\n- 编译完成后可检索。',
+    }),
+  });
+  assert.equal(ingested.status, 202);
+  let job: Record<string, unknown> | null = null;
+  for (let i = 0; i < 80; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const result = await j<{ job: Record<string, unknown> }>(`/api/jobs/${ingested.data.jobId}`, { token });
+    job = result.data.job;
+    if (job && (job.status === 'succeeded' || job.status === 'failed')) break;
+  }
+  assert.equal(job?.status, 'succeeded', JSON.stringify(job));
+  const search = await j<{ hits: { title: string }[] }>('/api/search?q=%E6%99%BA%E8%83%BD%E4%BD%93%E5%85%A5%E5%BA%93', { token });
+  assert.ok(search.data.hits.some((hit) => hit.title.includes('智能体入库')));
+});
+
+test('知识页与整库可以导出为 LLM Wiki 风格 Markdown', async () => {
+  const { token } = await login(base, 'lin@alex.dev');
+  const page = await fetch(`${base}/api/pages/concepts%2Fknowledge-compilation/markdown`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(page.status, 200);
+  const markdown = await page.text();
+  assert.match(markdown, /^---\n/);
+  assert.match(markdown, /type: "concept"/);
+  assert.match(markdown, /## 定义/);
+  const bundle = await fetch(`${base}/api/libraries/lib_product/export.md`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(bundle.status, 200);
+  const text = await bundle.text();
+  assert.match(text, /alexandria-markdown-bundle-v1/);
+  assert.match(text, /知识编译/);
+});
+
 test('检索接口返回信号分解，查询接口返回引用', async () => {
   const { token } = await login(base, 'lin@alex.dev');
   const search = await j<{ hits: { signals: Record<string, number> }[] }>('/api/search?q=%E7%9F%A5%E8%AF%86%E7%BC%96%E8%AF%91', { token });

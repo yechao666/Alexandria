@@ -325,7 +325,7 @@ function settingsTab(detail, library, color) {
               { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
             ] })}
           </form>
-          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button></div>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a></div>
         </div>
       </div>
       <div class="panel">

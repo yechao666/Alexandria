@@ -153,6 +153,8 @@ curl -s $ALEXANDRIA_URL/api/agent/page \
 | 图谱邻域 | `POST /api/agent/graph` |
 | 体检 | `POST /api/agent/lint` |
 | 导出 wiki | `GET /api/agent/export/:libraryId` |
+| 单页 Markdown | `GET /api/pages/:id/markdown` |
+| 整库 Markdown | `GET /api/libraries/:id/export.md` |
 | 工具清单 | `GET /api/agent/manifest` |
 
 ## 8. 结束条件
