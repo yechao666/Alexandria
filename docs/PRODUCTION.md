@@ -13,6 +13,7 @@ node server/src/main.ts
 - 建议使用 launchd / systemd 托管，失败自动重启。
 - 健康检查：`GET /api/health`，关注 `ok`、`dsh`、`llm`；`GET /api/health/ready` 用于编排系统就绪探针。
 - 巡检：管理员「运行状态」或 `GET /api/admin/observability` 查看队列、内容规模、SQLite/WAL、备份和进程内存。
+- 维护任务：每小时清理过期会话/登录挑战/SSO state；回收站超过 `ALEXANDRIA_TRASH_RETENTION_DAYS`（默认 30 天）自动清理；`ALEXANDRIA_AUTO_BACKUP_HOURS>0` 时按周期自动备份。
 - 登录限流：同一 IP + 邮箱 15 分钟 8 次失败后返回 429；多副本需替换为 Redis 限流。
 - 已启用 CSP、HSTS（HTTPS）、Secure Cookie、X-Frame-Options、nosniff。
 - 企业微信 Mock 仅用于联调，生产关闭或限制在内网。
@@ -60,7 +61,8 @@ data/
    或应用停机后复制 `data/alexandria.db`；
 2. 同步备份 `uploads/` 与 `thumbnails/`（原始证据不可重建）；
 3. 备份文件加密后异地保存，保留 30/90 天；
-4. 定期在隔离环境恢复演练：`ALEXANDRIA_DATA_DIR=/tmp/restore npm run restore -- <backupDir>`，确认 `PRAGMA integrity_check` 与账号/权限/文件后再切换。
+4. 备份 manifest 会记录 `integrity_check`、schema 版本与人数/页面/文献计数；恢复前复核后再切换。
+5. 定期在隔离环境恢复演练：`ALEXANDRIA_DATA_DIR=/tmp/restore npm run restore -- <backupDir>`，确认 `PRAGMA integrity_check` 与账号/权限/文件后再切换。
 
 ## 4. 权限上线检查
 

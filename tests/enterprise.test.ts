@@ -265,3 +265,21 @@ test('图谱路径查询返回最短关联路径', async () => {
   assert.ok(path.pages.length >= 2);
   assert.equal(path.edges.length, path.pages.length - 1);
 });
+
+test('删除页面进入回收站并可恢复/彻底删除', async () => {
+  const created = await j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '回收站测试页面', classKey: 'concept', body: '## 定义\n回收站测试', status: 'draft' }),
+  });
+  const deleted = await j<{ ok: boolean }>(`/api/pages/${created.page.id}`, admin.token, { method: 'DELETE' });
+  assert.equal(deleted.ok, true);
+  const trash = await j<{ items: { id: string; title: string }[] }>('/api/libraries/lib_eng/trash', admin.token);
+  const item = trash.items.find((entry) => entry.title === '回收站测试页面');
+  assert.ok(item);
+  const restored = await j<{ ok: boolean; page: { id: string; title: string } }>(`/api/trash/${item.id}/restore`, admin.token, { method: 'POST' });
+  assert.equal(restored.ok, true);
+  assert.equal(restored.page.title, '回收站测试页面');
+  const page = await fetch(`${base}/api/pages/${restored.page.id}`, { headers: { authorization: `Bearer ${admin.token}` } });
+  assert.equal(page.status, 200);
+});

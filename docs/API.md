@@ -340,6 +340,9 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/search/history` | 当前成员检索历史 |
 | GET | `/api/admin/security` | 安全事件（管理员） |
 | GET | `/api/admin/observability` | 队列/存储/进程/安全指标（管理员） |
+| GET | `/api/libraries/:id/trash` | 回收站快照列表 |
+| POST | `/api/trash/:id/restore` | 恢复页面 |
+| DELETE | `/api/trash/:id` | 彻底删除快照 |
 | GET | `/api/admin/integrity` | SQLite/孤立页/断链/缺文件/FTS 体检（管理员） |
 | GET | `/api/health/ready` | 数据库就绪检查 |
 | GET/POST/DELETE | `/api/search/saved` | 保存检索 |

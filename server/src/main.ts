@@ -9,6 +9,7 @@ import { createHttpServer } from './http/server.ts';
 import type { AppContext } from './http/context.ts';
 import { seedDatabase } from './seed/seed.ts';
 import { ensureDefaultOntology } from './knowledge/ontology.ts';
+import { startMaintenance } from './maintenance/scheduler.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -36,6 +37,8 @@ for (const row of db.prepare('SELECT id FROM libraries').all() as unknown as { i
 
 const app: AppContext = { db, env, now: () => new Date().toISOString() };
 const server = createHttpServer(app, createRouter());
+
+startMaintenance(db, env);
 
 server.listen(env.port, env.host, () => {
   const url = `http://${env.host}:${env.port}`;

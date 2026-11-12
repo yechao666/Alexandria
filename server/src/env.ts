@@ -11,6 +11,10 @@ export interface Env {
   host: string;
   sessionTtlHours: number;
   maxUploadBytes: number;
+  trashRetentionDays: number;
+  auditRetentionDays: number;
+  autoBackupHours: number;
+  maintenanceIntervalMinutes: number;
   dsh: {
     enabled: boolean;
     bin: string;
@@ -71,6 +75,10 @@ export function loadEnv(root: string): Env {
     host,
     sessionTtlHours: Number(process.env.ALEXANDRIA_SESSION_TTL_HOURS ?? 24 * 14),
     maxUploadBytes: Number(process.env.ALEXANDRIA_MAX_UPLOAD_MB ?? 80) * 1024 * 1024,
+    trashRetentionDays: Number(process.env.ALEXANDRIA_TRASH_RETENTION_DAYS ?? 30),
+    auditRetentionDays: Number(process.env.ALEXANDRIA_AUDIT_RETENTION_DAYS ?? 180),
+    autoBackupHours: Number(process.env.ALEXANDRIA_AUTO_BACKUP_HOURS ?? 0),
+    maintenanceIntervalMinutes: Number(process.env.ALEXANDRIA_MAINTENANCE_INTERVAL_MINUTES ?? 60),
     dsh: {
       enabled: bool(process.env.ALEXANDRIA_DSH_ENABLED ?? '1'),
       bin: process.env.ALEXANDRIA_DSH_BIN?.trim() || process.env.HIVE_DSH_BIN?.trim() || 'dsh',

@@ -364,7 +364,7 @@ function settingsTab(detail, library, color) {
               { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
             ] })}
           </form>
-          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button><button class="btn" id="merge-suggestions">${icon('layers', 14)} 扫描重复页</button><button class="btn" id="merge-proposals">${icon('check', 14)} 合并审批</button>` : ''}</div>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button><button class="btn" id="library-trash">${icon('trash', 14)} 回收站</button><button class="btn" id="merge-suggestions">${icon('layers', 14)} 扫描重复页</button><button class="btn" id="merge-proposals">${icon('check', 14)} 合并审批</button>` : ''}</div>
         </div>
       </div>
       <div class="panel">
@@ -446,6 +446,32 @@ function bindLibrarySettings(library, detail) {
         },
       });
     } catch (error) { toast(error.message, 'error'); }
+  });
+
+  document.getElementById('library-trash')?.addEventListener('click', async () => {
+    const openTrash = async () => {
+      try {
+        const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/trash`);
+        const items = data.items ?? [];
+        const rows = items.map((item) => `<div class="between" style="padding:10px 0;border-bottom:1px solid var(--line)"><span><b>${esc(item.title)}</b><br><span class="faint small">${esc(new Date(item.deletedAt).toLocaleString('zh-CN'))} · ${esc(item.deletedByName ?? '系统')}</span></span><span class="btn-row"><button class="btn btn-sm" data-restore-trash="${esc(item.id)}">恢复</button><button class="btn btn-sm btn-ghost" data-purge-trash="${esc(item.id)}">彻底删除</button></span></div>`).join('');
+        openModal({
+          title: '回收站',
+          wide: true,
+          body: `<p class="small muted">删除的页面会保留快照；恢复后重建页面、来源、主张、属性与关联。</p><div style="max-height:480px;overflow:auto;margin-top:10px">${rows || '<div class="rail-empty" style="padding:20px">回收站为空</div>'}</div>`,
+          footer: `<button class="btn" data-close-modal>关闭</button>`,
+          onMount: (modal) => {
+            modal.querySelectorAll('[data-restore-trash]').forEach((button) => button.addEventListener('click', async () => {
+              try { await api(`/api/trash/${encodeURIComponent(button.dataset.restoreTrash)}/restore`, { method: 'POST' }); toast('页面已恢复', 'success'); closeModal(); window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (error) { toast(error.message, 'error'); }
+            }));
+            modal.querySelectorAll('[data-purge-trash]').forEach((button) => button.addEventListener('click', async () => {
+              if (!confirm('彻底删除后不可恢复，确认？')) return;
+              try { await api(`/api/trash/${encodeURIComponent(button.dataset.purgeTrash)}`, { method: 'DELETE' }); toast('已彻底删除', 'success'); closeModal(); openTrash(); } catch (error) { toast(error.message, 'error'); }
+            }));
+          },
+        });
+      } catch (error) { toast(error.message, 'error'); }
+    };
+    openTrash();
   });
 
   document.getElementById('library-audit')?.addEventListener('click', async () => {

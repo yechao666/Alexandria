@@ -151,7 +151,7 @@ export function registerAuthRoutes(router: Router): void {
     for (let i = 0; i < 10; i += 1) {
       const code = `${randomToken(4).toUpperCase()}-${randomToken(4).toUpperCase()}`;
       recoveryCodes.push(code);
-      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/-/g, '')), nowIso());
+      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/[^A-Za-z0-9]/g, '').toUpperCase()), nowIso());
     }
     securityEvent(rc.app.db, { kind: '2fa.enable', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
     rc.json({ ok: true, recoveryCodes });
@@ -210,7 +210,7 @@ export function registerAuthRoutes(router: Router): void {
     for (let i = 0; i < 10; i += 1) {
       const code = `${randomToken(4).toUpperCase()}-${randomToken(4).toUpperCase()}`;
       codes.push(code);
-      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/-/g, '')), nowIso());
+      rc.app.db.prepare('INSERT INTO recovery_codes (id, person_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)').run(newId('rc'), actor.person.id, hashToken(code.replace(/[^A-Za-z0-9]/g, '').toUpperCase()), nowIso());
     }
     securityEvent(rc.app.db, { kind: '2fa.recovery_regenerate', severity: 'warning', actorId: actor.person.id, subject: actor.person.email, ip: requestIp(rc) });
     rc.json({ recoveryCodes: codes });

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -70,6 +70,12 @@ export function migrate(db: Db): void {
   const personColumns = db.prepare('PRAGMA table_info(persons)').all() as unknown as { name: string }[];
   if (!personColumns.some((column) => column.name === 'totp_secret')) db.exec('ALTER TABLE persons ADD COLUMN totp_secret TEXT');
   if (!personColumns.some((column) => column.name === 'totp_enabled')) db.exec('ALTER TABLE persons ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS trash_pages (
+    id TEXT PRIMARY KEY, page_id TEXT NOT NULL, library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    snapshot TEXT NOT NULL, deleted_by TEXT REFERENCES persons(id) ON DELETE SET NULL, deleted_at TEXT NOT NULL,
+    restored_at TEXT, restored_page_id TEXT
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_trash_library ON trash_pages(library_id, restored_at)');
   db.exec(`CREATE TABLE IF NOT EXISTS merge_proposals (
     id TEXT PRIMARY KEY, library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
     source_page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

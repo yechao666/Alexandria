@@ -76,7 +76,8 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **权限** | 组织层级（上级只读下级，下级不可反查上级）+ 库/页面/文献 ACL + 定向共享；每次查询先过滤 |
 | **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
-| **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记 |
+| **可追溯** | 页面版本、审计事件、来源锚点、主张级置信度、矛盾标记；删除页回收站 |
+| **维护** | 过期会话/挑战清理、回收站/审计保留期、备份完整性校验、可选自动备份 |
 | **可移植** | 知识页/整库导出 LLM Wiki 风格 Markdown（frontmatter + 主张 + 来源 + 链接） |
 | **校对台** | 草稿/退回/矛盾队列；批准、要求修改、撤回校对、逐条裁决主张 |
 | **任务中心** | worker 队列执行解析/OCR/索引/DSH 编译；分步事件、耗时、失败重试、排队取消 |
@@ -251,7 +252,7 @@ cd ../alexandria && node server/src/main.ts
 - [设计方案](docs/DESIGN.md)：架构、数据模型、编译、实体/事实、组织层级、资源 ACL、任务、企业微信。
 - [参考研究](docs/RESEARCH.md)：Karpathy LLM Wiki、llm-wiki 引擎、BookStack、Outline 等源码与文档研究。
 - [API 参考](docs/API.md)。
-- [验收报告](docs/ACCEPTANCE.md)：需求映射、86 项测试证据与已知边界。
+- [验收报告](docs/ACCEPTANCE.md)：需求映射、89 项测试证据与已知边界。
 - [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
 

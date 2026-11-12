@@ -7,7 +7,7 @@ import { securityEvent, requestIp, grantRecipients } from '../domain/security.ts
 import { notifyPerson } from '../domain/notifications.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
-import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef, mergePages } from '../knowledge/pages.ts';
+import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef, mergePages, snapshotAndTrashPage, restorePageFromTrash } from '../knowledge/pages.ts';
 import { relatedPages } from '../knowledge/search.ts';
 import { canEdit, pageAccess, pageListDto, parseList } from './helpers.ts';
 import type { PageRow } from '../types.ts';
@@ -217,8 +217,8 @@ export function registerPageRoutes(router: Router): void {
     const actor = requireActor(rc);
     const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
-    deletePage(rc.app.db, page.id);
-    audit(rc.app.db, { actor, action: 'page.delete', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { title: page.title } });
+    const trashId = snapshotAndTrashPage(rc.app.db, page, actor);
+    audit(rc.app.db, { actor, action: 'page.trash', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { title: page.title, trashId } });
     rc.json({ ok: true });
   });
 
@@ -467,6 +467,55 @@ export function registerPageRoutes(router: Router): void {
     requireLibrary(rc.app.db, actor, proposal.library_id, 'editor');
     rc.app.db.prepare("UPDATE merge_proposals SET status = 'rejected', reviewed_by = ?, reviewed_at = ? WHERE id = ?").run(actor.person.id, nowIso(), proposal.id);
     audit(rc.app.db, { actor, action: 'merge.reject', targetType: 'merge_proposal', targetId: proposal.id, libraryId: proposal.library_id });
+    rc.json({ ok: true });
+  });
+
+  router.get('/api/libraries/:id/trash', (rc) => {
+    const actor = requireActor(rc);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
+    const rows = rc.app.db
+      .prepare(
+        `SELECT t.id, t.page_id, t.deleted_at, t.restored_at, t.restored_page_id, p.name AS deleted_by_name, t.snapshot
+           FROM trash_pages t LEFT JOIN persons p ON p.id = t.deleted_by
+          WHERE t.library_id = ? AND t.restored_at IS NULL ORDER BY t.deleted_at DESC LIMIT 100`,
+      )
+      .all(library.id) as unknown as Record<string, unknown>[];
+    rc.json({
+      items: rows.map((row) => {
+        const snapshot = parseJson<{ page?: { title?: string; channel?: string; slug?: string } }>(String(row.snapshot ?? '{}'), {});
+        return {
+          id: row.id,
+          pageId: row.page_id,
+          title: snapshot.page?.title ?? '未命名页面',
+          slug: snapshot.page?.slug ?? '',
+          deletedAt: row.deleted_at,
+          deletedByName: row.deleted_by_name,
+        };
+      }),
+    });
+  });
+
+  router.post('/api/trash/:id/restore', (rc) => {
+    const actor = requireActor(rc);
+    const row = rc.app.db.prepare('SELECT * FROM trash_pages WHERE id = ?').get(rc.params.id!) as unknown as
+      | { id: string; library_id: string }
+      | undefined;
+    if (!row) throw errors.notFound('回收站记录不存在');
+    requireLibrary(rc.app.db, actor, row.library_id, 'editor');
+    const page = restorePageFromTrash(rc.app.db, row.id, actor);
+    audit(rc.app.db, { actor, action: 'page.restore', targetType: 'page', targetId: page.id, libraryId: row.library_id, detail: { trashId: row.id } });
+    rc.json({ ok: true, page: pageListDto(rc.app.db, page) });
+  });
+
+  router.delete('/api/trash/:id', (rc) => {
+    const actor = requireActor(rc);
+    const row = rc.app.db.prepare('SELECT * FROM trash_pages WHERE id = ?').get(rc.params.id!) as unknown as
+      | { id: string; library_id: string }
+      | undefined;
+    if (!row) throw errors.notFound('回收站记录不存在');
+    requireLibrary(rc.app.db, actor, row.library_id, 'owner');
+    rc.app.db.prepare('DELETE FROM trash_pages WHERE id = ?').run(row.id);
+    audit(rc.app.db, { actor, action: 'trash.purge', targetType: 'trash', targetId: row.id, libraryId: row.library_id });
     rc.json({ ok: true });
   });
 

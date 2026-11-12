@@ -431,6 +431,18 @@ CREATE TABLE IF NOT EXISTS oidc_states (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS trash_pages (
+  id          TEXT PRIMARY KEY,
+  page_id     TEXT NOT NULL,
+  library_id  TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  snapshot    TEXT NOT NULL,
+  deleted_by  TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  deleted_at  TEXT NOT NULL,
+  restored_at TEXT,
+  restored_page_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_trash_library ON trash_pages(library_id, restored_at);
+
 CREATE TABLE IF NOT EXISTS merge_proposals (
   id             TEXT PRIMARY KEY,
   library_id     TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,

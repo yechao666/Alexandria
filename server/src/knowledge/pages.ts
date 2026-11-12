@@ -3,7 +3,7 @@ import type { Actor, PageRow } from '../types.ts';
 import { newId, nowIso, parseJson, slugify, truncate } from '../lib/ids.ts';
 import { normalizeTitle, snippet, termsString } from './terms.ts';
 import { errors } from '../http/respond.ts';
-import { detectConflicts } from './claims.ts';
+import { detectConflicts, saveClaims } from './claims.ts';
 
 export interface PageInput {
   libraryId: string;
@@ -593,4 +593,102 @@ export function mergePages(
   db.prepare('DELETE FROM page_fts WHERE page_id = ?').run(source.id);
   detectConflicts(db, target.id);
   return updated;
+}
+
+export function snapshotAndTrashPage(db: Db, page: PageRow, actor: Actor | null): string {
+  const snapshot = {
+    page,
+    claims: db.prepare('SELECT * FROM claims WHERE page_id = ?').all(page.id),
+    sources: db.prepare('SELECT * FROM page_sources WHERE page_id = ?').all(page.id),
+    linksOut: db.prepare('SELECT * FROM links WHERE from_page_id = ?').all(page.id),
+    linksIn: db.prepare('SELECT * FROM links WHERE to_page_id = ?').all(page.id),
+    properties: db.prepare('SELECT * FROM page_properties WHERE page_id = ?').all(page.id),
+    comments: db.prepare('SELECT * FROM comments WHERE page_id = ?').all(page.id),
+  };
+  const id = newId('trash');
+  db.prepare(
+    'INSERT INTO trash_pages (id, page_id, library_id, snapshot, deleted_by, deleted_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(id, page.id, page.library_id, JSON.stringify(snapshot), actor?.person.id ?? null, nowIso());
+  deletePage(db, page.id);
+  return id;
+}
+
+export function restorePageFromTrash(db: Db, trashId: string, actor: Actor | null): PageRow {
+  const row = db.prepare('SELECT * FROM trash_pages WHERE id = ? AND restored_at IS NULL').get(trashId) as unknown as
+    | { id: string; library_id: string; snapshot: string }
+    | undefined;
+  if (!row) throw errors.notFound('回收站记录不存在');
+  const snapshot = parseJson<{
+    page: PageRow;
+    claims: Record<string, unknown>[];
+    sources: { source_id: string; relation: string; locator: string; quote: string }[];
+    linksOut: { to_page_id: string; relation: string; origin: string; weight: number }[];
+    properties: { key: string; value: string }[];
+    comments: Record<string, unknown>[];
+  }>(row.snapshot, { page: undefined as never, claims: [], sources: [], linksOut: [], properties: [], comments: [] });
+  const original = snapshot.page;
+  const page = createPage(
+    db,
+    {
+      libraryId: row.library_id,
+      nodeId: original.node_id,
+      classKey: original.class_key,
+      title: original.title,
+      summary: original.summary,
+      tldr: original.tldr,
+      body: original.body,
+      status: original.status === 'deleted' ? 'active' : original.status,
+      confidence: original.confidence,
+      tags: parseJson<string[]>(original.tags, []),
+      aliases: parseJson<string[]>(original.aliases, []),
+      readWhen: parseJson<string[]>(original.read_when, []),
+      metadata: { ...parseJson<Record<string, unknown>>(original.metadata, {}), restoredFrom: row.id, restoredAt: nowIso() },
+      createdBy: actor?.person.id ?? null,
+    },
+    actor,
+  );
+  for (const source of snapshot.sources) {
+    const exists = db.prepare('SELECT 1 FROM sources WHERE id = ?').get(source.source_id);
+    if (exists) attachSource(db, page.id, source.source_id, source.relation, source.locator, source.quote);
+  }
+  saveClaims(
+    db,
+    page.id,
+    snapshot.claims
+      .map((claim) => ({
+        text: String(claim.text ?? ''),
+        subject: String(claim.subject ?? ''),
+        predicate: String(claim.predicate ?? ''),
+        object: String(claim.object ?? ''),
+        confidence: Number(claim.confidence ?? 0.5),
+        section: String(claim.section ?? ''),
+      }))
+      .filter((claim) => claim.text),
+    original.id,
+  );
+  for (const property of snapshot.properties) {
+    db.prepare('INSERT OR IGNORE INTO page_properties (page_id, key, value) VALUES (?, ?, ?)').run(page.id, property.key, property.value);
+  }
+  for (const link of snapshot.linksOut) {
+    const target = db.prepare('SELECT 1 FROM pages WHERE id = ? AND library_id = ?').get(link.to_page_id, row.library_id);
+    if (target) addLink(db, row.library_id, page.id, link.to_page_id, link.relation, link.origin, link.weight);
+  }
+  for (const comment of snapshot.comments) {
+    db.prepare(
+      'INSERT INTO comments (id, library_id, page_id, parent_id, author_id, body, status, resolved_by, resolved_at, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      newId('cmt'),
+      row.library_id,
+      page.id,
+      comment.author_id ? String(comment.author_id) : null,
+      String(comment.body ?? ''),
+      String(comment.status ?? 'open'),
+      comment.resolved_by ? String(comment.resolved_by) : null,
+      comment.resolved_at ? String(comment.resolved_at) : null,
+      String(comment.created_at ?? nowIso()),
+      String(comment.updated_at ?? nowIso()),
+    );
+  }
+  db.prepare('UPDATE trash_pages SET restored_at = ?, restored_page_id = ? WHERE id = ?').run(nowIso(), page.id, row.id);
+  return page;
 }
