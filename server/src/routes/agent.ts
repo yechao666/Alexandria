@@ -8,6 +8,7 @@ import { audit } from '../domain/audit.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { createPage, getPage, pageContext, pageToView, updatePage, attachSource } from '../knowledge/pages.ts';
 import { searchKnowledge, answerKnowledge, graphForLibrary } from '../knowledge/search.ts';
+import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { pageListDto, parseList } from './helpers.ts';
 import { ingestBuffer } from '../ingest/pipeline.ts';
@@ -53,11 +54,17 @@ export function registerAgentRoutes(router: Router): void {
         ? [requireLibrary(rc.app.db, actor, body.library).library.id]
         : undefined;
     if (libraryIds) for (const id of libraryIds) requireLibrary(rc.app.db, actor, id);
-    const hits = searchKnowledge(rc.app.db, actor, body.query ?? '', {
-      libraryIds,
-      classKey: body.classKey,
-      limit: body.limit ?? 20,
-    });
+    const hits = body.query && rc.app.env.dsh.enabled
+      ? await searchKnowledgeWithDsh(rc.app.db, rc.app.env, actor, body.query, {
+          libraryIds,
+          classKey: body.classKey,
+          limit: body.limit ?? 20,
+        })
+      : searchKnowledge(rc.app.db, actor, body.query ?? '', {
+          libraryIds,
+          classKey: body.classKey,
+          limit: body.limit ?? 20,
+        });
     rc.json({
       hits: hits.map((hit) => ({
         kind: hit.kind,
@@ -75,19 +82,25 @@ export function registerAgentRoutes(router: Router): void {
         confidence: hit.confidence,
         tags: hit.tags,
       })),
-      strategy: 'compiled-wiki: FTS5 + typed graph expansion',
+      strategy: rc.app.env.dsh.enabled
+        ? 'compiled-wiki: local candidates + local DSH semantic rerank/selection'
+        : 'compiled-wiki: FTS5 + typed graph expansion',
     });
   });
 
   router.post('/api/agent/ask', async (rc) => {
     const actor = requireActor(rc);
-    const body = await rc.body<{ query?: string; libraryIds?: string[]; mode?: 'compiled' | 'llm' | 'auto' }>();
+    const body = await rc.body<{ query?: string; libraryIds?: string[]; mode?: 'compiled' | 'llm' | 'auto' | 'dsh' }>();
     const query = String(body.query ?? '').trim();
     if (!query) throw errors.badRequest('缺少 query');
-    const compiled = answerKnowledge(rc.app.db, actor, query, { libraryIds: body.libraryIds, limit: 8 });
+    let compiled = answerKnowledge(rc.app.db, actor, query, { libraryIds: body.libraryIds, limit: 8 });
+    if ((body.mode === 'dsh' || !body.mode) && rc.app.env.dsh.enabled && compiled.citations.length) {
+      const dshAnswer = await answerKnowledgeWithDsh(rc.app.db, rc.app.env, actor, query, { libraryIds: body.libraryIds, limit: 8 });
+      if (dshAnswer) compiled = dshAnswer;
+    }
     let answer = compiled.answer;
     let mode = compiled.mode;
-    if ((body.mode === 'llm' || body.mode === 'auto' || !body.mode) && rc.app.env.llm && compiled.citations.length) {
+    if (compiled.mode !== 'dsh' && (body.mode === 'llm' || body.mode === 'auto' || (!body.mode && rc.app.env.llm)) && rc.app.env.llm && compiled.citations.length) {
       const synthesized = await synthesizeWithLlm(rc.app.env, query, compiled);
       if (synthesized) {
         answer = synthesized.answer;

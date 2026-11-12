@@ -3,6 +3,7 @@ import { requireActor } from '../http/auth.ts';
 import { requireLibrary, visibleLibraries } from '../domain/access.ts';
 import { errors } from '../http/respond.ts';
 import { searchKnowledge, answerKnowledge, graphForLibrary, relatedPages, rebuildIndexes } from '../knowledge/search.ts';
+import { answerKnowledgeWithDsh, searchKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 import { synthesizeWithLlm } from '../knowledge/llm.ts';
 import { getPage, pageToView } from '../knowledge/pages.ts';
 import { parseList } from './helpers.ts';
@@ -32,19 +33,21 @@ function filtersFrom(rc: import('../http/context.ts').RequestContext) {
 }
 
 export function registerSearchRoutes(router: Router): void {
-  router.get('/api/search', (rc) => {
+  router.get('/api/search', async (rc) => {
     const actor = requireActor(rc);
     const q = rc.query('q');
     const filters = filtersFrom(rc);
     const started = Date.now();
-    const hits = searchKnowledge(rc.app.db, actor, q, filters);
+    const hits = q && rc.app.env.dsh.enabled
+      ? await searchKnowledgeWithDsh(rc.app.db, rc.app.env, actor, q, filters)
+      : searchKnowledge(rc.app.db, actor, q, filters);
     rc.json({
       query: q,
       tookMs: Date.now() - started,
       total: hits.length,
       hits,
       strategy: q
-        ? 'FTS5 词法检索 + 预编译关联图扩展 + 元数据/时效重排（无查询时向量化）'
+        ? `FTS5 词法检索 + 预编译关联图扩展 + 元数据/时效重排${rc.app.env.dsh.enabled ? ' + 本机 DSH 语义重排' : ''}（无查询时向量化）`
         : '最近更新',
     });
   });
@@ -56,7 +59,7 @@ export function registerSearchRoutes(router: Router): void {
       query?: string;
       library?: string;
       libraryIds?: string[];
-      mode?: 'compiled' | 'llm' | 'auto';
+      mode?: 'compiled' | 'llm' | 'auto' | 'dsh';
       limit?: number;
     }>();
     const q = String(body.q ?? body.query ?? '').trim();
@@ -68,10 +71,14 @@ export function registerSearchRoutes(router: Router): void {
       libraryIds: body.libraryIds,
       limit: Math.max(1, Math.min(20, body.limit ?? 8)),
     };
-    const compiled = answerKnowledge(rc.app.db, actor, q, filters);
+    let compiled = answerKnowledge(rc.app.db, actor, q, filters);
+    if ((body.mode === 'dsh' || !body.mode) && rc.app.env.dsh.enabled && compiled.citations.length) {
+      const dshAnswer = await answerKnowledgeWithDsh(rc.app.db, rc.app.env, actor, q, filters);
+      if (dshAnswer) compiled = dshAnswer;
+    }
     let answer = compiled.answer;
     let mode = compiled.mode;
-    if ((body.mode === 'llm' || body.mode === 'auto' || !body.mode) && rc.app.env.llm && compiled.citations.length) {
+    if (compiled.mode !== 'dsh' && (body.mode === 'llm' || body.mode === 'auto' || (!body.mode && rc.app.env.llm)) && rc.app.env.llm && compiled.citations.length) {
       const synthesized = await synthesizeWithLlm(rc.app.env, q, compiled);
       if (synthesized) {
         answer = synthesized.answer;

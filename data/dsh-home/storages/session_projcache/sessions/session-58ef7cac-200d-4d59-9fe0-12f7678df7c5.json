@@ -1,0 +1,238 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794504802925,
+      "cwd": "/Volumes/wd2025/devel/aiworker/alexandria/data/dsh-work",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "turnBoundary": {
+        "ver": 2,
+        "seq": 21,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": 6,
+          "lastStepBoundary": {
+            "kind": "end",
+            "seq": 20
+          },
+          "lastTurn": 1
+        }
+      },
+      "approvalState": {
+        "ver": 1,
+        "seq": 21,
+        "val": {
+          "policy": "ask",
+          "turnOpen": false
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": 21,
+        "val": {
+          "headerSeq": 12,
+          "stepStart": null,
+          "anchor": {
+            "headerSeq": 12,
+            "assistantTokens": 42,
+            "usage": {
+              "inputTokens": 1535,
+              "outputTokens": 34,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0,
+              "totalTokens": 7073
+            }
+          },
+          "invalidSeq": null
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": 21,
+        "val": null
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": 21,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": 21,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 1535,
+            "outputTokens": 34,
+            "cacheReadTokens": 5504,
+            "cacheWriteTokens": 0
+          },
+          "last": {
+            "turn": 1,
+            "step": 1,
+            "buckets": {
+              "uncachedInputTokens": 1535,
+              "outputTokens": 34,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0
+            }
+          }
+        }
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": 21,
+        "val": "workspace-write"
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": 21,
+        "val": {
+          "surfaceTokens": 1869,
+          "contextWindow": 1048576,
+          "pressureTokens": 7039,
+          "sampledSurfaceTokens": 1827
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": 21,
+        "val": "Greeting"
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": 21,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": 21,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": 21,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": false,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": 21,
+        "val": {
+          "lastUsed": {
+            "provider": "deepseek-official",
+            "model": "deepseek-flash"
+          },
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": 21,
+        "val": {
+          "systems": [
+            {
+              "seq": 7,
+              "tokens": 742
+            }
+          ],
+          "surfaceTokens": 1869,
+          "breakdown": {
+            "systemTokens": 742,
+            "toolsTokens": 5016,
+            "messageTokens": 1127
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 21,
+        "val": {
+          "first": {
+            "seq": 8,
+            "text": "只输出 OK 两个字符，不要解释。"
+          },
+          "count": 1,
+          "lastSeq": 8
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 21,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": 21,
+        "val": {
+          "preset": "workspace-write",
+          "sandbox": "workspace-write",
+          "approval": "ask",
+          "seeded": false
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": 21,
+        "val": "/Volumes/wd2025/devel/aiworker/alexandria/data/dsh-work"
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": 21,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": 21,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": 21,
+        "val": {}
+      },
+      "agentTeam": {
+        "ver": 7,
+        "seq": 21,
+        "val": {
+          "inheritedEventCount": 0,
+          "id": "session-58ef7cac-200d-4d59-9fe0-12f7678df7c5",
+          "tasks": [],
+          "nextTaskNumber": 1
+        }
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": 21,
+        "val": null
+      }
+    }
+  }
+}

@@ -141,6 +141,7 @@ export function registerAuthRoutes(router: Router): void {
       classes: classDistribution,
       features: {
         llm: Boolean(rc.app.env.llm),
+        dsh: rc.app.env.dsh.enabled,
         wecom: wecomConfigured(getWecomConfig(rc.app.db, rc.app.env)),
         ocr: true,
       },

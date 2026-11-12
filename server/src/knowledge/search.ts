@@ -35,7 +35,7 @@ export interface SearchHit {
 }
 
 export interface KnowledgeAnswer {
-  mode: 'compiled' | 'llm' | 'empty';
+  mode: 'compiled' | 'llm' | 'dsh' | 'empty';
   answer: string;
   citations: {
     pageId: string;

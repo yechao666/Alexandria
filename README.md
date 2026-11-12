@@ -2,7 +2,7 @@
 
 > 把资料编译成知识，而不是在提问时重新检索片段。
 >
-> 基于 **LLM Wiki / Dynamic Knowledge Repository** 理念、**本体论** 与 **团队权限** 的企业知识库。纯 Node 26 + SQLite，零外部服务依赖，开箱即用。
+> 基于 **LLM Wiki / Dynamic Knowledge Repository** 理念、**本体论** 与 **团队权限** 的企业知识库。纯 Node 26 + SQLite；语义编译/检索/合成默认调用**本机 DSH**，不可用时自动回退规则与本地检索。
 
 ![总览](docs/screenshots/02-home.png)
 
@@ -11,10 +11,10 @@
 Alexandria 借鉴了 Karpathy 的 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 模式与 [llm-wiki](https://github.com/geronimo-iia/llm-wiki) 引擎的设计：
 
 - **知识在入库时编译**：阅读来源，拆成原子知识页，抽取结构化主张，建立类型化关联，标记矛盾。
-- **查询时导航**：SQLite FTS5 词法召回 + 预编译知识图扩展，不依赖查询期向量切块；LLM 仅作为可选的答案合成层。
+- **查询时导航**：本机 DSH 在候选知识页上做语义重排与合成；底层是 SQLite FTS5 + 预编译知识图，不使用查询期向量切块。
 - **本体驱动**：每个知识库有独立的本体（类型 / 属性 / 关系），页面不是文章，而是可校验、可遍历的知识对象。
 - **像图书馆一样组织**：分库 → 目录（书架/分类）→ 知识页 / 文献；团队与个人授权，严格权限过滤。
-- **面向智能体**：DSH 通过 Agent API + SKILL.md 维护知识；引擎本身不内嵌提示词。
+- **面向智能体**：后台通过本机 DSH headless 执行语义编译/重排/合成；DSH 智能体也可通过 Agent API + SKILL.md 维护知识。
 - **文档能力全面**：PDF、DOCX/DOC、PPTX、XLSX、TeX、RTF、WPS、图片 OCR、Markdown、HTML、CSV/JSON、ODT/EPUB 等。
 
 ## 快速开始
@@ -57,7 +57,8 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **知识编译** | 入库时生成文献页、概念页、主张、关联；同来源概念互链 |
 | **本体论** | 类型 + 属性 + 关系；内置类型带属性定义，可扩展类型/属性；页面按类型渲染属性表单 |
 | **检索** | FTS5（中文单字/双字切分）+ BM25 + 图谱一跳扩展 + 元数据/时效/read_when 重排 |
-| **知识合成** | 从已编译页面组织带引用答案；配置 LLM 后可选自然语言合成 |
+| **知识合成** | 本机 DSH 基于候选知识页做语义重排与带引用合成；失败回退编译式答案 |
+| **本机 DSH** | 入库编译、语义检索重排、知识合成；无凭据时回退规则编译器与 FTS/图谱 |
 | **权限** | 管理员 / 团队负责人 / 团队成员 / 个人授权 / 组织可见 / 私有库；每次查询先过滤 |
 | **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
@@ -85,7 +86,8 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 3. **阅读与校正**：打开概念页，查看来源、主张、出链/入链与邻域图谱；人工编辑正文、类型、置信度与标签。
 4. **校对与裁决**：进入「校对台」处理自动编译的草稿；批准、退回或撤回校对。页面内可直接对冲突主张选择「采用」或「驳回」。
 5. **检索与合成**：全局检索给出词法 + 图谱的命中与信号分解；「知识合成」返回带引用的答案，并标注草稿与缺口。
-6. **接入智能体**：在「团队与权限 / API 密钥」创建读写密钥，把 [SKILL.md](skills/alexandria/SKILL.md) 交给 DSH。
+6. **本机 DSH**：默认读取 `~/.dsh` 凭据；没有 DSH 或凭据时自动回退，不影响基本使用。
+7. **接入外部智能体**：在「团队与权限 / API 密钥」创建读写密钥，把 [SKILL.md](skills/alexandria/SKILL.md) 交给 DSH。
 
 ## 架构
 
@@ -98,7 +100,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 ┌──────────────────────────▼─────────────────────────────────┐
 │ Alexandria Server（Node 26，TypeScript 直接运行）           │
 │  auth · rbac · libraries · pages · ontology · search        │
-│  ingest pipeline · compiler · graph · audit · agent API     │
+│  ingest pipeline · DSH runtime · compiler/graph · agent API │
 └───────────────┬──────────────────────────────┬──────────────┘
                 │                              │
       ┌─────────▼─────────┐          ┌─────────▼─────────┐
@@ -272,7 +274,7 @@ cd ../alexandria && node server/src/main.ts
 3. 通讯录增量同步、离职停用与部门负责人映射。
 4. 跨库受控引用与知识联邦检索。
 5. 编译质量评测集：引用准确率、矛盾关闭率、孤儿页比例。
-6. 可选 LLM 编译增强（需保留来源锚点与人工验收）。
+6. 本机 DSH 编译质量评测与失败回退观测。
 
 ---
 

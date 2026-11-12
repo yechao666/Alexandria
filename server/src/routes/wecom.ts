@@ -133,7 +133,7 @@ export function registerWecomAuthRoutes(router: Router): void {
     }>();
     const senderId = String(body.senderWecomId ?? '').trim();
     if (!senderId) throw errors.badRequest('缺少 senderWecomId');
-    const result = answerWecomText(rc.app.db, rc.app.env, {
+    const result = await answerWecomText(rc.app.db, rc.app.env, {
       senderWecomId: senderId,
       text: String(body.text ?? ''),
       chatId: body.chatId,
@@ -188,7 +188,7 @@ export function registerWecomAuthRoutes(router: Router): void {
       rc.res.end(buildWecomEncryptedReply({ replyXml, token: config.callbackToken, encodingAesKey: config.encodingAesKey, corpId: config.corpId }));
       return;
     }
-    const result = answerWecomText(rc.app.db, rc.app.env, {
+    const result = await answerWecomText(rc.app.db, rc.app.env, {
       senderWecomId: inbound.FromUserName ?? '',
       text: inbound.Content ?? '',
       chatId: inbound.ChatId,

@@ -9,6 +9,8 @@ import { cleanText } from '../extract/text-util.ts';
 import { makeThumbnail, ocrImage } from '../extract/image.ts';
 import { wordCount } from '../knowledge/terms.ts';
 import { compileSource } from '../knowledge/compiler.ts';
+import { dshCompileSource } from '../knowledge/dsh-engine.ts';
+import { dshAvailable } from '../knowledge/dsh-runtime.ts';
 import { indexSource } from '../knowledge/pages.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
@@ -21,6 +23,7 @@ export interface IngestInput {
   nodeId?: string | null;
   actor?: Actor | null;
   defer?: boolean;
+  dsh?: boolean;
 }
 
 export interface IngestResult {
@@ -118,10 +121,11 @@ export function ingestBuffer(db: Db, env: Env, libraryId: string, input: IngestI
   );
 
   const jobId = newId('job');
+  const useDsh = input.dsh !== false && dshAvailable(env);
   db.prepare(
     `INSERT INTO ingest_jobs (id, library_id, source_id, status, stage, progress, compiler, log, created_at)
-     VALUES (?, ?, ?, 'queued', 'queued', 0, 'rule', '[]', ?)`,
-  ).run(jobId, libraryId, sourceId, now);
+     VALUES (?, ?, ?, 'queued', 'queued', 0, ?, '[]', ?)`,
+  ).run(jobId, libraryId, sourceId, useDsh ? 'dsh' : 'rule', now);
 
   audit(db, {
     actor: input.actor,
@@ -139,9 +143,10 @@ export function ingestBuffer(db: Db, env: Env, libraryId: string, input: IngestI
 
 export function processJob(db: Db, env: Env, jobId: string): void {
   const job = db.prepare('SELECT * FROM ingest_jobs WHERE id = ?').get(jobId) as unknown as
-    | { id: string; library_id: string; source_id: string; status: string }
+    | { id: string; library_id: string; source_id: string; status: string; compiler: string }
     | undefined;
   if (!job || !job.source_id) return;
+  const jobCompiler = job.compiler ?? 'rule';
   if (job.status === 'running' || job.status === 'succeeded') return;
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(job.source_id) as unknown as SourceRow | undefined;
   if (!source) {
@@ -267,9 +272,21 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     const refreshed = db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as SourceRow;
     indexSource(db, refreshed);
 
-    setJob(db, jobId, { stage: 'compile', progress: 58 });
-    jobLog(db, jobId, '开始知识编译：抽取概念、主张与关联');
-    const report = compileSource(db, refreshed, { ...extracted, text: extractedText }, { actor: null, maxConcepts: 10 });
+    setJob(db, jobId, { stage: jobCompiler === 'dsh' ? 'dsh-compile' : 'compile', progress: 58 });
+    let report = null;
+    if (jobCompiler === 'dsh') {
+      jobLog(db, jobId, '调用本机 DSH 编译知识：概念、主张、关联');
+      report = dshCompileSource(db, env, refreshed, { ...extracted, text: extractedText }, null);
+      if (report) {
+        for (const line of report.log) jobLog(db, jobId, line);
+      } else {
+        jobLog(db, jobId, 'DSH 编译失败，回退到规则编译器');
+      }
+    }
+    if (!report) {
+      jobLog(db, jobId, '开始规则知识编译：抽取概念、主张与关联');
+      report = compileSource(db, refreshed, { ...extracted, text: extractedText }, { actor: null, maxConcepts: 10 });
+    }
 
     setJob(db, jobId, {
       status: 'succeeded',
@@ -333,7 +350,7 @@ export function ingestText(
   libraryId: string,
   title: string,
   text: string,
-  options: { filename?: string; nodeId?: string | null; actor?: Actor | null; sync?: boolean } = {},
+  options: { filename?: string; nodeId?: string | null; actor?: Actor | null; sync?: boolean; dsh?: boolean } = {},
 ): IngestResult {
   const filename = options.filename ?? `${slugify(title, 'note')}.md`;
   const result = ingestBuffer(db, env, libraryId, {
@@ -343,6 +360,7 @@ export function ingestText(
     nodeId: options.nodeId ?? null,
     actor: options.actor ?? null,
     defer: !options.sync,
+    dsh: options.dsh ?? false,
   });
   if (options.sync && result.jobId) processJob(db, env, result.jobId);
   return result;

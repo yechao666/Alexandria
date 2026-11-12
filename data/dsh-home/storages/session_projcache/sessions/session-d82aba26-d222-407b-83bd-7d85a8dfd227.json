@@ -1,0 +1,238 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794504926656,
+      "cwd": "/Volumes/wd2025/devel/aiworker/alexandria/data/dsh-work",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "turnBoundary": {
+        "ver": 2,
+        "seq": 18,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": 6,
+          "lastStepBoundary": {
+            "kind": "end",
+            "seq": 17
+          },
+          "lastTurn": 1
+        }
+      },
+      "approvalState": {
+        "ver": 1,
+        "seq": 18,
+        "val": {
+          "policy": "ask",
+          "turnOpen": false
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": 18,
+        "val": {
+          "headerSeq": 12,
+          "stepStart": null,
+          "anchor": {
+            "headerSeq": 12,
+            "assistantTokens": 600,
+            "usage": {
+              "inputTokens": 4494,
+              "outputTokens": 963,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0,
+              "totalTokens": 10961
+            }
+          },
+          "invalidSeq": null
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": 18,
+        "val": null
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": 18,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": 18,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 4494,
+            "outputTokens": 963,
+            "cacheReadTokens": 5504,
+            "cacheWriteTokens": 0
+          },
+          "last": {
+            "turn": 1,
+            "step": 1,
+            "buckets": {
+              "uncachedInputTokens": 4494,
+              "outputTokens": 963,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0
+            }
+          }
+        }
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": 18,
+        "val": "workspace-write"
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": 18,
+        "val": {
+          "surfaceTokens": 3722,
+          "contextWindow": 1048576,
+          "pressureTokens": 9998,
+          "sampledSurfaceTokens": 3122
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": 18,
+        "val": "你是 Alexandria 企业知识库的检"
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": 18,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": 18,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": 18,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": false,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": 18,
+        "val": {
+          "lastUsed": {
+            "provider": "deepseek-official",
+            "model": "deepseek-flash"
+          },
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": 18,
+        "val": {
+          "systems": [
+            {
+              "seq": 7,
+              "tokens": 742
+            }
+          ],
+          "surfaceTokens": 3722,
+          "breakdown": {
+            "systemTokens": 742,
+            "toolsTokens": 5016,
+            "messageTokens": 2980
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 18,
+        "val": {
+          "first": {
+            "seq": 8,
+            "text": "你是 Alexandria 企业知识库的检索与知识合成器。你只能依据下面给出的候选知识页回答，不得使用外部知识，不得编造。\n请完成两件事：1) 从候选页中选择真正支持答案的页面；2) 用这些页面合成简洁、可核对的中文答案。\n只输出 JSON，不要 Markdown 代码围栏之外的内容：\n{\"selected\":[{\"pageId\":\"pg_...\",\"reason\":\"为什么相关\"}],\"answer\":\"答案正文\",\"gaps\":[\"仍需补充的信息\"]}\n\n规则：\n- selected 只能使用候选页面中的 pageId，按相关性排序，最多 6 个。\n- answer 先给结论，再用 2–5 个要点展开；每个要点后用〔页面标题〕标注来源。\n- 如果候选页不足，明确写出的不确定性或 gaps，不要臆测。\n- 不要引用未出现在候选中的页面。\n\n用户问题：DSH 真实编译验证是什么？\n\n候选知识页：\n页面 ID：pg_bba0b50e3d5b4cd8ab11\n标题：DSH 真实编译验证\n类型：source｜状态：active｜置信度：0.7\n摘要：资料定义了 DSH 真实编译验证：由本机 DSH 阅读资料，生成概念页、主张与关联，并让生成的概念页进入校对队列。\n结论：DSH 真实编译验证强调编译由本机 DSH 完成，生成的概念页需进入校对队列。\n正文节选：> 本页由**本机 DSH**在入库时阅读原文、抽取概念与主张并建立关联。原始文件保留在文献中。 ## 摘要 资料定义了 DSH 真实编译验证：由本机 DSH 阅读资料，生成概念页、主张与关联，并让生成的概念页进入校对队列。 ## 文档结构 | 章节 | 概要 | | --- | --- | | 定义 | DSH 真实编译验证是指由本机 DSH 阅读资料后生成概念页、主张与关联的过程。 | | 要点 | - 编译应由本机 DSH 完成。 - 生成的概念页进入校对队列。 | ## 关键主张 - 资料将 DSH 真实编译验证定义为由本机 DSH 阅读资料后生成概念页、主张与关联的过程。 - 资料要求，DSH 真实编译验证中的编译工作由本机 DSH 完成。 - 资料说明，DSH 真实编译验证生成的概念页会进入校对队列。 ## 相关概念 - [[concepts/dsh-真实编译验证|DSH 真实编译验证]] ## 溯源 文件：dsh-e2e.md · 格式：md\n主张：资料将 DSH 真实编译验证定义为由本机 DSH 阅读资料后生成概念页、主张与关联的过程。；资料要求，DSH 真实编译验证中的编译工作由本机 DSH 完成。；资料说明，DSH 真实编译验证生成的概念页会进入校对队列。\n来源：DSH 真实编译验证\n\n---\n\n页面 ID：pg_704d365d4a10415bb614\n标题：DSH 真实编译验证\n类型：concept｜状态：draft｜置信度：0.9\n摘要：DSH 真实编译验证是指由本机 DSH 阅读资料后生成概念页、结构化主张与页面关联的过程。\n结论：DSH 真实编译验证是指由本机 DSH 阅读资料后生成概念页、结构化主张与页面关联的过程。\n正文节选：## 定义 DSH 真实编译验证是指由本机 DSH 阅读资料后生成概念页、结构化主张与页面关联的过程。 ## 要点 - 编译应由本机 DSH 完成，而非交由外部服务或其他代理。 - 编译输出包括概念页、结构化主张与页面关联。 - 生成的概念页不直接发布，而是进入校对队列。 ## 来源 - [[sources/dsh-真实编译验证|《DSH 真实编译验证》]]\n主张：资料将 DSH 真实编译验证定义为由本机 DSH 阅读资料后生成概念页、主张与关联的过程。；资料要求，DSH 真实编译验证中的编译工作由本机 DSH 完成。；资料说明，DSH 真实编译验证生成的概念页会进入校对队列。\n来源：DSH 真实编译验证\n\n---\n\n页面 ID：pg_0be58ba1b4e24d55a36d\n标题：DSH 运行时\n类型：concept｜状态：active｜置信度：0.8\n摘要：DeepSeek Harness 的会话、工具、技能与插件运行时；知识库把编译与查询能力暴露给 DSH 智能体。\n结论：DSH 负责执行智能体工作，Alexandria 负责知识的持久化与治理。\n正文节选：## 职责边界 - DSH：会话、工具调用、子智能体、插件与技能； - Alexandria：知识页、本体、权限、索引、编译任务； - 二者通过 HTTP API 与 API Key 连接，智能体不需要理解数据库。 ## 为什么不在 DSH 里做知识存储 知识需要版本、权限、审计与跨会话复用；这些属于服务端状态，不应该绑在单次会话或某个智能体的上下文中。 ## 接入方式 智能体读取 `/api/agent/manifest`，用 `search → read → upsert_page` 的循环维护知识；技能文件 `skills/alexandria/SKILL.md` 描述工作流与质量约束。具体解析链路见 [[concepts/document-pipeline|文档解析流水线]]。\n\n---\n\n页面 ID：pg_ca7631981fa74bb59850\n标题：2026 年 Q2 战略复盘\n类型：source｜状态：active｜置信度：0.65\n摘要：- 内部知识库完成三个团队试点； - 文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS； - DSH 智能体接入编译与查询 API。 - 概念页人工校对进度低于计划； - 跨库检索尚未开放，权限模型需要补课。 1. 建立知识页责任人与复核队列； 2. 完成扫描版 PDF 的 OCR 渲染； 3. 开放受控的跨库引用； 4. 与市场部完成竞品知识库对标。 暂不引入向量数据库；继续以编译式知识库与图谱检索为主，待真实查询日志证明召回不足后再评…\n结论：文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS；\n正文节选：> 本文由 Alexandria 在入库时编译：先读原文，再更新概念页与主张，不把原文切块留给查询时再猜。原始文件保留在「文献」中，可随时回溯。 ## 一句话摘要 - 内部知识库完成三个团队试点； - 文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS； - DSH 智能体接入编译与查询 API。 - 概念页人工校对进度低于计划； - 跨库检索尚未开放，权限模型需要补课。 1. 建立知识页责任人与复核队列； 2. 完成扫描版 PDF 的 OCR 渲染； 3. 开放受控的跨库引用； 4. 与市场部完成竞品知识库对标。 暂不引入向量数据库；继续以编译式知识库与图谱检索为主，待真实查询日志证明召回不足后再评… ## 文档结构 | 章节 | 概要 | | --- | --- | | 进展 | - 内部知识库完成三个团队试点； - 文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS； - DSH 智能体接入编译与查询 API。 | | 偏差 | - 概念页人工校对进度低于计划； - 跨库检索尚未开放，权限模型需要补课。 | | 下季度重点 | 1. 建立知识页责任人与复核队列； 2. 完成扫描版 PDF 的 OCR 渲染； 3. 开放受控的跨库引用； 4. 与市场部完成竞品知识库对标。 | | 决策 | 暂不引入向量数据库；继续以编译式知识库与图谱检索为主，待真实查询日志证明召回不足后再评估。 | ## 关键主张 - 文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS； ## 相关概念 （暂无，等待后续入库时建立关联） ## 溯源 文件：q2-strategy-review.md · 格式：md · 字数：162\n主张：文档流水线支持 PDF、DOCX、PPTX、XLSX、TeX、RTF、图片与 WPS；\n来源：2026 年 Q2 战略复盘\n\n---\n\n页面 ID：pg_0e948f5b8a414849a1a9\n标题：开放问题清单\n类型：note｜状态：active｜置信度：0.6\n摘要：当前尚不确定、需要实验或讨论的问题；每条都应能在未来被关闭。\n结论：把不确定性写下来，才有机会消解它。\n正文节选：## 产品 - 自动编译的概念页，人工校对的最低成本路径是什么？ - 多知识库之间是否允许跨库链接？权限如何表达？ ## 技术 - 扫描版 PDF 的多页 OCR 渲染方案； - [[concepts/llm-wiki|LLM Wiki]] 的交叉引用如何与自动编译共存； - 中文关键短语抽取是否需要引入领域词典； - 矛盾检测如何减少“同义不同词”的误报。 ## 组织 - 知识页的责任人如何轮值？ - 过期页面如何自动进入复核队列？\n\n---\n\n页面 ID：pg_93de89e961914d74b707\n标题：需求评审\n类型：howto｜状态：active｜置信度：0.82\n摘要：在产品需求进入研发前，用固定清单检查价值、边界、验收标准与风险，并留下可追踪的决策记录。\n结论：评审不是走过场，而是把“做什么、为什么、怎样算完成”固定下来。\n正文节选：## 前置条件 - 需求文档包含背景、目标用户、范围与非目标； - 至少有一个可验证的验收标准； - 依赖方（设计、研发、数据）已提前阅读。 ## 流程 1. **价值确认**：这个问题值得现在解决吗？不做的代价是什么？ 2. **边界确认**：本期做什么、不做什么，哪些是后续版本。 3. **方案取舍**：至少一个备选方案与选择理由。 4. **验收标准**：可测量、可复现、可演示。 5. **风险与依赖**：上线风险、数据迁移、合规与回滚方案。 6. **决策记录**：形成 [[decisions/decision-log|决策记录]]，指定负责人和截止时间。 ## 常见失败 - 只讨论方案，不确认问题； - 验收标准是“体验好”“稳定”，无法验证； - 评审后没有决议记录，下一次会议重新争论。 ## 与知识库的关系 评审结论应写入知识页，而不是散落在聊天记录。下次相似需求可以直接引用历史 [[decisions/decision-log|决策记录]]。\n来源：需求评审规范 v2\n\n---\n\n页面 ID：pg_9ddf9263836b490c8c0d\n标题：原子知识页\n类型：concept｜状态：active｜置信度：0.85\n摘要：一页只讲清一个概念或一个决策，有稳定 slug、明确边界和可追溯来源。\n结论：原子化是可链接、可复用、可审计的前提。\n正文节选：## 定义 原子知识页是知识库中最小的可引用单元：一个概念、一个方法、一个决策或一个实体。它有稳定的 slug，一个清晰的标题，一段能独立成立的摘要，以及指向来源与相邻概念的链接。 ## 判断标准 - **可独立引用**：脱离上下文也能说明它是什么； - **边界清楚**：与相邻概念有明确的“不属于本页”的说明； - **来源可追溯**：每条关键主张都能落到具体文献与章节； - **可演化**：新来源可以追加，而不是整页推倒重写。 ## 反例 把一份 40 页的产品手册直接作为一个页面，既无法被精准引用，也无法在局部修订时保持历史。正确做法是拆成 [[concepts/knowledge-compilation|知识编译]] 产出的概念页与文献页。 ## 命名 标题使用领域内的稳定名词；slug 使用小写与连字符，中文标题保留中文 slug，保证可读性。\n主张：原子知识页是知识库中最小的可引用单元。\n\n---\n\n页面 ID：pg_2bfb74bd9b9b4faea128\n标题：决策记录\n类型：decision｜状态：active｜置信度：0.83\n摘要：把关键决策的背景、选项、理由与影响写成一页，供未来的人复用而不是重新争论。\n结论：决策会过期，但决策的理由值得保留。\n正文节选：## 模板 - **背景**：为什么现在必须决定； - **选项**：至少两个真实可选项； - **决定**：选择了什么； - **理由**：依据什么证据与约束； - **影响**：谁会受影响，何时复查； - **状态**：提议 / 已采纳 / 已废弃。 ## 反模式 只写“决定采用 X”，不写为什么不选 Y；把决策写成会议纪要，没有明确负责人。"
+          },
+          "count": 1,
+          "lastSeq": 8
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 18,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": 18,
+        "val": {
+          "preset": "workspace-write",
+          "sandbox": "workspace-write",
+          "approval": "ask",
+          "seeded": false
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": 18,
+        "val": "/Volumes/wd2025/devel/aiworker/alexandria/data/dsh-work"
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": 18,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": 18,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": 18,
+        "val": {}
+      },
+      "agentTeam": {
+        "ver": 7,
+        "seq": 18,
+        "val": {
+          "inheritedEventCount": 0,
+          "id": "session-d82aba26-d222-407b-83bd-7d85a8dfd227",
+          "tasks": [],
+          "nextTaskNumber": 1
+        }
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": 18,
+        "val": null
+      }
+    }
+  }
+}

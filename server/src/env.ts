@@ -11,6 +11,13 @@ export interface Env {
   host: string;
   sessionTtlHours: number;
   maxUploadBytes: number;
+  dsh: {
+    enabled: boolean;
+    bin: string;
+    profile: string;
+    timeoutMs: number;
+    sourceHome: string;
+  };
   wecom: {
     enabled: boolean;
     baseUrl: string;
@@ -55,6 +62,13 @@ export function loadEnv(root: string): Env {
     host,
     sessionTtlHours: Number(process.env.ALEXANDRIA_SESSION_TTL_HOURS ?? 24 * 14),
     maxUploadBytes: Number(process.env.ALEXANDRIA_MAX_UPLOAD_MB ?? 80) * 1024 * 1024,
+    dsh: {
+      enabled: bool(process.env.ALEXANDRIA_DSH_ENABLED ?? '1'),
+      bin: process.env.ALEXANDRIA_DSH_BIN?.trim() || process.env.HIVE_DSH_BIN?.trim() || 'dsh',
+      profile: process.env.ALEXANDRIA_DSH_PROFILE?.trim() || 'headless',
+      timeoutMs: Number(process.env.ALEXANDRIA_DSH_TIMEOUT_MS ?? 90_000),
+      sourceHome: process.env.ALEXANDRIA_DSH_SOURCE_HOME?.trim() || join(process.env.HOME || '', '.dsh'),
+    },
     wecom: {
       enabled: bool(process.env.ALEXANDRIA_WECOM_ENABLED ?? 'true'),
       baseUrl: wecomBase,

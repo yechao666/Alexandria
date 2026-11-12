@@ -3,6 +3,7 @@ import type { Env } from '../env.ts';
 import { actorFor } from './access.ts';
 import { audit } from './audit.ts';
 import { answerKnowledge, searchKnowledge } from '../knowledge/search.ts';
+import { answerKnowledgeWithDsh } from '../knowledge/dsh-query.ts';
 
 export interface WecomAnswer {
   reply: string;
@@ -15,7 +16,7 @@ export interface WecomAnswer {
 const HELP = '【Alexandria】可用指令：\n/ask 知识编译是什么？\n/search 本体论\n也可以直接提问；回答来自已编译知识页并带引用。';
 
 /** 企微 JSON / 加密 XML 回调共用的问答逻辑。 */
-export function answerWecomText(db: Db, env: Env, input: { senderWecomId: string; text: string; chatId?: string }): WecomAnswer {
+export async function answerWecomText(db: Db, env: Env, input: { senderWecomId: string; text: string; chatId?: string }): Promise<WecomAnswer> {
   const senderId = String(input.senderWecomId ?? '').trim();
   const raw = String(input.text ?? '').trim();
   const personRow = db
@@ -66,7 +67,11 @@ export function answerWecomText(db: Db, env: Env, input: { senderWecomId: string
     };
   }
 
-  const answer = answerKnowledge(db, actor, query, { limit: 5 });
+  let answer = answerKnowledge(db, actor, query, { limit: 5 });
+  if (env.dsh.enabled && answer.citations.length) {
+    const dshAnswer = await answerKnowledgeWithDsh(db, env, actor, query, { limit: 5 });
+    if (dshAnswer) answer = dshAnswer;
+  }
   const citations = answer.citations.map((citation, index) => `[${index + 1}] ${citation.title} · ${citation.libraryName}`).join('\n');
   const reply = answer.citations.length
     ? `【Alexandria】${answer.answer.replace(/\n\n以上结论.*$/s, '').slice(0, 1200)}\n\n引用：\n${citations}`

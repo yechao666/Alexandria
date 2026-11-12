@@ -49,7 +49,7 @@ export async function renderSearch(params) {
 
   const answerHtml = answer
     ? `<div class="answer-card">
-        <div class="answer-head">${icon('spark', 18)}<h3 style="font-size:16px">知识合成</h3><span class="badge ${answer.mode === 'llm' ? 'plum' : 'jade'}">${answer.mode === 'llm' ? 'LLM 合成' : answer.mode === 'compiled' ? '编译知识' : '无结果'}</span><span class="small faint" style="margin-left:auto">${answer.tookMs ?? 0} ms · ${answer.citations?.length ?? 0} 条引用</span></div>
+        <div class="answer-head">${icon('spark', 18)}<h3 style="font-size:16px">知识合成</h3><span class="badge ${answer.mode === 'llm' ? 'plum' : 'jade'}">${answer.mode === 'dsh' ? '本机 DSH' : answer.mode === 'llm' ? 'LLM 合成' : answer.mode === 'compiled' ? '编译知识' : '无结果'}</span><span class="small faint" style="margin-left:auto">${answer.tookMs ?? 0} ms · ${answer.citations?.length ?? 0} 条引用</span></div>
         <div class="answer-body">${formatAnswer(answer.answer)}</div>
         ${answer.gaps?.length ? `<div class="gaps">${answer.gaps.map((gap) => `<div class="gap-item">${icon('clock', 13)}<span>${esc(gap)}</span></div>`).join('')}</div>` : ''}
       </div>`

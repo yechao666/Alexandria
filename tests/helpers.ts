@@ -37,6 +37,7 @@ export function createTestContext(options: { seed?: boolean } = {}): TestContext
   env.uploadsDir = join(root, 'data', 'uploads');
   env.thumbnailsDir = join(root, 'data', 'thumbs');
   env.webDir = join(root, 'web');
+  env.dsh.enabled = false;
   const db = openDatabase(env.dbPath);
   migrate(db);
   if (options.seed !== false) seedDatabase(db, env);

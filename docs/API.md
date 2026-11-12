@@ -241,6 +241,8 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/recent` | 最近更新 |
 | POST | `/api/rebuild-index` | 管理员重建 FTS |
 
+`/api/search` 在本机 DSH 可用时会在本地候选上做语义重排；响应 `signals.dsh=1` 表示命中经 DSH 选择。
+
 `/api/search` 响应（节选）：
 
 ```json
@@ -262,7 +264,7 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 }
 ```
 
-`/api/query` 响应包含 `answer`、`mode`、`citations[]`、`gaps[]`、`signals`、`tookMs`。`mode` 为 `compiled` / `llm` / `empty`。
+`/api/query` 响应包含 `answer`、`mode`、`citations[]`、`gaps[]`、`signals`、`tookMs`。`mode` 为 `dsh` / `compiled` / `llm` / `empty`；显式传 `mode: "compiled"` 可跳过 DSH。
 
 ---
 
