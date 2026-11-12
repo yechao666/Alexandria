@@ -431,6 +431,22 @@ CREATE TABLE IF NOT EXISTS oidc_states (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS merge_proposals (
+  id             TEXT PRIMARY KEY,
+  library_id     TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  source_page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  target_page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  score          REAL NOT NULL DEFAULT 0,
+  reasons        TEXT NOT NULL DEFAULT '[]',
+  status         TEXT NOT NULL DEFAULT 'pending',
+  created_by     TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  reviewed_by    TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  reviewed_at    TEXT,
+  created_at     TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_merge_proposals_pending
+  ON merge_proposals(library_id, source_page_id, target_page_id) WHERE status = 'pending';
+
 CREATE TABLE IF NOT EXISTS security_events (
   id         TEXT PRIMARY KEY,
   kind       TEXT NOT NULL,

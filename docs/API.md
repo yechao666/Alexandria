@@ -344,6 +344,10 @@ curl -X POST http://127.0.0.1:4520/api/libraries/lib_product/sources \
 | GET | `/api/pages/:id/access-audit` | 有效访问名单与原因（管理员/页面所有者） |
 | GET | `/api/libraries/:id/merge-suggestions` | 重复页合并建议 |
 | POST | `/api/pages/:id/merge` | 合并同类型重复页 |
+| GET | `/api/libraries/:id/merge-proposals` | 合并审批列表 |
+| POST | `/api/libraries/:id/merge-proposals/scan` | 扫描生成建议 |
+| POST | `/api/merge-proposals/:id/approve` | 批准合并 |
+| POST | `/api/merge-proposals/:id/reject` | 驳回建议 |
 | POST | `/api/pages/:id/parent` | 设置/清除上位概念 |
 | GET | `/api/libraries/:id/hierarchy` | 单库层级树 |
 | GET | `/api/graph/hierarchy` | 权限过滤的层级树 |

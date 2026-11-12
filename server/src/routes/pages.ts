@@ -438,4 +438,36 @@ export function registerPageRoutes(router: Router): void {
     rc.json({ pageId: page.id, visibility: page.visibility, grants, actorRole: libraryRole, people: rows.filter((row) => row.role) });
   });
 
+  router.post('/api/merge-proposals/:id/approve', (rc) => {
+    const actor = requireActor(rc);
+    const proposal = rc.app.db.prepare('SELECT * FROM merge_proposals WHERE id = ?').get(rc.params.id!) as unknown as
+      | { id: string; library_id: string; source_page_id: string; target_page_id: string; status: string }
+      | undefined;
+    if (!proposal) throw errors.notFound('合并建议不存在');
+    if (proposal.status !== 'pending') throw errors.conflict('该建议已处理');
+    const { library } = requireLibrary(rc.app.db, actor, proposal.library_id, 'editor');
+    const source = getPage(rc.app.db, proposal.source_page_id);
+    const target = getPage(rc.app.db, proposal.target_page_id);
+    if (!source || !target) throw errors.notFound('页面不存在');
+    pageAccess(rc, source.id, 'editor');
+    pageAccess(rc, target.id, 'editor');
+    mergePages(rc.app.db, source, target, actor);
+    rc.app.db.prepare("UPDATE merge_proposals SET status = 'approved', reviewed_by = ?, reviewed_at = ? WHERE id = ?").run(actor.person.id, nowIso(), proposal.id);
+    audit(rc.app.db, { actor, action: 'merge.approve', targetType: 'page', targetId: target.id, libraryId: library.id, detail: { proposalId: proposal.id, sourceId: source.id } });
+    rc.json({ ok: true, targetId: target.id });
+  });
+
+  router.post('/api/merge-proposals/:id/reject', (rc) => {
+    const actor = requireActor(rc);
+    const proposal = rc.app.db.prepare('SELECT * FROM merge_proposals WHERE id = ?').get(rc.params.id!) as unknown as
+      | { id: string; library_id: string; status: string }
+      | undefined;
+    if (!proposal) throw errors.notFound('合并建议不存在');
+    if (proposal.status !== 'pending') throw errors.conflict('该建议已处理');
+    requireLibrary(rc.app.db, actor, proposal.library_id, 'editor');
+    rc.app.db.prepare("UPDATE merge_proposals SET status = 'rejected', reviewed_by = ?, reviewed_at = ? WHERE id = ?").run(actor.person.id, nowIso(), proposal.id);
+    audit(rc.app.db, { actor, action: 'merge.reject', targetType: 'merge_proposal', targetId: proposal.id, libraryId: proposal.library_id });
+    rc.json({ ok: true });
+  });
+
 }

@@ -364,7 +364,7 @@ function settingsTab(detail, library, color) {
               { value: 'plum', label: '梅' }, { value: 'indigo', label: '靛' }, { value: 'teal', label: '青' },
             ] })}
           </form>
-          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button><button class="btn" id="merge-suggestions">${icon('layers', 14)} 扫描重复页</button>` : ''}</div>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="save-library">保存设置</button><button class="btn" id="new-node">${icon('plus', 14)} 新建目录</button><a class="btn" href="/api/libraries/${encodeURIComponent(library.id)}/export.md" target="_blank">${icon('file', 14)} 导出 Markdown</a>${detail.canEdit ? `<button class="btn" id="library-audit">${icon('clock', 14)} 审计日志</button><button class="btn" id="merge-suggestions">${icon('layers', 14)} 扫描重复页</button><button class="btn" id="merge-proposals">${icon('check', 14)} 合并审批</button>` : ''}</div>
         </div>
       </div>
       <div class="panel">
@@ -392,6 +392,34 @@ function settingsTab(detail, library, color) {
 }
 
 function bindLibrarySettings(library, detail) {
+  document.getElementById('merge-proposals')?.addEventListener('click', async () => {
+    const openProposals = async () => {
+      try {
+        const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/merge-proposals`);
+        const proposals = (data.proposals ?? []).filter((item) => item.status === 'pending');
+        const rows = proposals.map((item) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="between"><span><b>${esc(item.source_title)}</b> → <b>${esc(item.target_title)}</b></span><span class="badge ${item.score >= 0.85 ? 'clay' : 'ochre'}">${Math.round(item.score * 100)}%</span></div><div class="small muted" style="margin:4px 0">${esc((item.reasons ?? []).join(' · '))}</div><div class="btn-row"><button class="btn btn-sm btn-primary" data-approve-proposal="${esc(item.id)}">批准合并</button><button class="btn btn-sm btn-ghost" data-reject-proposal="${esc(item.id)}">驳回</button></div></div>`).join('');
+        openModal({
+          title: '合并审批',
+          wide: true,
+          body: `<div class="between" style="margin-bottom:10px"><span class="small muted">待审批 ${proposals.length} 条</span><button class="btn btn-sm" id="scan-proposals">扫描新建议</button></div><div style="max-height:480px;overflow:auto">${rows || '<div class="rail-empty" style="padding:20px">没有待审批的合并建议。</div>'}</div>`,
+          footer: `<button class="btn" data-close-modal>关闭</button>`,
+          onMount: (modal) => {
+            modal.querySelector('#scan-proposals')?.addEventListener('click', async () => {
+              try { const result = await api(`/api/libraries/${encodeURIComponent(library.id)}/merge-proposals/scan`, { method: 'POST' }); toast(`新生成 ${result.created} 条建议`, 'success'); closeModal(); openProposals(); } catch (error) { toast(error.message, 'error'); }
+            });
+            modal.querySelectorAll('[data-approve-proposal]').forEach((button) => button.addEventListener('click', async () => {
+              try { await api(`/api/merge-proposals/${encodeURIComponent(button.dataset.approveProposal)}/approve`, { method: 'POST' }); toast('已批准合并', 'success'); closeModal(); openProposals(); window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (error) { toast(error.message, 'error'); }
+            }));
+            modal.querySelectorAll('[data-reject-proposal]').forEach((button) => button.addEventListener('click', async () => {
+              try { await api(`/api/merge-proposals/${encodeURIComponent(button.dataset.rejectProposal)}/reject`, { method: 'POST' }); toast('已驳回', 'success'); closeModal(); openProposals(); } catch (error) { toast(error.message, 'error'); }
+            }));
+          },
+        });
+      } catch (error) { toast(error.message, 'error'); }
+    };
+    openProposals();
+  });
+
   document.getElementById('merge-suggestions')?.addEventListener('click', async () => {
     try {
       const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/merge-suggestions`);

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -70,6 +70,15 @@ export function migrate(db: Db): void {
   const personColumns = db.prepare('PRAGMA table_info(persons)').all() as unknown as { name: string }[];
   if (!personColumns.some((column) => column.name === 'totp_secret')) db.exec('ALTER TABLE persons ADD COLUMN totp_secret TEXT');
   if (!personColumns.some((column) => column.name === 'totp_enabled')) db.exec('ALTER TABLE persons ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS merge_proposals (
+    id TEXT PRIMARY KEY, library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    source_page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    target_page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    score REAL NOT NULL DEFAULT 0, reasons TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending', created_by TEXT REFERENCES persons(id) ON DELETE SET NULL,
+    reviewed_by TEXT REFERENCES persons(id) ON DELETE SET NULL, reviewed_at TEXT, created_at TEXT NOT NULL
+  )`);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_merge_proposals_pending ON merge_proposals(library_id, source_page_id, target_page_id) WHERE status = 'pending'");
   db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes (
     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
     code_hash TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL

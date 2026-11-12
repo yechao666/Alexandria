@@ -531,6 +531,42 @@ export function registerLibraryRoutes(router: Router): void {
     rc.json({ ok: true });
   });
 
+  router.get('/api/libraries/:id/merge-proposals', (rc) => {
+    const actor = requireActor(rc);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
+    const rows = rc.app.db
+      .prepare(
+        `SELECT mp.*, sp.title AS source_title, sp.slug AS source_slug, tp.title AS target_title, tp.slug AS target_slug,
+                creator.name AS created_by_name, reviewer.name AS reviewed_by_name
+           FROM merge_proposals mp
+           JOIN pages sp ON sp.id = mp.source_page_id
+           JOIN pages tp ON tp.id = mp.target_page_id
+           LEFT JOIN persons creator ON creator.id = mp.created_by
+           LEFT JOIN persons reviewer ON reviewer.id = mp.reviewed_by
+          WHERE mp.library_id = ? ORDER BY mp.created_at DESC LIMIT 100`,
+      )
+      .all(library.id) as unknown as Record<string, unknown>[];
+    rc.json({ proposals: rows.map((row) => ({ ...row, reasons: parseJson<string[]>(String(row.reasons ?? '[]'), []) })) });
+  });
+
+  router.post('/api/libraries/:id/merge-proposals/scan', (rc) => {
+    const actor = requireActor(rc);
+    const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
+    const suggestions = mergeSuggestions(rc.app.db, actor, library.id);
+    let created = 0;
+    for (const suggestion of suggestions) {
+      const result = rc.app.db
+        .prepare(
+          `INSERT OR IGNORE INTO merge_proposals (id, library_id, source_page_id, target_page_id, score, reasons, status, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        )
+        .run(newId('mp'), library.id, suggestion.source.id, suggestion.target.id, suggestion.score, JSON.stringify(suggestion.reasons), actor.person.id, nowIso());
+      created += Number(result.changes);
+    }
+    securityEvent(rc.app.db, { kind: 'merge.scan', actorId: actor.person.id, subject: library.id, ip: requestIp(rc), detail: { created } });
+    rc.json({ ok: true, created, total: suggestions.length });
+  });
+
   router.get('/api/libraries/:id/merge-suggestions', (rc) => {
     const actor = requireActor(rc);
     const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');

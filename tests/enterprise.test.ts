@@ -219,3 +219,23 @@ test('管理员可以查看页面有效访问名单与原因', async () => {
   const denied = await fetch(`${base}/api/pages/concepts%2Fknowledge-compilation/access-audit`, { headers: { authorization: `Bearer ${guest.token}` } });
   assert.equal(denied.status, 403);
 });
+
+test('合并建议可以进入审批流并批准', async () => {
+  const create = async (title: string) =>
+    j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title, classKey: 'concept', body: `## 定义\n${title}`, status: 'draft' }),
+    });
+  const source = await create('审批合并测试同名');
+  const target = await create('审批合并测试同名');
+  const scan = await j<{ created: number }>('/api/libraries/lib_eng/merge-proposals/scan', admin.token, { method: 'POST' });
+  assert.ok(scan.created >= 1);
+  const proposals = await j<{ proposals: { id: string; source_page_id: string; target_page_id: string; status: string }[] }>('/api/libraries/lib_eng/merge-proposals', admin.token);
+  const proposal = proposals.proposals.find((item) => item.status === 'pending' && ((item.source_page_id === source.page.id && item.target_page_id === target.page.id) || (item.source_page_id === target.page.id && item.target_page_id === source.page.id)));
+  assert.ok(proposal, '应生成待审批建议');
+  const approved = await j<{ ok: boolean }>(`/api/merge-proposals/${proposal.id}/approve`, admin.token, { method: 'POST' });
+  assert.equal(approved.ok, true);
+  const archived = ctx.db.prepare('SELECT status FROM pages WHERE id = ?').get(proposal.source_page_id) as unknown as { status: string };
+  assert.equal(archived.status, 'archived');
+});
