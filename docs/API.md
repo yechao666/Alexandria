@@ -32,6 +32,10 @@
 
 创建 OAuth state（10 分钟），302 跳转到企业微信授权地址；`returnTo` 只接受以 `/` 开头的站内路径。
 
+### SCIM 2.0
+
+配置 `ALEXANDRIA_SCIM_TOKEN` 后启用：`GET/POST/PATCH/DELETE /scim/v2/Users`、`GET/POST/PATCH /scim/v2/Groups`。使用 `Authorization: Bearer <token>`；删除用户执行停用（active=false）。
+
 ### GET `/api/auth/oidc/start` / `/api/auth/oidc/callback`
 
 OIDC 授权码登录。需配置 Issuer、Client ID/Secret、Redirect URI；回调仅映射已有本地账号，未映射返回登录错误。

@@ -9,6 +9,7 @@ import { registerAgentRoutes } from './agent.ts';
 import { registerReviewRoutes } from './review.ts';
 import { registerWecomAuthRoutes } from './wecom.ts';
 import { registerOidcRoutes } from './oidc.ts';
+import { registerScimRoutes } from './scim.ts';
 import { registerOntologyRoutes } from './ontology.ts';
 import { registerSocialRoutes } from './social.ts';
 import { registerExportRoutes } from './export.ts';
@@ -25,6 +26,7 @@ export function createRouter(): Router {
   registerReviewRoutes(router);
   registerWecomAuthRoutes(router);
   registerOidcRoutes(router);
+  registerScimRoutes(router);
   registerOntologyRoutes(router);
   registerSocialRoutes(router);
   registerExportRoutes(router);

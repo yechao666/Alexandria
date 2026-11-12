@@ -35,6 +35,7 @@ ALEXANDRIA_WECOM_ENCODING_AES_KEY=...
 - DSH 凭据放在运行用户可读的 `~/.dsh/.credentials.yaml`，或只注入 `DEEPSEEK_API_KEY`；**不要**写入数据库/前端。
 - 企业微信 Secret、Token、EncodingAESKey 通过环境变量或管理端写入 meta；接口不回显 Secret。
 - 企业 SSO：配置 `ALEXANDRIA_OIDC_ISSUER/CLIENT_ID/CLIENT_SECRET/REDIRECT_URI`；仅映射已存在的本地 active 账号，不自动创建账号。
+- SCIM：配置 `ALEXANDRIA_SCIM_TOKEN` 后启用 `/scim/v2/Users`、`/scim/v2/Groups`；令牌放在 IdP 的 provisioning secret 中，不写前端。SCIM 删除为停用，不物理删除人员。
 - 生产必须使用企业微信加密 XML 回调 `/api/wecom/callback`，不要使用 JSON Mock 回调。
 
 ## 3. 数据与备份
