@@ -62,7 +62,7 @@ export async function renderLibrary(ref, tab = 'catalog') {
         ${catalogTree(nodes, detail.nodes, selected)}
         <div class="content-pad">
           <div class="list-toolbar">
-            <div class="section-head" style="margin:0;flex:1"><div><h2 style="font-size:22px">${selected ? esc(nodes.find((node) => node.id === selected)?.name ?? '目录') : '全部馆藏'}</h2><div class="sub">知识页 ${visiblePages.length} · 文献 ${visibleSources.length}</div></div></div>
+            <div class="section-head" style="margin:0;flex:1"><div><h2 style="font-size:22px">${selected ? esc(nodes.find((node) => node.id === selected)?.name ?? '目录') : '全部知识页'}</h2><div class="sub">知识页 ${visiblePages.length} · 文献 ${visibleSources.length}</div></div></div>
             <input class="input" id="library-filter" placeholder="筛选标题…" style="width:180px">
             ${detail.canEdit ? `<button class="btn btn-sm" id="new-page">${icon('plus', 14)} 新建页</button>` : ''}
           </div>
@@ -82,7 +82,7 @@ export async function renderLibrary(ref, tab = 'catalog') {
     sources: `
       <div class="list-toolbar">
         <input class="input" id="library-filter" placeholder="筛选文献…" style="width:260px">
-        <span class="small faint">${sources.length} 份馆藏</span>
+        <span class="small faint">${sources.length} 份资料</span>
         ${detail.canEdit ? `<a class="btn btn-sm btn-clay" href="#/upload/${encodeURIComponent(library.slug)}" style="margin-left:auto">${icon('upload', 14)} 上传文献</a>` : ''}
       </div>
       <div class="source-list" id="source-list">${sourceRows || emptyState('还没有文献', '支持 PDF、Word、PPT、Excel、TeX、RTF、WPS、图片与 Markdown 等格式。')}</div>`,
@@ -95,7 +95,6 @@ export async function renderLibrary(ref, tab = 'catalog') {
   return `
     <div class="library-hero">
       <div>
-        <div class="row small muted" style="margin-bottom:10px"><a href="#/">总览</a><span>/</span><span>${esc(library.name)}</span></div>
         <div class="library-title-row">
           <span class="library-emblem" style="--lib-color:${color}">${icon(library.icon === 'terminal' ? 'terminal' : library.icon === 'flask' ? 'flask' : library.icon === 'lock' ? 'lock' : library.icon === 'compass' ? 'compass' : 'book', 27)}</span>
           <div>
@@ -176,7 +175,7 @@ function flattenNodes(nodes, depth = 0, out = []) {
 
 function catalogTree(flat, tree, selected) {
   const all = `<div class="catalog-item ${!selected ? 'active' : ''}" data-node=""><span class="code">ALL</span><span>全部</span><span class="count">${flat.reduce((sum, node) => sum + node.pageCount, 0)}</span></div>`;
-  return `<aside class="catalog"><div class="catalog-head">馆藏目录</div>${all}${flat
+  return `<aside class="catalog"><div class="catalog-head">目录</div>${all}${flat
     .map(
       (node) => `<div class="catalog-item ${selected === node.id ? 'active' : ''}" data-node="${esc(node.id)}" style="padding-left:${9 + node.depth * 14}px"><span class="code">${esc(node.code || '·')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(node.name)}</span><span class="count">${node.pageCount}</span></div>`,
     )

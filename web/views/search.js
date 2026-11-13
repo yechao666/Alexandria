@@ -97,7 +97,7 @@ export async function renderSearch(params) {
   return `
     <section class="search-hero">
       <div class="eyebrow">FTS5 · TYPED GRAPH · COMPILED PAGES</div>
-      <h1>沿着知识路径找答案。</h1>
+      <h1 style="font-size:28px !important;margin:4px 0 8px">知识检索</h1>
       <form class="search-box" id="search-form">
         <input name="q" value="${esc(q)}" list="search-suggestions" placeholder="问一个问题，或输入一个概念 / 文献名 / 标签…" autofocus>
         <datalist id="search-suggestions"></datalist>

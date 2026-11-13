@@ -45,7 +45,7 @@ export async function renderReview(params) {
 
   return `
     <div class="eyebrow">CURATION · REVIEW · CONFLICT RESOLUTION</div>
-    <h1 style="font-size:42px;letter-spacing:-.03em;margin:8px 0 6px">校对台</h1>
+    <h1 style="font-size:28px;letter-spacing:-.02em;margin:6px 0 4px">知识校对</h1>
     <p class="muted" style="max-width:760px;margin-bottom:20px">自动编译出的概念页默认是草稿；在成为高置信知识之前，需要人工确认定义、来源与矛盾。批准会将页面标记为已校对，并要求后续变更重新进入队列。</p>
     <div class="stat-strip" style="margin:0 0 22px">
       <div class="stat-cell"><div class="label">待校对</div><div class="value">${summary.unreviewed ?? 0}</div><div class="sub">尚未人工确认</div></div>

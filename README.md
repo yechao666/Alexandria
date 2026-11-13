@@ -1,10 +1,10 @@
-# Alexandria · 亚历山大知识库
+# Alexandria · 企业知识基础设施
 
-> 把资料编译成知识，而不是在提问时重新检索片段。
+> 把资料编译成可审计、可复用的组织知识资产。
 >
 > 基于 **LLM Wiki / Dynamic Knowledge Repository** 理念、**本体论** 与 **团队权限** 的企业知识库。纯 Node 26 + SQLite；语义编译/检索/合成默认调用**本机 DSH**，不可用时自动回退规则与本地检索。
 
-![总览](docs/screenshots/02-home.png)
+![知识总览](docs/screenshots/30-home-enterprise.png)
 
 ## 这是什么
 
@@ -13,9 +13,10 @@ Alexandria 借鉴了 Karpathy 的 [LLM Wiki](https://gist.github.com/karpathy/44
 - **知识在入库时编译**：阅读来源，拆成原子知识页，抽取结构化主张，建立类型化关联，标记矛盾。
 - **查询时导航**：本机 DSH 在候选知识页上做语义重排与合成；底层是 SQLite FTS5 + 预编译知识图，不使用查询期向量切块。
 - **本体驱动**：每个知识库有独立的本体（类型 / 属性 / 关系），页面不是文章，而是可校验、可遍历的知识对象。
-- **像图书馆一样组织**：分库 → 目录（书架/分类）→ 知识页 / 文献；团队与个人授权，严格权限过滤。
+- **企业知识组织**：知识库 → 目录 → 知识页 / 文献；团队与个人授权，按组织层级严格过滤。
 - **面向智能体**：后台通过本机 DSH headless 执行语义编译/重排/合成；DSH 智能体也可通过 Agent API + SKILL.md 维护知识。
 - **文档能力全面**：PDF、DOCX/DOC、PPTX、XLSX、TeX、RTF、WPS、图片 OCR、Markdown、HTML、CSV/JSON、ODT/EPUB 等。
+- **企业控制台 UI**：与工作区 AIWO/Mnemos/Hive 控制台统一的 Aurora Console 深色设计语言，见 [UI 设计](docs/UI.md)。
 
 ## 快速开始
 
@@ -46,31 +47,19 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 > 本仓库开发时通过 `node_modules -> ../aiwo/node_modules` 复用 TypeScript 编译器；运行时不需要它。
 
-## 一眼看懂
+## 企业控制台
 
-![知识库目录](docs/screenshots/03-library.png)
+![登录](docs/screenshots/29-login-enterprise.png)
 
-![任务中心](docs/screenshots/18-tasks.png)
+![知识总览](docs/screenshots/30-home-enterprise.png)
 
-![页面访问控制](docs/screenshots/19-page-access.png)
+![知识库](docs/screenshots/31-library-enterprise.png)
 
-![知识层级](docs/screenshots/20-hierarchy.png)
+![知识页](docs/screenshots/31-page-enterprise.png)
 
-![全局检索](docs/screenshots/21-search.png)
+![管理控制台](docs/screenshots/31-admin-enterprise.png)
 
-![安全审计](docs/screenshots/22-security.png)
-
-![访问审计](docs/screenshots/23-access-audit.png)
-
-![运行状态](docs/screenshots/24-observability.png)
-
-![权限矩阵](docs/screenshots/25-access-matrix.png)
-
-![校对台](docs/screenshots/26-review.png)
-
-![冲突中心](docs/screenshots/27-conflicts.png)
-
-![校对报表](docs/screenshots/28-review-analytics.png)
+![知识校对](docs/screenshots/31-review-enterprise.png)
 
 | 能力 | 实现 |
 | --- | --- |
@@ -263,6 +252,7 @@ cd ../alexandria && node server/src/main.ts
 - [API 参考](docs/API.md)。
 - [验收报告](docs/ACCEPTANCE.md)：需求映射、98 项测试证据与已知边界。
 - [生产部署手册](docs/PRODUCTION.md)：进程、环境、备份、权限上线检查与容量边界。
+- [企业控制台 UI](docs/UI.md)：Aurora Console tokens、布局与页面规范。
 - [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
 - **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。

@@ -76,7 +76,6 @@ export async function renderPage(ref) {
     html: `
       <div class="article-layout">
         <article>
-          <div class="small muted" style="margin-bottom:14px"><a href="#/library/${encodeURIComponent(page.libraryId)}">${esc(detail.library.name)}</a><span> / </span><span>${esc(page.className)}</span></div>
           <header class="article-head">
             <div class="row wrap">${classBadge(page)}${statusBadge(page.status)}${reviewBadge(page.reviewStatus)}${page.tags?.slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('') ?? ''}</div>
             <h1>${esc(page.title)}</h1>

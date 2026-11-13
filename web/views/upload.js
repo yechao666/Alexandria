@@ -36,7 +36,7 @@ export async function renderUpload(libraryRef) {
 
   return `
     <div class="eyebrow">INGESTION · OCR · COMPILE</div>
-    <h1 style="font-size:42px;letter-spacing:-.03em;margin:8px 0 8px">资料入库</h1>
+    <h1 style="font-size:28px;letter-spacing:-.02em;margin:6px 0 6px">导入资料</h1>
     <p class="muted" style="max-width:680px">上传后先解析、再做知识编译。文本、章节、图片与 OCR 文本会合并成可检索的知识；原始文件保留，可随时回溯或重新编译。</p>
     <div class="upload-layout" style="margin-top:22px">
       <div>

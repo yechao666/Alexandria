@@ -125,7 +125,7 @@ export async function renderAdmin(tab = 'teams') {
 
   return `
     <div class="eyebrow">ORGANIZATION · RBAC · INTEGRATIONS</div>
-    <h1 style="font-size:42px;letter-spacing:-.03em;margin:8px 0 4px">团队与权限</h1>
+    <h1 style="font-size:28px;letter-spacing:-.02em;margin:6px 0 4px">管理控制台</h1>
     <p class="muted" style="max-width:720px">知识库属于团队，权限按组织、团队、个人三层授予；成员离开团队后自动失去对应访问。所有写入都会进入审计。</p>
     <div class="admin-layout" style="margin-top:22px">
       <nav class="admin-nav">${TABS.map((item) => `<button class="${tab === item.key ? 'active' : ''}" data-admin-tab="${item.key}">${item.label}</button>`).join('')}</nav>

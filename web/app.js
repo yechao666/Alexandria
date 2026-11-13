@@ -75,21 +75,27 @@ function showLogin() {
       <aside class="login-aside">
         <div class="brand" style="padding:0">
           <span class="brand-mark">A</span>
-          <span class="brand-text"><span class="brand-name">ALEXANDRIA</span><span class="brand-sub">亚历山大知识库</span></span>
+          <span class="brand-text"><span class="brand-name">ALEXANDRIA</span><span class="brand-sub">企业知识基础设施</span></span>
         </div>
         <div>
-          <div class="eyebrow" style="margin-bottom:18px">KNOWLEDGE, COMPILED</div>
-          <div class="login-quote">知识不是被检索的片段，<br>而是被<em>编译</em>的馆藏。</div>
-          <p class="caption">在资料入库时阅读、拆页、抽取主张、维护本体关联；查询时沿着已经写好的路径导航。为团队与智能体共同维护的知识而设计。</p>
-          <div class="login-meta"><span>分库与目录</span><span>本体类型</span><span>团队权限</span><span>文档 + OCR</span><span>DSH 智能体</span></div>
+          <div class="eyebrow" style="margin-bottom:18px;color:#60a5fa">KNOWLEDGE OPERATIONS</div>
+          <div class="login-quote">让知识成为<br>可复用的<em>企业资产</em>。</div>
+          <p class="caption">统一管理资料、知识页、实体关系与访问权限。处理过程任务化，知识变更留痕，敏感内容按组织架构精确授权。</p>
+          <div class="login-features">
+            <span>${icon('shield', 14)} 组织级权限</span>
+            <span>${icon('check', 14)} 人工校对</span>
+            <span>${icon('graph', 14)} 知识图谱</span>
+            <span>${icon('search', 14)} 语义检索</span>
+          </div>
+          <div class="login-meta"><span>SSO / 企业微信</span><span>审计日志</span><span>备份与恢复</span><span>本机 DSH</span></div>
         </div>
-        <div class="small faint">Alexandria · 0.1 · 本地优先 · 本机 DSH · 组织级权限</div>
+        <div class="small" style="color:#64748b">ALEXANDRIA · ENTERPRISE · v1.0 BASELINE</div>
       </aside>
       <main class="login-main">
         <div class="login-card">
           <div class="eyebrow">SIGN IN</div>
-          <h2 style="margin-top:8px">回到你的图书馆</h2>
-          <p class="muted small">使用组织账号登录。演示环境密码统一为 <span class="mono">alex-demo</span>。</p>
+          <h2 style="margin-top:8px">登录企业知识库</h2>
+          <p class="muted small">使用组织账号登录；管理员可配置 SSO 与企业微信。演示环境密码统一为 <span class="mono">alex-demo</span>。</p>
           <form class="login-form" id="login-form">
             <div class="field"><label>邮箱</label><input class="input" name="email" type="email" value="lin@alex.dev" autocomplete="username" required></div>
             <div class="field"><label>密码</label><input class="input" name="password" type="password" value="alex-demo" autocomplete="current-password" required></div>
@@ -214,10 +220,10 @@ async function route() {
     }
     if (parts[0] === 'search') {
       setContent(loading('正在检索已编译的知识…'));
-      renderShell({ content: loading('正在检索已编译的知识…'), breadcrumb: [{ label: '总览', href: '#/' }, { label: '全局检索' }], active: 'search' });
+      renderShell({ content: loading('正在检索已编译的知识…'), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识检索' }], active: 'search' });
       const html = await renderSearch(query);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '全局检索' }], active: 'search' });
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识检索' }], active: 'search' });
       document.title = `${query.get('q') ?? '检索'} · Alexandria`;
       mountSearch();
       return;
@@ -225,7 +231,7 @@ async function route() {
     if (parts[0] === 'upload') {
       const html = await renderUpload(parts[1] ? decodeURIComponent(parts[1]) : '');
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '资料入库' }], active: 'upload' });
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '导入资料' }], active: 'upload' });
       document.title = '资料入库 · Alexandria';
       mountUpload(parts[1] ? decodeURIComponent(parts[1]) : '');
       return;
@@ -234,7 +240,7 @@ async function route() {
       setContent(loading('正在读取任务…'));
       const html = await renderTasks();
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '任务中心' }], active: 'tasks' });
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '处理任务' }], active: 'tasks' });
       document.title = '任务中心 · Alexandria';
       mountTasks();
       return;
@@ -253,7 +259,7 @@ async function route() {
       setContent(loading());
       const html = await renderAdmin(tab);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '团队与权限' }], active: 'admin' });
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '管理控制台' }], active: 'admin' });
       document.title = '团队与权限 · Alexandria';
       mountAdmin(tab);
       return;
@@ -262,7 +268,7 @@ async function route() {
       setContent(loading());
       const html = await renderReview(query);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '校对台' }], active: 'review' });
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识校对' }], active: 'review' });
       document.title = '校对台 · Alexandria';
       mountReview();
       return;

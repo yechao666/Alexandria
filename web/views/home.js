@@ -26,97 +26,108 @@ export async function renderHome() {
   const maxClass = Math.max(1, ...classes.map((item) => item.count));
   const featured = libraries[0];
 
-  const libraryCards = libraries
+  const libraryRows = libraries
     .map((library) => {
       const coverColor = libraryColor(library.color);
-      return `<a class="library-card" href="#/library/${encodeURIComponent(library.slug)}" style="--lib-color:${coverColor}">
-        <span class="library-spine"></span>
-        <span class="library-cover">
-          <span class="top"><span class="badge ${library.visibility === 'private' ? 'clay' : 'outline'}">${library.visibility === 'private' ? '私有馆藏' : library.visibility === 'public' ? '公开' : '组织内'}</span>${roleBadge(library.role)}</span>
-          <span class="name">${esc(library.name)}</span>
-          <span class="desc">${esc(library.description)}</span>
-          <span class="library-shelf">${(library.nodes ?? []).slice(0, 3).map((node) => `<span class="shelf-chip">${esc(node.name)}</span>`).join('')}</span>
-          <span class="foot"><span><b>${fmtNumber(library.counts?.pages)}</b> 知识页</span><span><b>${fmtNumber(library.counts?.sources)}</b> 文献</span><span><b>${fmtNumber(library.counts?.links)}</b> 关联</span><span class="arrow">${icon('arrow', 15)}</span></span>
-        </span>
-      </a>`;
+      const visibility = library.visibility === 'private' ? '私有' : library.visibility === 'public' ? '公开' : '组织内';
+      return `<tr>
+        <td><a class="library-row" href="#/library/${encodeURIComponent(library.slug)}">
+          <span class="library-avatar" style="background:${coverColor}">${esc(library.name.slice(0, 1))}</span>
+          <span style="min-width:0"><span class="name">${esc(library.name)}</span><span class="desc">${esc(library.description || '暂无描述')}</span></span>
+        </a></td>
+        <td><span class="badge ${library.visibility === 'private' ? 'ochre' : 'outline'}">${visibility}</span></td>
+        <td>${roleBadge(library.role)}</td>
+        <td class="num-cell"><b>${fmtNumber(library.counts?.pages)}</b></td>
+        <td class="num-cell">${fmtNumber(library.counts?.sources)}</td>
+        <td class="num-cell">${fmtNumber(library.counts?.links)}</td>
+        <td><a class="icon-btn" href="#/library/${encodeURIComponent(library.slug)}" title="打开知识库" aria-label="打开知识库">${icon('arrow', 14)}</a></td>
+      </tr>`;
     })
     .join('');
 
-  const recent = (b.recentPages ?? [])
+  const recentRows = (b.recentPages ?? [])
     .slice(0, 6)
     .map(
-      (page) => `<a class="activity-row" href="#/page/${encodeURIComponent(page.id)}">
-        <span class="activity-icon">${icon(page.classKey === 'source' ? 'file' : 'file', 15)}</span>
-        <span class="text"><b>${esc(page.title)}</b><br><span class="muted">${esc(page.libraryName)} · ${esc(page.summary ?? '').slice(0, 70)}</span></span>
-        <span class="time">${timeAgo(page.updatedAt)}</span>
-      </a>`,
+      (page) => `<tr><td><a class="library-row" href="#/page/${encodeURIComponent(page.id)}"><span class="activity-icon">${icon('file', 14)}</span><span style="min-width:0"><span class="name">${esc(page.title)}</span><span class="desc">${esc(page.libraryName)}</span></span></a></td><td><span class="badge outline">${esc(page.classKey ?? 'page')}</span></td><td class="faint small">${timeAgo(page.updatedAt)}</td></tr>`,
     )
     .join('');
 
   const teamTree = renderTeamTree(b.teams ?? []);
+  const pending = Number(stats.reviewPending ?? 0);
+  const conflicts = Number(stats.conflicts ?? 0);
+  const composition = classes
+    .slice(0, 7)
+    .map(
+      (item) => `<div class="type-bar"><span>${esc(item.name)}</span><span class="track"><i class="fill" style="width:${Math.round((item.count / Math.max(1, ...classes.map((entry) => entry.count))) * 100)}%;background:${libraryColor(item.color)}"></i></span><span>${item.count}</span></div>`,
+    )
+    .join('');
 
   return `
-    <section class="hero">
+    <section class="page-head">
       <div>
-        <div class="eyebrow">LLM WIKI · ONTOLOGY · TEAM KNOWLEDGE</div>
-        <h1><span class="line">把资料，</span><span class="line"><em>编译</em>成知识。</span></h1>
-        <p class="lede">不是把文件切块、等提问时再猜。Alexandria 在入库时阅读、拆页、抽取主张、建立本体关联；检索时沿着已经写好的知识路径走。</p>
-        <div class="hero-actions">
-          ${featured ? `<a class="btn btn-primary" href="#/library/${encodeURIComponent(featured.slug)}">进入${esc(featured.name)} ${icon('arrow', 15)}</a>` : ''}
-          <a class="btn" href="#/upload">${icon('upload', 15)} 上传资料</a>
-          <a class="btn btn-ghost" href="#/search">${icon('search', 15)} 试试检索</a>
-        </div>
-        <div class="hero-foot">
-          <span><b>${fmtNumber(stats.pages)}</b>知识页</span>
-          <span><b>${fmtNumber(stats.sources)}</b>馆藏文献</span>
-          <span><b>${fmtNumber(stats.links)}</b>类型化关联</span>
-          <span><b>${fmtNumber(stats.members)}</b>组织成员</span>
-        </div>
+        <div class="eyebrow">KNOWLEDGE OPERATIONS · ENTERPRISE</div>
+        <h1>知识库总览</h1>
+        <p>统一管理组织知识资产、资料处理、权限与校对队列；所有内容按团队和可见性范围受控。</p>
       </div>
-      <div class="panel pipeline-card">
-        <div class="between" style="margin-bottom:8px"><h3 style="font-size:16px">一条资料的旅程</h3><span class="badge jade">入库时编译</span></div>
-        <div class="pipeline-step"><span class="num">01</span><span class="body"><span class="name">解析与识别</span><span class="desc">PDF / Word / PPT / Excel / TeX / RTF / WPS / 图片 OCR，统一成文本、章节与资产。</span></span></div>
-        <div class="pipeline-step"><span class="num">02</span><span class="body"><span class="name">概念与主张抽取</span><span class="desc">识别概念、定义、关系与数字事实，生成带来源锚点的 claim。</span></span></div>
-        <div class="pipeline-step"><span class="num">03</span><span class="body"><span class="name">合并与矛盾标记</span><span class="desc">更新已有原子知识页，保留双方说法，把冲突留给人类裁决。</span></span></div>
-        <div class="pipeline-step"><span class="num">04</span><span class="body"><span class="name">本体化与索引</span><span class="desc">按类型归档，写入词法索引与类型化图谱，供检索与智能体导航。</span></span></div>
-        <div class="pipeline-foot"><span>${fmtNumber(stats.claims)} 条结构化主张</span><span>${fmtNumber(stats.conflicts)} 处待裁决矛盾</span></div>
+      <div class="page-actions">
+        <a class="btn" href="#/search">${icon('search', 14)} 检索</a>
+        <button class="btn" id="new-library-btn">${icon('plus', 14)} 新建知识库</button>
+        <a class="btn btn-primary" href="#/upload">${icon('upload', 14)} 导入资料</a>
       </div>
     </section>
 
-    <section class="stat-strip">
-      <div class="stat-cell"><div class="label">知识页</div><div class="value">${fmtNumber(stats.pages)}</div><div class="sub">原子化、可引用</div></div>
-      <div class="stat-cell"><div class="label">馆藏文献</div><div class="value">${fmtNumber(stats.sources)}</div><div class="sub">原始文件可回溯</div></div>
-      <div class="stat-cell"><div class="label">知识关联</div><div class="value">${fmtNumber(stats.links)}</div><div class="sub">wikilink + 类型化边</div></div>
-      <div class="stat-cell"><div class="label">待校对</div><div class="value">${fmtNumber(stats.reviewPending ?? 0)}</div><div class="sub">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库 · ${fmtNumber(stats.conflicts ?? 0)} 处矛盾</div></div>
+    <section class="kpi-grid">
+      <div class="kpi-card"><span class="kpi-icon">${icon('layers', 17)}</span><div><div class="label">知识资产</div><div class="value">${fmtNumber(stats.pages)}</div><div class="hint">原子化知识页</div></div></div>
+      <div class="kpi-card"><span class="kpi-icon green">${icon('file', 17)}</span><div><div class="label">原始资料</div><div class="value">${fmtNumber(stats.sources)}</div><div class="hint">可回溯的文献与附件</div></div></div>
+      <div class="kpi-card"><span class="kpi-icon amber">${icon('check', 17)}</span><div><div class="label">待校对</div><div class="value">${fmtNumber(pending)}</div><div class="hint">${conflicts} 条矛盾待裁决</div></div></div>
+      <div class="kpi-card"><span class="kpi-icon ${conflicts ? 'red' : 'green'}">${icon('users', 17)}</span><div><div class="label">组织成员</div><div class="value">${fmtNumber(stats.members)}</div><div class="hint">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库</div></div></div>
     </section>
 
-    <div class="section-head">
-      <div><h2>馆藏</h2><div class="sub">按团队与领域划分的知识库；权限在库、团队、个人三层授予。</div></div>
-      <button class="btn btn-sm" id="new-library-btn">${icon('plus', 14)} 新建知识库</button>
-    </div>
-    <div class="library-grid">
-      ${libraryCards || ''}
-      <button class="library-add" id="new-library-card">${icon('plus', 22)}<div style="margin-top:8px">建立一个新的知识库</div><div class="small muted">绑定团队、设定可见性，再选择本体</div></button>
-    </div>
-
-    <div class="home-lower">
-      <div class="panel">
-        <div class="panel-head"><h3>最近编译</h3><a class="link small" href="#/search">查看全部 ${icon('arrow', 13)}</a></div>
-        <div class="panel-body activity-list">${recent || '<div class="rail-empty">还没有知识页，先上传一份资料。</div>'}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>知识构成</h3><span class="small muted">按本体类型</span></div>
-        <div class="panel-body type-bars">
-          ${classes
-            .slice(0, 8)
-            .map(
-              (item) => `<div class="type-bar"><span>${esc(item.name)}</span><span class="track"><i class="fill" style="width:${Math.round((item.count / maxClass) * 100)}%;background:${libraryColor(item.color)}"></i></span><span>${item.count}</span></div>`,
-            )
-            .join('') || '<div class="rail-empty">暂无数据</div>'}
+    <div class="dashboard-grid">
+      <div class="dashboard-main">
+        <div class="panel">
+          <div class="panel-head"><div><h3>知识库</h3><div class="small faint">按团队授权，库内再按目录、页面与文献细化</div></div><span class="badge jade">${libraries.length} 个可见</span></div>
+          <div style="overflow:auto">
+            <table class="data-table">
+              <thead><tr><th>知识库</th><th>可见性</th><th>我的角色</th><th>知识页</th><th>文献</th><th>关联</th><th></th></tr></thead>
+              <tbody>${libraryRows || '<tr><td colspan="7" class="muted" style="padding:18px">暂无可见知识库</td></tr>'}</tbody>
+            </table>
+          </div>
         </div>
-        <div class="panel-head" style="border-top:1px solid var(--line)"><h3>组织架构</h3><a class="link small" href="#/admin">管理 ${icon('arrow', 13)}</a></div>
-        <div class="panel-body org-tree">${teamTree}</div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h3>最近更新</h3><div class="small faint">编译、校对或编辑后的知识页</div></div><a class="link small" href="#/search">查看全部 ${icon('arrow', 12)}</a></div>
+          <div style="overflow:auto">
+            <table class="data-table">
+              <thead><tr><th>页面</th><th>类型</th><th>更新时间</th></tr></thead>
+              <tbody>${recentRows || '<tr><td colspan="3" class="muted" style="padding:18px">还没有知识页，先导入一份资料。</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
       </div>
+
+      <aside class="dashboard-side">
+        <div class="panel">
+          <div class="panel-head"><h3>待办事项</h3><span class="badge ochre">${pending + conflicts}</span></div>
+          <div class="panel-body">
+            <div class="todo-list">
+              <a class="todo-item" href="#/review"><span class="todo-icon">${icon('check', 14)}</span><span class="todo-text"><b>待校对知识页</b><span>草稿需人工确认</span></span><span class="todo-count">${pending}</span></a>
+              <a class="todo-item" href="#/review?conflicts=1"><span class="todo-icon">${icon('shield', 14)}</span><span class="todo-text"><b>矛盾主张</b><span>需裁决后发布</span></span><span class="todo-count">${conflicts}</span></a>
+              <a class="todo-item" href="#/tasks"><span class="todo-icon">${icon('clock', 14)}</span><span class="todo-text"><b>处理任务</b><span>查看队列与失败项</span></span><span class="todo-count">›</span></a>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>知识构成</h3><span class="small faint">按本体类型</span></div>
+          <div class="panel-body type-bars">${composition || '<div class="rail-empty">暂无数据</div>'}</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>组织架构</h3><a class="link small" href="#/admin">管理 ${icon('arrow', 12)}</a></div>
+          <div class="panel-body org-tree">${teamTree}</div>
+        </div>
+      </aside>
     </div>`;
 
   // bind after insertion by app: return markup only; events handled in mountHome

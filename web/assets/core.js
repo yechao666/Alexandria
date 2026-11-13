@@ -235,23 +235,29 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
       <aside class="sidebar">
         <a class="brand" href="#/">
           <span class="brand-mark">A</span>
-          <span class="brand-text"><span class="brand-name">ALEXANDRIA</span><span class="brand-sub">亚历山大知识库</span></span>
+          <span class="brand-text"><span class="brand-name">ALEXANDRIA</span><span class="brand-sub">企业知识基础设施</span></span>
         </a>
-        <div class="side-section">
-          <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>总览</span></a>
-          <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>全局检索</span></a>
-          <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
-          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>校对台</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
-          <a class="nav-link ${active === 'upload' ? 'active' : ''}" href="#/upload">${icon('upload')}<span>资料入库</span></a>
-          <a class="nav-link ${active === 'tasks' ? 'active' : ''}" href="#/tasks">${icon('clock')}<span>任务中心</span></a>
-        </div>
-        <div class="side-section">
-          <div class="side-label">我的知识库</div>
-          ${libraries || '<div class="side-label" style="padding-top:4px">暂无可见知识库</div>'}
+        <div class="workspace-switcher" title="当前工作空间">
+          <span class="ws-icon">EK</span>
+          <span class="ws-text"><b>企业知识空间</b><span>Production · 组织级</span></span>
+          <span class="ws-chevron">${icon('chevron', 12) || '▾'}</span>
         </div>
         <div class="side-section">
           <div class="side-label">工作台</div>
-          <a class="nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('users')}<span>团队与权限</span></a>
+          <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>知识总览</span></a>
+          <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>知识检索</span></a>
+          <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
+          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>知识校对</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
+          <a class="nav-link ${active === 'upload' ? 'active' : ''}" href="#/upload">${icon('upload')}<span>导入资料</span></a>
+          <a class="nav-link ${active === 'tasks' ? 'active' : ''}" href="#/tasks">${icon('clock')}<span>处理任务</span></a>
+        </div>
+        <div class="side-section">
+          <div class="side-label">知识库</div>
+          ${libraries || '<div class="side-label" style="padding-top:4px">暂无可见知识库</div>'}
+        </div>
+        <div class="side-section">
+          <div class="side-label">管理</div>
+          <a class="nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('users')}<span>管理控制台</span></a>
           <a class="nav-link ${active === 'agent' ? 'active' : ''}" href="#/agent">${icon('spark')}<span>智能体接入</span></a>
         </div>
         <div class="side-spacer"></div>
@@ -265,9 +271,10 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
         <header class="topbar">
           <button class="icon-btn mobile-toggle" id="nav-toggle" aria-label="菜单">${icon('menu')}</button>
           <div class="breadcrumb">${crumbs}</div>
+          <div class="topbar-meta"><span class="live-status"><i></i>实时</span><span class="env-badge">PRODUCTION</span><span class="small faint hide-sm">组织级权限</span></div>
           <form class="topbar-search" id="top-search">
             ${icon('search', 16)}
-            <input name="q" placeholder="搜索知识、文献、概念…" autocomplete="off" aria-label="搜索">
+            <input name="q" placeholder="搜索知识、文档、人员…" autocomplete="off" aria-label="搜索">
             <kbd>⌘K</kbd>
           </form>
           <a class="icon-btn notif-btn hide-sm" href="#/notifications" title="通知" aria-label="通知">${icon('bell', 17)}${Number(state.bootstrap?.stats?.notificationsUnread ?? 0) > 0 ? `<span class="notif-dot">${state.bootstrap.stats.notificationsUnread}</span>` : ''}</a>
