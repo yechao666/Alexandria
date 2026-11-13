@@ -53,7 +53,9 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ![知识总览](docs/screenshots/30-home-enterprise.png)
 
-![知识库](docs/screenshots/34-library-docs-enterprise.png)
+![文件管理](docs/screenshots/34-library-docs-enterprise.png)
+
+![文件与关联知识](docs/screenshots/35-drive-selected-enterprise.png)
 
 ![文档中心](docs/screenshots/34-documents-enterprise.png)
 
@@ -75,7 +77,8 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **知识合成** | 本机 DSH 基于候选知识页做语义重排与带引用合成；失败回退编译式答案 |
 | **本机 DSH** | 入库编译、语义检索重排、知识合成；无凭据时回退规则编译器与 FTS/图谱 |
 | **权限** | 组织层级（上级只读下级，下级不可反查上级）+ 库/页面/文献 ACL + 定向共享；每次查询先过滤 |
-| **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底；文档中心统一管理 |
+| **文件管理** | 网盘式文件页：文件夹树、网格/列表、搜索、上传、编辑归档、重编译、删除 |
+| **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底；文档中心统一登记 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 文档→知识页→主张全程来源链路；页面版本、审计事件、矛盾标记、回收站 |
 | **维护** | 过期会话/挑战清理、回收站/审计保留期、备份完整性校验、可选自动备份 |

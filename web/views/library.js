@@ -4,6 +4,7 @@ import {
   icon,
   escapeHtml as esc,
   fmtNumber,
+  fmtBytes,
   timeAgo,
   libraryColor,
   roleBadge,
@@ -25,12 +26,59 @@ import {
 import { mountGraph } from '../assets/graph.js';
 
 const TABS = [
-  { key: 'documents', label: '文档' },
+  { key: 'documents', label: '文件' },
   { key: 'pages', label: '知识页' },
   { key: 'catalog', label: '目录' },
   { key: 'graph', label: '图谱' },
   { key: 'settings', label: '设置' },
 ];
+
+const FILE_KIND_LABEL = {
+  pdf: 'PDF', docx: 'Word', doc: 'Word', pptx: 'PPT', ppt: 'PPT', xlsx: 'Excel', xls: 'Excel',
+  md: 'Markdown', markdown: 'Markdown', txt: '文本', html: 'HTML', tex: 'TeX', rtf: 'RTF',
+  wps: 'WPS', image: '图片', odt: 'ODT', epub: 'EPUB',
+};
+
+function fileKind(source) {
+  return FILE_KIND_LABEL[source.kind] ?? FILE_KIND_LABEL[String(source.ext ?? '').toLowerCase()] ?? String(source.ext ?? '文件').toUpperCase();
+}
+
+function driveFile(source, view) {
+  const status = source.status === 'ready' ? 'jade' : source.status === 'failed' ? 'clay' : 'ochre';
+  const statusLabel = source.status === 'ready' ? '已编译' : source.status === 'failed' ? '失败' : '处理中';
+  const kind = fileKind(source);
+  return `<div class="file-card ${view === 'list' ? 'file-row' : ''}" data-file-id="${esc(source.id)}" data-file-node="${esc(source.nodeId ?? '')}" data-search="${esc(`${source.title} ${source.filename} ${kind}`.toLowerCase())}" tabindex="0">
+    <span class="file-kind ${source.kind === 'image' ? 'image' : ''}">${icon(source.kind === 'image' ? 'image' : 'file', 20)}<b>${esc(kind)}</b></span>
+    <div class="file-main"><div class="file-name">${esc(source.title)}</div><div class="file-meta">${esc(source.filename)} · ${fmtNumber(source.wordCount)} 字 · ${timeAgo(source.createdAt)}</div></div>
+    <div class="file-links"><b>${fmtNumber(source.compiledPages)}</b><span>知识点</span></div>
+    <span class="badge ${status}">${statusLabel}</span>
+    <span class="file-chevron">${icon('chevron', 14)}</span>
+  </div>`;
+}
+
+function renderDrive(library, detail, sources, nodes, selected, view) {
+  const current = nodes.find((node) => node.id === selected);
+  const folderRows = [`<button class="drive-folder ${!selected ? 'active' : ''}" data-node="">${icon('folder', 14)}<span>全部文件</span><span class="count">${sources.length}</span></button>`, ...nodes.map((node) => `<button class="drive-folder ${selected === node.id ? 'active' : ''}" data-node="${esc(node.id)}" style="padding-left:${10 + node.depth * 14}px">${icon('folder', 14)}<span>${esc(node.name)}</span><span class="count">${node.sourceCount ?? ''}</span></button>`)].join('');
+  const files = sources.map((source) => driveFile(source, view)).join('');
+  return `<div class="drive-layout">
+    <aside class="drive-folders">
+      <div class="drive-folders-head"><span>文件夹</span><span>${sources.length}</span></div>
+      ${folderRows}
+      ${detail.canEdit ? `<button class="drive-new-folder" id="new-node">${icon('plus', 13)} 新建文件夹</button>` : ''}
+    </aside>
+    <section class="drive-main">
+      <div class="drive-toolbar">
+        <div class="drive-breadcrumb"><span>${esc(library.name)}</span><span>/</span><b>${esc(current?.name ?? '全部文件')}</b></div>
+        <input class="input" id="library-filter" placeholder="搜索文件…">
+        <div class="drive-view-toggle"><button class="${view === 'grid' ? 'active' : ''}" data-view="grid" title="网格">${icon('layers', 14)}</button><button class="${view === 'list' ? 'active' : ''}" data-view="list" title="列表">${icon('menu', 14)}</button></div>
+        ${detail.canEdit ? `<a class="btn btn-primary" href="#/upload/${encodeURIComponent(library.slug)}">${icon('upload', 14)} 上传文件</a>` : ''}
+      </div>
+      <div class="drive-summary"><span><b>${sources.length}</b> 文件</span><span><b>${sources.filter((source) => source.status === 'ready').length}</b> 已编译</span><span><b>${sources.reduce((sum, source) => sum + Number(source.compiledPages ?? 0), 0)}</b> 关联知识点</span><span><b>${sources.filter((source) => source.status === 'ready' && !Number(source.compiledPages)).length}</b> 无知识点</span></div>
+      <div class="file-grid ${view === 'list' ? 'view-list' : ''}" id="file-grid">${files || emptyState('这个文件夹还没有文件', '上传文档后，文件会出现在这里，并自动关联编译出的知识点。', detail.canEdit ? `<a class="btn btn-primary" href="#/upload/${encodeURIComponent(library.slug)}">${icon('upload', 14)} 上传文件</a>` : '')}</div>
+    </section>
+    <aside class="file-inspector" id="file-inspector"><div class="inspector-empty">${icon('file', 24)}<b>选择一个文件</b><span>查看文件信息、来源和它关联的知识点。</span></div></aside>
+  </div>`;
+}
 
 export async function renderLibrary(ref, tab = 'documents') {
   const [detail, pagesData, sourcesData] = await Promise.all([
@@ -43,7 +91,9 @@ export async function renderLibrary(ref, tab = 'documents') {
   const pages = pagesData.pages ?? [];
   const sources = sourcesData.sources ?? [];
   const nodes = flattenNodes(detail.nodes ?? []);
-  const selected = new URLSearchParams(location.hash.split('?')[1] ?? '').get('node') ?? '';
+  const hashQuery = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  const selected = hashQuery.get('node') ?? '';
+  const view = hashQuery.get('view') === 'list' ? 'list' : 'grid';
   const visiblePages = pages.filter((page) => !selected || page.nodeId === selected);
   const visibleSources = sources.filter((source) => !selected || source.nodeId === selected);
   const color = libraryColor(library.color);
@@ -80,20 +130,7 @@ export async function renderLibrary(ref, tab = 'documents') {
         ${detail.canEdit ? `<button class="btn btn-sm" id="new-page">${icon('plus', 14)} 新建页</button>` : ''}
       </div>
       <div class="page-grid" id="page-grid">${pageCards || emptyState('没有匹配的知识页', '换个类型或关键词试试。')}</div>`,
-    documents: `
-      <div class="doc-coverage">
-        <div><b>${sources.length}</b><span>文档总数</span></div>
-        <div><b>${sources.filter((source) => source.status === 'ready').length}</b><span>已编译</span></div>
-        <div><b>${sources.filter((source) => source.status === 'processing' || source.status === 'queued').length}</b><span>处理中</span></div>
-        <div><b>${sources.filter((source) => source.status === 'failed').length}</b><span>失败</span></div>
-        <div><b>${sources.filter((source) => source.status === 'ready' && !Number(source.compiledPages)).length}</b><span>无知识页</span></div>
-      </div>
-      <div class="list-toolbar">
-        <input class="input" id="library-filter" placeholder="筛选文档…" style="width:260px">
-        <span class="small faint">按部门知识库归档 · ${sources.length} 份文档</span>
-        ${detail.canEdit ? `<a class="btn btn-sm btn-clay" href="#/upload/${encodeURIComponent(library.slug)}" style="margin-left:auto">${icon('upload', 14)} 上传文档</a>` : ''}
-      </div>
-      <div class="source-list" id="source-list">${sourceRows || emptyState('还没有文档', '支持 PDF、Word、PPT、Excel、TeX、RTF、WPS、图片与 Markdown 等格式。')}</div>`,
+    documents: renderDrive(library, detail, visibleSources, nodes, selected, view),
     graph: `
       <div class="between" style="margin-bottom:14px"><div><h2 style="font-size:22px">类型化图谱</h2><div class="sub">节点大小约等于连接度；颜色代表本体类型；点击进入知识页。</div></div><button class="btn btn-sm" id="graph-fit">${icon('refresh', 14)} 重置视图</button></div>
       <div class="graph-shell"><canvas class="graph-canvas" id="library-graph"></canvas><div class="graph-legend" id="graph-legend"></div></div>`,
@@ -169,6 +206,7 @@ export async function mountLibrary(ref, tab = 'documents') {
   });
   bindCatalogTree(ref, tab);
   bindFilter();
+  bindDrive(library, detail);
   bindSourceRows();
   bindLibrarySettings(library, detail);
 }
@@ -191,11 +229,71 @@ function catalogTree(flat, tree, selected) {
 }
 
 function bindCatalogTree(ref, tab) {
-  document.querySelectorAll('[data-node]').forEach((item) => {
+  document.querySelectorAll('.catalog-item[data-node], .drive-folder[data-node]').forEach((item) => {
     item.addEventListener('click', () => {
       const node = item.dataset.node;
       go(`#/library/${encodeURIComponent(ref)}?tab=${tab}${node ? `&node=${encodeURIComponent(node)}` : ''}`);
     });
+  });
+}
+
+function bindDrive(library, detail) {
+  const grid = document.getElementById('file-grid');
+  if (!grid) return;
+  const params = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => {
+    params.set('view', button.dataset.view);
+    params.set('tab', 'documents');
+    go(`#/library/${encodeURIComponent(library.slug)}?${params.toString()}`);
+  }));
+  const select = async (card) => {
+    grid.querySelectorAll('.file-card').forEach((item) => item.classList.toggle('selected', item === card));
+    const inspector = document.getElementById('file-inspector');
+    if (!inspector) return;
+    inspector.innerHTML = `<div class="inspector-empty">${icon('clock', 20)}<b>正在读取文件…</b></div>`;
+    try {
+      const data = await api(`/api/sources/${encodeURIComponent(card.dataset.fileId)}`);
+      const source = data.source;
+      const pages = source.compiledPages ?? [];
+      const pageRows = pages.slice(0, 8).map((page) => `<a class="inspector-page" href="#/page/${encodeURIComponent(page.id)}"><span class="dot" style="background:${libraryColor(page.classColor)}"></span><span>${esc(page.title)}</span></a>`).join('');
+      inspector.innerHTML = `<div class="inspector-head"><span class="file-kind">${icon(source.kind === 'image' ? 'image' : 'file', 18)}<b>${esc(fileKind(source))}</b></span><div><b>${esc(source.title)}</b><span>${esc(source.filename)}</span></div></div>
+        <div class="inspector-section"><div class="inspector-label">文件</div><dl class="inspector-kv"><dt>目录</dt><dd>${esc(source.node?.name ?? '未分类')}</dd><dt>大小</dt><dd>${fmtBytes(source.size)}</dd><dt>字数</dt><dd>${fmtNumber(source.wordCount)}</dd><dt>上传</dt><dd>${timeAgo(source.createdAt)}</dd></dl></div>
+        <div class="inspector-section"><div class="inspector-label">关联知识点 · ${pages.length}</div><div class="inspector-pages">${pageRows || '<span class="faint small">尚未编译出知识点</span>'}</div>${pages.length > 8 ? `<a class="link small" href="#/library/${encodeURIComponent(library.slug)}?tab=pages">查看全部 ${pages.length} 个 →</a>` : ''}</div>
+        <div class="inspector-section"><div class="inspector-label">操作</div><div class="inspector-actions"><a class="btn btn-sm" href="#/source/${encodeURIComponent(source.id)}">${icon('external', 12)} 文档详情</a><a class="btn btn-sm btn-ghost" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('file', 12)} 原文</a>${data.canEdit ? `<button class="btn btn-sm btn-ghost" data-file-edit>${icon('edit', 12)} 编辑归档</button><button class="btn btn-sm btn-ghost" data-file-reprocess>${icon('refresh', 12)} 重编译</button><button class="btn btn-sm btn-ghost btn-danger" data-file-delete>${icon('trash', 12)} 删除</button>` : ''}</div></div>`;
+      inspector.querySelector('[data-file-edit]')?.addEventListener('click', () => openDriveMeta(library, detail, source));
+      inspector.querySelector('[data-file-reprocess]')?.addEventListener('click', async () => {
+        try { await api(`/api/sources/${encodeURIComponent(source.id)}/reprocess`, { method: 'POST' }); toast('已加入编译队列', 'success'); } catch (error) { toast(error.message, 'error'); }
+      });
+      inspector.querySelector('[data-file-delete]')?.addEventListener('click', async () => {
+        if (!confirm(`确认删除「${source.title}」？原始文件与来源关联会被删除。`)) return;
+        try { await api(`/api/sources/${encodeURIComponent(source.id)}`, { method: 'DELETE' }); toast('文件已删除', 'success'); window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (error) { toast(error.message, 'error'); }
+      });
+    } catch (error) {
+      inspector.innerHTML = `<div class="inspector-empty">${icon('x', 18)}<b>读取失败</b><span>${esc(error.message)}</span></div>`;
+    }
+  };
+  grid.addEventListener('click', (event) => {
+    const card = event.target.closest('.file-card');
+    if (card && grid.contains(card)) select(card);
+  });
+  grid.addEventListener('keydown', (event) => {
+    const card = event.target.closest('.file-card');
+    if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); select(card); }
+  });
+}
+
+function openDriveMeta(library, detail, source) {
+  const nodes = flattenNodes(detail.nodes ?? []);
+  openModal({
+    title: '编辑文件归档',
+    body: `<div class="field"><label>文件标题</label><input class="input" id="drive-file-title" value="${esc(source.title)}"></div><div class="field" style="margin-top:10px"><label>文件夹</label><select class="select" id="drive-file-node"><option value="">未分类</option>${nodes.map((node) => `<option value="${esc(node.id)}" ${source.nodeId === node.id ? 'selected' : ''}>${'— '.repeat(node.depth)}${esc(node.name)}</option>`).join('')}</select></div>`,
+    footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="drive-file-save">保存</button>`,
+    onMount: (modal) => modal.querySelector('#drive-file-save')?.addEventListener('click', async () => {
+      try {
+        await api(`/api/sources/${encodeURIComponent(source.id)}`, { method: 'PATCH', body: { title: modal.querySelector('#drive-file-title')?.value ?? '', nodeId: modal.querySelector('#drive-file-node')?.value || null } });
+        closeModal(); toast('归档已更新', 'success'); window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (error) { toast(error.message, 'error'); }
+    }),
   });
 }
 
@@ -210,7 +308,7 @@ function bindFilter() {
   if (!input) return;
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    document.querySelectorAll('#page-grid .page-card, #source-list .source-row').forEach((card) => {
+    document.querySelectorAll('#page-grid .page-card, #source-list .source-row, #file-grid .file-card').forEach((card) => {
       card.style.display = (card.dataset.search ?? card.textContent.toLowerCase()).includes(q) ? '' : 'none';
     });
   });
