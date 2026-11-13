@@ -31,6 +31,8 @@
 | 冲突裁决 | 校对台冲突弹窗逐条 keep/dismiss；有冲突页面禁止批量批准 | `review.ts`、`tests/enterprise.test.ts` |
 | 校对报表 | 待校对/批准/矛盾/负责人/置信度分布 | `review/analytics`、`tests/enterprise.test.ts` |
 | 校对 SLA | 超过 SLA 的指派页每日提醒 | `maintenance.test.ts` |
+| 文档中心 | 跨库文档、部门/状态筛选、覆盖统计、文档详情 | `routes/sources.ts`、`tests/enterprise.test.ts` |
+| 知识片段 | 类型 chips、文档-知识来源链路、文档详情分组 | `web/views/documents.js` |
 | 批量校对 | 无矛盾页面批量批准/退回，最多 50 页 | `review/bulk`、`tests/enterprise.test.ts` |
 | 实体/事实/图谱 | DSH 抽取概念、实体、事实、上下位关系；重复页合并、手动层级、层级图谱 | `dsh-engine.ts`、`pages.ts`、`tests/enterprise.test.ts` |
 | 账户体系 | 本地密码、Cookie 会话、API Key、管理员、WeCom 身份映射 | `schema.sql`、`routes/auth.ts`、`tests/wecom.test.ts` |
@@ -49,7 +51,7 @@ DSH_PYTHON=/Users/yechao/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pyth
 
 最近结果：
 
-- **98 / 98 测试通过**；
+- **99 / 99 测试通过**；
 - 覆盖：15 类文档格式端到端入库、PDF/扫描 PDF OCR、组织层级/页面 ACL、任务步骤事件、检索分面、本机 DSH 编译/实体/事实/重排/合成、规则回退、矛盾裁决、审核、评论/通知、本体属性、Agent 入库/导出、WeCom OAuth/同步/加密回调/机器人问答；
 - 演示库 lint：**0 孤儿页、0 断链、3 个待校对草稿**；
 - 演示数据：29 个知识页、5 份文献、5 个处理任务、11 个本体属性、4 个知识库、7 个成员。

@@ -29,10 +29,16 @@ function sourceView(rc: RequestContext, source: SourceRow, actor?: import('../ty
   const job = rc.app.db
     .prepare('SELECT * FROM ingest_jobs WHERE source_id = ? ORDER BY created_at DESC LIMIT 1')
     .get(source.id) as unknown as Record<string, unknown> | undefined;
+  const library = rc.app.db.prepare('SELECT id, name, slug, owner_team_id FROM libraries WHERE id = ?').get(source.library_id) as unknown as { id: string; name: string; slug: string; owner_team_id: string | null } | undefined;
+  const node = source.node_id ? (rc.app.db.prepare('SELECT id, name FROM catalog_nodes WHERE id = ?').get(source.node_id) as unknown as { id: string; name: string } | undefined) : null;
+  const uploader = source.uploaded_by ? (rc.app.db.prepare('SELECT name FROM persons WHERE id = ?').get(source.uploaded_by) as unknown as { name: string } | undefined) : null;
   return {
     id: source.id,
     libraryId: source.library_id,
+    library: library ? { id: library.id, name: library.name, slug: library.slug } : null,
     nodeId: source.node_id,
+    node,
+    uploadedByName: uploader?.name ?? null,
     title: source.title,
     filename: source.filename,
     ext: source.ext,
@@ -67,6 +73,75 @@ function sourceView(rc: RequestContext, source: SourceRow, actor?: import('../ty
 }
 
 export function registerSourceRoutes(router: Router): void {
+  router.get('/api/sources', (rc) => {
+    const actor = requireActor(rc);
+    const libraries = visibleLibraries(rc.app.db, actor);
+    const conditions = [`s.library_id IN (${libraries.map(() => '?').join(',') || "''"})`];
+    const params: (string | number)[] = libraries.map((library) => library.id);
+    if (rc.query('library')) {
+      const library = libraries.find((item) => item.id === rc.query('library') || item.slug === rc.query('library'));
+      if (!library) throw errors.notFound('知识库不存在');
+      conditions.push('s.library_id = ?');
+      params.push(library.id);
+    }
+    if (rc.query('status')) {
+      const status = rc.query('status');
+      if (status === 'processing') conditions.push("s.status IN ('processing','queued')");
+      else { conditions.push('s.status = ?'); params.push(status); }
+    }
+    if (rc.query('kind')) { conditions.push('s.kind = ?'); params.push(rc.query('kind')); }
+    if (rc.query('q')) {
+      conditions.push('(s.title LIKE ? OR s.filename LIKE ? OR s.excerpt LIKE ?)');
+      const q = `%${rc.query('q')}%`; params.push(q, q, q);
+    }
+    const rows = rc.app.db.prepare(`
+      SELECT s.*, l.name AS library_name, l.slug AS library_slug, t.name AS department_name,
+             (SELECT COUNT(*) FROM page_sources ps WHERE ps.source_id = s.id) AS compiled_pages
+        FROM sources s JOIN libraries l ON l.id = s.library_id
+        LEFT JOIN teams t ON t.id = l.owner_team_id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY s.created_at DESC LIMIT 500
+    `).all(...params) as unknown as Record<string, unknown>[];
+    const visible = rows.filter((row) => Boolean(effectiveSourceRole(rc.app.db, actor, row as unknown as SourceRow)));
+    const items = visible.map((row) => ({
+      id: row.id,
+      title: row.title,
+      filename: row.filename,
+      ext: row.ext,
+      kind: row.kind,
+      status: row.status,
+      size: row.size,
+      wordCount: row.word_count,
+      pageCount: row.page_count,
+      libraryId: row.library_id,
+      libraryName: row.library_name,
+      librarySlug: row.library_slug,
+      departmentName: row.department_name || row.library_name,
+      nodeId: row.node_id,
+      compiledPages: Number(row.compiled_pages ?? 0),
+      uploadedBy: row.uploaded_by,
+      uploadedByName: row.uploaded_by ? (rc.app.db.prepare('SELECT name FROM persons WHERE id = ?').get(String(row.uploaded_by)) as unknown as { name: string } | undefined)?.name ?? null : null,
+      error: row.error,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    rc.json({
+      sources: items,
+      total: items.length,
+      facets: {
+        libraries: libraries.map((library) => ({ id: library.id, name: library.name, slug: library.slug, count: items.filter((item) => item.libraryId === library.id).length })),
+        statuses: ['ready', 'processing', 'failed'].map((status) => ({ status, count: items.filter((item) => item.status === status).length })),
+      },
+      summary: {
+        total: items.length,
+        ready: items.filter((item) => item.status === 'ready').length,
+        processing: items.filter((item) => item.status === 'processing' || item.status === 'queued').length,
+        failed: items.filter((item) => item.status === 'failed').length,
+        withoutKnowledge: items.filter((item) => item.status === 'ready' && Number(item.compiledPages) === 0).length,
+      },
+    });
+  });
+
   router.post('/api/libraries/:id/sources', async (rc) => {
     const actor = requireActor(rc);
     const { library } = requireLibrary(rc.app.db, actor, rc.params.id!, 'editor');
@@ -136,7 +211,7 @@ export function registerSourceRoutes(router: Router): void {
       params.push(q, q, q);
     }
     const allRows = rc.app.db
-      .prepare(`SELECT * FROM sources WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`)
+      .prepare(`SELECT *, (SELECT COUNT(*) FROM page_sources ps WHERE ps.source_id = sources.id) AS compiled_pages FROM sources WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`)
       .all(...params) as unknown as SourceRow[];
     const visible = allRows.filter((source) => Boolean(effectiveSourceRole(rc.app.db, actor, source)));
     const rows = visible.slice(offset, offset + limit);
@@ -151,6 +226,7 @@ export function registerSourceRoutes(router: Router): void {
         status: source.status,
         size: source.size,
         pageCount: source.page_count,
+        compiledPages: Number((source as unknown as { compiled_pages?: number }).compiled_pages ?? 0),
         wordCount: source.word_count,
         excerpt: source.excerpt,
         nodeId: source.node_id,
@@ -189,6 +265,29 @@ export function registerSourceRoutes(router: Router): void {
     const path = thumb ? asset.thumbnail_path! : asset.storage_path;
     if (!existsSync(path)) throw errors.notFound('文件已丢失');
     sendBinary(rc, readFileSync(path), asset.filename, thumb ? 'image/jpeg' : asset.mime || 'application/octet-stream');
+  });
+
+
+  router.patch('/api/sources/:id', async (rc) => {
+    const actor = requireActor(rc);
+    const source = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(rc.params.id!) as unknown as SourceRow | undefined;
+    if (!source) throw errors.notFound('文档不存在');
+    const { library } = requireLibrary(rc.app.db, actor, source.library_id, 'editor');
+    const body = await rc.body<{ title?: string; nodeId?: string | null }>();
+    const title = String(body.title ?? source.title).trim();
+    if (!title) throw errors.badRequest('标题不能为空');
+    let nodeId = source.node_id;
+    if (Object.prototype.hasOwnProperty.call(body, 'nodeId')) {
+      nodeId = body.nodeId ? String(body.nodeId) : null;
+      if (nodeId) {
+        const node = rc.app.db.prepare('SELECT id FROM catalog_nodes WHERE id = ? AND library_id = ?').get(nodeId, source.library_id);
+        if (!node) throw errors.badRequest('目录不存在或不属于该知识库');
+      }
+    }
+    rc.app.db.prepare('UPDATE sources SET title = ?, node_id = ?, updated_at = ? WHERE id = ?').run(title, nodeId, nowIso(), source.id);
+    audit(rc.app.db, { actor, action: 'source.update', targetType: 'source', targetId: source.id, libraryId: library.id, detail: { title, nodeId } });
+    const updated = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as SourceRow;
+    rc.json({ source: sourceView(rc, updated, actor) });
   });
 
   router.post('/api/sources/:id/reprocess', (rc) => {

@@ -11,6 +11,7 @@ import {
   parseHash,
 } from './assets/core.js';
 import { renderHome, mountHome } from './views/home.js';
+import { renderDocuments, mountDocuments, renderSource, mountSource } from './views/documents.js';
 import { renderLibrary, mountLibrary } from './views/library.js';
 import { renderPage, mountPage } from './views/page.js';
 import { renderSearch, mountSearch } from './views/search.js';
@@ -185,6 +186,24 @@ async function route() {
       location.replace(`#/page/${encodeURIComponent(result.page.id)}`);
       return;
     }
+    if (parts[0] === 'documents') {
+      setContent(loading('正在读取文档登记册…'));
+      const html = await renderDocuments(query);
+      if (seq !== routeSeq) return;
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '文档中心' }], active: 'documents' });
+      document.title = '文档中心 · Alexandria';
+      mountDocuments();
+      return;
+    }
+    if (parts[0] === 'source') {
+      setContent(loading('正在读取文档…'));
+      const html = await renderSource(decodeURIComponent(parts.slice(1).join('/')));
+      if (seq !== routeSeq) return;
+      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '文档中心', href: '#/documents' }, { label: '文档详情' }], active: 'documents' });
+      document.title = '文档详情 · Alexandria';
+      mountSource(decodeURIComponent(parts.slice(1).join('/')));
+      return;
+    }
     if (parts[0] === 'page') {
       setContent(loading());
       renderShell({ content: loading(), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识页' }], active: 'page' });
@@ -204,7 +223,7 @@ async function route() {
       const ref = decodeURIComponent(parts[1]);
       setContent(loading());
       renderShell({ content: loading(), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识库' }], active: `library:${ref}` });
-      const tab = query.get('tab') ?? 'catalog';
+      const tab = query.get('tab') === 'sources' ? 'documents' : (query.get('tab') ?? 'documents');
       const html = await renderLibrary(ref, tab);
       if (seq !== routeSeq) return;
       const library = state.currentLibrary?.library;

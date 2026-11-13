@@ -245,6 +245,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
         <div class="side-section">
           <div class="side-label">工作台</div>
           <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>知识总览</span></a>
+          <a class="nav-link ${active === 'documents' ? 'active' : ''}" href="#/documents">${icon('file')}<span>文档中心</span></a>
           <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>知识检索</span></a>
           <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
           <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>知识校对</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>

@@ -387,3 +387,24 @@ test('校对报表返回待校对、矛盾与负责人分布', async () => {
   assert.ok(Array.isArray(report.byLibrary));
   assert.ok(Array.isArray(report.byAssignee));
 });
+
+test('文档中心跨知识库列出文档并可编辑归档信息', async () => {
+  const docs = await j<{ sources: { id: string; title: string; compiledPages: number; libraryName: string }[]; summary: { total: number } }>('/api/sources?limit=20', admin.token);
+  assert.ok(docs.summary.total > 0);
+  assert.ok(docs.sources.every((source) => source.libraryName));
+  const source = docs.sources.find((item) => item.libraryName === '工程手册') ?? docs.sources[0];
+  const updated = await j<{ source: { title: string; node: { name: string } | null } }>(`/api/sources/${source.id}`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: `${source.title}（归档）` }),
+  });
+  assert.match(updated.source.title, /（归档）/);
+  const library = await j<{ nodes: { id: string; name: string }[] }>('/api/libraries/lib_eng', admin.token);
+  const target = library.nodes[0];
+  const moved = await j<{ source: { node: { name: string } | null } }>(`/api/sources/${source.id}`, admin.token, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ nodeId: target.id }),
+  });
+  assert.equal(moved.source.node?.name, target.name);
+});

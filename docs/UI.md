@@ -77,3 +77,5 @@ Alexandria 的 Web 控制台对齐同工作区的 **AIWO / Mnemos / Hive / Haos*
 - [导入资料](screenshots/33-upload-enterprise.png)
 - [处理任务](screenshots/33-tasks-enterprise.png)
 - [知识图谱](screenshots/33-graph-enterprise.png)
+- [文档中心](screenshots/34-documents-enterprise.png)
+- [文档详情](screenshots/34-source-enterprise.png)

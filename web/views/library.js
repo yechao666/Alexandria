@@ -25,14 +25,14 @@ import {
 import { mountGraph } from '../assets/graph.js';
 
 const TABS = [
-  { key: 'catalog', label: '目录' },
+  { key: 'documents', label: '文档' },
   { key: 'pages', label: '知识页' },
-  { key: 'sources', label: '文献' },
+  { key: 'catalog', label: '目录' },
   { key: 'graph', label: '图谱' },
   { key: 'settings', label: '设置' },
 ];
 
-export async function renderLibrary(ref, tab = 'catalog') {
+export async function renderLibrary(ref, tab = 'documents') {
   const [detail, pagesData, sourcesData] = await Promise.all([
     api(`/api/libraries/${encodeURIComponent(ref)}`),
     api(`/api/libraries/${encodeURIComponent(ref)}/pages?limit=400`).catch(() => ({ pages: [], total: 0 })),
@@ -52,8 +52,10 @@ export async function renderLibrary(ref, tab = 'catalog') {
     .map((page) => pageCard(page))
     .join('');
   const sourceRows = visibleSources.map((source) => sourceRow(source)).join('');
+  const classCounts = detail.classes.map((klass) => ({ ...klass, count: pages.filter((page) => page.classKey === klass.key).length }));
+  const classChips = `<button class="filter-chip active" data-class-filter="">全部 <span>${pages.length}</span></button>${classCounts.map((klass) => `<button class="filter-chip" data-class-filter="${esc(klass.key)}">${esc(klass.name)} <span>${klass.count}</span></button>`).join('')}`;
   const tabsHtml = TABS.map(
-    (item) => `<button class="tab ${tab === item.key ? 'active' : ''}" data-tab="${item.key}">${item.label}${item.key === 'pages' ? ` <span class="faint">${pages.length}</span>` : item.key === 'sources' ? ` <span class="faint">${sources.length}</span>` : ''}</button>`,
+    (item) => `<button class="tab ${tab === item.key ? 'active' : ''}" data-tab="${item.key}">${item.label}${item.key === 'pages' ? ` <span class="faint">${pages.length}</span>` : item.key === 'documents' ? ` <span class="faint">${sources.length}</span>` : ''}</button>`,
   ).join('');
 
   const bodyByTab = {
@@ -72,20 +74,26 @@ export async function renderLibrary(ref, tab = 'catalog') {
         </div>
       </div>`,
     pages: `
-      <div class="list-toolbar">
-        <input class="input" id="library-filter" placeholder="筛选知识页…" style="width:260px">
-        <select class="select" id="class-filter"><option value="">全部类型</option>${detail.classes.map((klass) => `<option value="${esc(klass.key)}">${esc(klass.name)}</option>`).join('')}</select>
-        <span class="small faint">${pages.length} 个知识页</span>
-        ${detail.canEdit ? `<button class="btn btn-sm" id="new-page" style="margin-left:auto">${icon('plus', 14)} 新建页</button>` : ''}
+      <div class="fragment-toolbar">
+        <div class="fragment-chips">${classChips}</div>
+        <input class="input" id="library-filter" placeholder="筛选知识页…" style="width:220px">
+        ${detail.canEdit ? `<button class="btn btn-sm" id="new-page">${icon('plus', 14)} 新建页</button>` : ''}
       </div>
       <div class="page-grid" id="page-grid">${pageCards || emptyState('没有匹配的知识页', '换个类型或关键词试试。')}</div>`,
-    sources: `
-      <div class="list-toolbar">
-        <input class="input" id="library-filter" placeholder="筛选文献…" style="width:260px">
-        <span class="small faint">${sources.length} 份资料</span>
-        ${detail.canEdit ? `<a class="btn btn-sm btn-clay" href="#/upload/${encodeURIComponent(library.slug)}" style="margin-left:auto">${icon('upload', 14)} 上传文献</a>` : ''}
+    documents: `
+      <div class="doc-coverage">
+        <div><b>${sources.length}</b><span>文档总数</span></div>
+        <div><b>${sources.filter((source) => source.status === 'ready').length}</b><span>已编译</span></div>
+        <div><b>${sources.filter((source) => source.status === 'processing' || source.status === 'queued').length}</b><span>处理中</span></div>
+        <div><b>${sources.filter((source) => source.status === 'failed').length}</b><span>失败</span></div>
+        <div><b>${sources.filter((source) => source.status === 'ready' && !Number(source.compiledPages)).length}</b><span>无知识页</span></div>
       </div>
-      <div class="source-list" id="source-list">${sourceRows || emptyState('还没有文献', '支持 PDF、Word、PPT、Excel、TeX、RTF、WPS、图片与 Markdown 等格式。')}</div>`,
+      <div class="list-toolbar">
+        <input class="input" id="library-filter" placeholder="筛选文档…" style="width:260px">
+        <span class="small faint">按部门知识库归档 · ${sources.length} 份文档</span>
+        ${detail.canEdit ? `<a class="btn btn-sm btn-clay" href="#/upload/${encodeURIComponent(library.slug)}" style="margin-left:auto">${icon('upload', 14)} 上传文档</a>` : ''}
+      </div>
+      <div class="source-list" id="source-list">${sourceRows || emptyState('还没有文档', '支持 PDF、Word、PPT、Excel、TeX、RTF、WPS、图片与 Markdown 等格式。')}</div>`,
     graph: `
       <div class="between" style="margin-bottom:14px"><div><h2 style="font-size:22px">类型化图谱</h2><div class="sub">节点大小约等于连接度；颜色代表本体类型；点击进入知识页。</div></div><button class="btn btn-sm" id="graph-fit">${icon('refresh', 14)} 重置视图</button></div>
       <div class="graph-shell"><canvas class="graph-canvas" id="library-graph"></canvas><div class="graph-legend" id="graph-legend"></div></div>`,
@@ -120,7 +128,7 @@ export async function renderLibrary(ref, tab = 'catalog') {
     ${bodyByTab[tab] ?? bodyByTab.catalog}`;
 }
 
-export async function mountLibrary(ref, tab = 'catalog') {
+export async function mountLibrary(ref, tab = 'documents') {
   document.querySelectorAll('[data-tab]').forEach((button) => {
     button.addEventListener('click', () => go(`#/library/${encodeURIComponent(ref)}?tab=${button.dataset.tab}`));
   });
@@ -191,6 +199,12 @@ function bindCatalogTree(ref, tab) {
   });
 }
 
+function applyClassFilter(value) {
+  document.querySelectorAll('#page-grid .page-card').forEach((card) => {
+    card.style.display = !value || card.dataset.class === value ? '' : 'none';
+  });
+}
+
 function bindFilter() {
   const input = document.getElementById('library-filter');
   if (!input) return;
@@ -202,13 +216,14 @@ function bindFilter() {
   });
   const classFilter = document.getElementById('class-filter');
   if (classFilter) {
-    classFilter.addEventListener('change', () => {
-      const value = classFilter.value;
-      document.querySelectorAll('#page-grid .page-card').forEach((card) => {
-        card.style.display = !value || card.dataset.class === value ? '' : 'none';
-      });
-    });
+    classFilter.addEventListener('change', () => applyClassFilter(classFilter.value));
   }
+  document.querySelectorAll('[data-class-filter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-class-filter]').forEach((item) => item.classList.toggle('active', item === button));
+      applyClassFilter(button.dataset.classFilter ?? '');
+    });
+  });
 }
 
 function pageCard(page) {
@@ -222,19 +237,18 @@ function pageCard(page) {
 
 function sourceRow(source) {
   const status = source.status === 'ready' ? 'jade' : source.status === 'failed' ? 'clay' : 'ochre';
-  return `<div class="source-row" data-source="${esc(source.id)}" data-search="${esc(`${source.title} ${source.filename}`.toLowerCase())}" style="cursor:pointer">
+  return `<a class="source-row" href="#/source/${encodeURIComponent(source.id)}" data-search="${esc(`${source.title} ${source.filename}`.toLowerCase())}">
     <span class="file-icon">${icon(source.kind === 'image' ? 'image' : 'file', 18)}</span>
-    <span class="info"><span class="name">${esc(source.title)}</span><span class="meta">${esc(source.filename)} · ${esc(source.kind)} · ${fmtNumber(source.wordCount)} 字${source.pageCount ? ` · ${source.pageCount} 页` : ''}</span></span>
+    <span class="info"><span class="name">${esc(source.title)}</span><span class="meta">${esc(source.filename)} · ${esc(source.kind)} · ${fmtNumber(source.wordCount)} 字</span></span>
+    <span class="source-linkage"><b>${fmtNumber(source.compiledPages)}</b> 知识页</span>
     <span class="badge ${status}">${source.status === 'ready' ? '已编译' : source.status === 'failed' ? '失败' : '处理中'}</span>
     <span class="faint small">${timeAgo(source.createdAt)}</span>
     <span class="icon-btn">${icon('chevron', 15)}</span>
-  </div>`;
+  </a>`;
 }
 
 function bindSourceRows() {
-  document.querySelectorAll('[data-source]').forEach((row) => {
-    row.addEventListener('click', () => openSource(row.dataset.source));
-  });
+  // 文档行现在是链接，直接进入文档详情页。
 }
 
 export async function openSource(sourceId) {

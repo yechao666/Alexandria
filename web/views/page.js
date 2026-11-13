@@ -20,7 +20,7 @@ import {
 } from '../assets/core.js';
 import { renderMarkdown, headingList } from '../assets/markdown.js';
 import { mountGraph } from '../assets/graph.js';
-import { openPageEditor, openSource } from './library.js';
+import { openPageEditor } from './library.js';
 
 const RELATION_LABELS = {
   references: '引用',
@@ -44,7 +44,7 @@ export async function renderPage(ref) {
   const headings = headingList(page.body).filter((heading) => heading.level >= 2 && heading.level <= 3);
   const sources = (detail.sources ?? [])
     .map(
-      (source) => `<div class="rail-item" data-source="${esc(source.id)}" style="cursor:pointer"><span class="dot" style="background:var(--ochre)"></span><span>${esc(source.title)}<br><span class="faint">${esc(relationLabel(source.relation))}${source.locator ? ` · ${esc(source.locator)}` : ''}</span></span></div>`,
+      (source) => `<a class="rail-item" href="#/source/${encodeURIComponent(source.id)}"><span class="dot" style="background:var(--ochre)"></span><span>${esc(source.title)}<br><span class="faint">${esc(relationLabel(source.relation))}${source.locator ? ` · ${esc(source.locator)}` : ''}</span></span></a>`,
     )
     .join('');
   const claims = (detail.claims ?? [])
@@ -227,9 +227,6 @@ export async function mountPage(ref) {
     }
   });
 
-  document.querySelectorAll('[data-source]').forEach((node) => {
-    node.addEventListener('click', () => openSource(node.dataset.source));
-  });
   document.getElementById('edit-page')?.addEventListener('click', () => {
     openPageEditor({ id: page.libraryId, name: detail.library.name, slug: detail.library.slug }, libraryDetail, page, detail.properties ?? []);
   });

@@ -180,9 +180,9 @@ export function mountUpload(libraryRef) {
       const data = result.data;
       if (data.duplicate) {
         fill.style.width = '100%';
-        status.textContent = '已存在（去重）';
+        status.textContent = '已存在（去重）· 查看文档';
         item.style.cursor = 'pointer';
-        item.addEventListener('click', () => go(`#/library/${encodeURIComponent(library.slug)}`));
+        item.addEventListener('click', () => go(`#/source/${encodeURIComponent(data.source?.id ?? '')}`));
         continue;
       }
       fill.style.width = '72%';
@@ -197,10 +197,10 @@ export function mountUpload(libraryRef) {
         if (job?.status === 'succeeded') {
           fill.style.width = '100%';
           fill.style.background = 'var(--jade)';
-          status.textContent = `已编译 · ${job.pages_created ?? 0} 新页`;
+          status.textContent = `已编译 · ${job.pages_created ?? 0} 新页 · 查看文档`;
           status.style.color = 'var(--jade)';
           item.style.cursor = 'pointer';
-          item.addEventListener('click', () => go(`#/library/${encodeURIComponent(library.slug)}`));
+          item.addEventListener('click', () => go(`#/source/${encodeURIComponent(data.source?.id ?? '')}`));
         } else {
           fill.style.width = '100%';
           fill.style.background = 'var(--clay)';
