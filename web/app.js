@@ -81,11 +81,10 @@ function showLogin() {
           <div class="eyebrow" style="margin-bottom:18px;color:#60a5fa">KNOWLEDGE OPERATIONS</div>
           <div class="login-quote">让知识成为<br>可复用的<em>企业资产</em>。</div>
           <p class="caption">统一管理资料、知识页、实体关系与访问权限。处理过程任务化，知识变更留痕，敏感内容按组织架构精确授权。</p>
-          <div class="login-features">
-            <span>${icon('shield', 14)} 组织级权限</span>
-            <span>${icon('check', 14)} 人工校对</span>
-            <span>${icon('graph', 14)} 知识图谱</span>
-            <span>${icon('search', 14)} 语义检索</span>
+          <div class="login-feature-grid">
+            <div class="login-feature-card">${icon('layers', 15)}<b>资料编译</b><span>入库时抽取概念、事实与矛盾。</span></div>
+            <div class="login-feature-card">${icon('graph', 15)}<b>知识图谱</b><span>类型化关联、层级与最短路径。</span></div>
+            <div class="login-feature-card">${icon('shield', 15)}<b>组织权限</b><span>按团队与层级精确控制可见性。</span></div>
           </div>
           <div class="login-meta"><span>SSO / 企业微信</span><span>审计日志</span><span>备份与恢复</span><span>本机 DSH</span></div>
         </div>
@@ -93,9 +92,9 @@ function showLogin() {
       </aside>
       <main class="login-main">
         <div class="login-card">
-          <div class="eyebrow">SIGN IN</div>
-          <h2 style="margin-top:8px">登录企业知识库</h2>
-          <p class="muted small">使用组织账号登录；管理员可配置 SSO 与企业微信。演示环境密码统一为 <span class="mono">alex-demo</span>。</p>
+          <div class="login-card-top"><div class="eyebrow">SIGN IN</div><span class="badge jade">${icon('shield', 12)} 安全会话</span></div>
+          <h2 style="margin-top:8px">登录控制台</h2>
+          <p class="muted small">使用组织账号或演示账号继续；管理员可配置 SSO 与企业微信。</p>
           <form class="login-form" id="login-form">
             <div class="field"><label>邮箱</label><input class="input" name="email" type="email" value="lin@alex.dev" autocomplete="username" required></div>
             <div class="field"><label>密码</label><input class="input" name="password" type="password" value="alex-demo" autocomplete="current-password" required></div>
@@ -104,7 +103,7 @@ function showLogin() {
           </form>
           <div id="wecom-login-slot" style="margin-top:18px"></div>
           <div class="demo-users">
-            <div class="title">演示账号</div>
+            <div class="demo-head"><span class="title">演示账号</span><span class="small faint">点击自动填入</span></div>
             ${DEMO_USERS.map(
               (user) => `<div class="demo-row" data-email="${user.email}"><span class="avatar sm ${user.email.startsWith('lin') ? 'clay' : user.email.startsWith('shen') ? 'jade' : user.email.startsWith('su') ? 'ochre' : user.email.startsWith('zhou') ? 'indigo' : 'slate'}">${user.name.slice(-1)}</span><span>${user.name}</span><span class="faint" style="font-size:10px">${user.role}</span><span class="email">${user.email}</span></div>`,
             ).join('')}
@@ -297,7 +296,7 @@ async function route() {
     const html = await renderHome();
     if (seq !== routeSeq) return;
     renderShell({ content: html, breadcrumb: [{ label: '总览' }], active: 'home' });
-    document.title = 'Alexandria · 亚历山大知识库';
+    document.title = 'Alexandria · 企业知识基础设施';
     mountHome();
   } catch (error) {
     console.error(error);

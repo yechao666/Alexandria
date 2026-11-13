@@ -26,22 +26,23 @@ export async function renderHome() {
   const maxClass = Math.max(1, ...classes.map((item) => item.count));
   const featured = libraries[0];
 
-  const libraryRows = libraries
+  const libraryCards = libraries
     .map((library) => {
       const coverColor = libraryColor(library.color);
       const visibility = library.visibility === 'private' ? '私有' : library.visibility === 'public' ? '公开' : '组织内';
-      return `<tr>
-        <td><a class="library-row" href="#/library/${encodeURIComponent(library.slug)}">
-          <span class="library-avatar" style="background:${coverColor}">${esc(library.name.slice(0, 1))}</span>
-          <span style="min-width:0"><span class="name">${esc(library.name)}</span><span class="desc">${esc(library.description || '暂无描述')}</span></span>
-        </a></td>
-        <td><span class="badge ${library.visibility === 'private' ? 'ochre' : 'outline'}">${visibility}</span></td>
-        <td>${roleBadge(library.role)}</td>
-        <td class="num-cell"><b>${fmtNumber(library.counts?.pages)}</b></td>
-        <td class="num-cell">${fmtNumber(library.counts?.sources)}</td>
-        <td class="num-cell">${fmtNumber(library.counts?.links)}</td>
-        <td><a class="icon-btn" href="#/library/${encodeURIComponent(library.slug)}" title="打开知识库" aria-label="打开知识库">${icon('arrow', 14)}</a></td>
-      </tr>`;
+      return `<a class="lib-card" href="#/library/${encodeURIComponent(library.slug)}">
+        <div class="lib-card-head">
+          <span class="lib-avatar" style="background:${coverColor}">${esc(library.name.slice(0, 1))}</span>
+          <span class="lib-card-title"><b>${esc(library.name)}</b><span>${esc(library.description || '暂无描述')}</span></span>
+          <span class="lib-chevron">${icon('chevron', 14)}</span>
+        </div>
+        <div class="lib-card-badges"><span class="badge ${library.visibility === 'private' ? 'ochre' : 'outline'}">${visibility}</span>${roleBadge(library.role)}<span class="badge outline">${(library.nodes ?? []).length} 个目录</span></div>
+        <div class="lib-card-stats">
+          <span><b>${fmtNumber(library.counts?.pages)}</b><i>知识页</i></span>
+          <span><b>${fmtNumber(library.counts?.sources)}</b><i>文献</i></span>
+          <span><b>${fmtNumber(library.counts?.links)}</b><i>关联</i></span>
+        </div>
+      </a>`;
     })
     .join('');
 
@@ -77,22 +78,17 @@ export async function renderHome() {
     </section>
 
     <section class="kpi-grid">
-      <div class="kpi-card"><span class="kpi-icon">${icon('layers', 17)}</span><div><div class="label">知识资产</div><div class="value">${fmtNumber(stats.pages)}</div><div class="hint">原子化知识页</div></div></div>
-      <div class="kpi-card"><span class="kpi-icon green">${icon('file', 17)}</span><div><div class="label">原始资料</div><div class="value">${fmtNumber(stats.sources)}</div><div class="hint">可回溯的文献与附件</div></div></div>
-      <div class="kpi-card"><span class="kpi-icon amber">${icon('check', 17)}</span><div><div class="label">待校对</div><div class="value">${fmtNumber(pending)}</div><div class="hint">${conflicts} 条矛盾待裁决</div></div></div>
-      <div class="kpi-card"><span class="kpi-icon ${conflicts ? 'red' : 'green'}">${icon('users', 17)}</span><div><div class="label">组织成员</div><div class="value">${fmtNumber(stats.members)}</div><div class="hint">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库</div></div></div>
+      <div class="kpi-card kpi-violet"><div><div class="label">知识资产</div><div class="value">${fmtNumber(stats.pages)}</div><div class="hint">原子化知识页</div></div><span class="kpi-icon">${icon('layers', 18)}</span></div>
+      <div class="kpi-card kpi-cyan"><div><div class="label">原始资料</div><div class="value">${fmtNumber(stats.sources)}</div><div class="hint">可回溯的文献与附件</div></div><span class="kpi-icon">${icon('file', 18)}</span></div>
+      <div class="kpi-card kpi-amber"><div><div class="label">待校对</div><div class="value">${fmtNumber(pending)}</div><div class="hint">${conflicts} 条矛盾待裁决</div></div><span class="kpi-icon">${icon('check', 18)}</span></div>
+      <div class="kpi-card kpi-green"><div><div class="label">组织成员</div><div class="value">${fmtNumber(stats.members)}</div><div class="hint">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库</div></div><span class="kpi-icon">${icon('users', 18)}</span></div>
     </section>
 
     <div class="dashboard-grid">
       <div class="dashboard-main">
         <div class="panel">
           <div class="panel-head"><div><h3>知识库</h3><div class="small faint">按团队授权，库内再按目录、页面与文献细化</div></div><span class="badge jade">${libraries.length} 个可见</span></div>
-          <div style="overflow:auto">
-            <table class="data-table">
-              <thead><tr><th>知识库</th><th>可见性</th><th>我的角色</th><th>知识页</th><th>文献</th><th>关联</th><th></th></tr></thead>
-              <tbody>${libraryRows || '<tr><td colspan="7" class="muted" style="padding:18px">暂无可见知识库</td></tr>'}</tbody>
-            </table>
-          </div>
+          <div class="panel-body"><div class="lib-grid">${libraryCards || '<div class="rail-empty">暂无可见知识库</div>'}</div></div>
         </div>
 
         <div class="panel">
@@ -116,6 +112,16 @@ export async function renderHome() {
               <a class="todo-item" href="#/tasks"><span class="todo-icon">${icon('clock', 14)}</span><span class="todo-text"><b>处理任务</b><span>查看队列与失败项</span></span><span class="todo-count">›</span></a>
             </div>
           </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>快捷入口</h3></div>
+          <div class="panel-body"><div class="quick-grid">
+            <a class="quick-action" href="#/upload">${icon('upload', 16)}<span>导入资料</span></a>
+            <a class="quick-action" href="#/search">${icon('search', 16)}<span>知识检索</span></a>
+            <a class="quick-action" href="#/review?conflicts=1">${icon('shield', 16)}<span>处理矛盾</span></a>
+            <a class="quick-action" href="#/admin?tab=review-analytics">${icon('graph', 16)}<span>校对报表</span></a>
+          </div></div>
         </div>
 
         <div class="panel">
