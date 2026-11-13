@@ -1261,3 +1261,17 @@ h1, h2, h3, h4, .section-head h2, .library-title-row h1, .article-head h1, .page
 .source-row .info .name, .source-row .info .meta { display:block; }
 .source-row .info { min-width:0; }
 .source-type-filter { margin-bottom:10px; }
+/* Knowledge-base-centered home */
+.kb-summary { display:flex; align-items:stretch; gap:1px; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--line); margin-bottom:18px; }
+.kb-summary > div { flex:1; padding:11px 16px; background:rgba(255,255,255,.025); display:flex; align-items:baseline; gap:8px; }
+.kb-summary b { color:var(--ink); font-size:19px; font-weight:650; }
+.kb-summary span { color:var(--faint); font-size:10px; }
+.kb-group { margin-bottom:20px; }
+.kb-group-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:9px; }
+.kb-group-head h2 { font-size:14px; font-weight:600; color:var(--ink); }
+.kb-group-head span { color:var(--faint); font-size:10.5px; }
+.kb-card { min-height:170px; }
+.kb-card-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:8px; border-top:1px solid var(--line); color:var(--faint); font-size:9.5px; }
+.kb-card-foot span:last-child { color:#b8adff; display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+.text-amber { color:#fcd34d !important; }
+@media (max-width:720px) { .kb-summary { flex-wrap:wrap; } .kb-summary > div { min-width:30%; } }

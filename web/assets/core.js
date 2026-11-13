@@ -243,24 +243,16 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
           <span class="ws-chevron">${icon('chevron', 12) || '▾'}</span>
         </div>
         <div class="side-section">
-          <div class="side-label">工作台</div>
-          <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>知识总览</span></a>
-          <a class="nav-link ${active === 'documents' ? 'active' : ''}" href="#/documents">${icon('file')}<span>文档中心</span></a>
-          <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>知识检索</span></a>
-          <a class="nav-link ${active === 'graph' ? 'active' : ''}" href="#/graph">${icon('graph')}<span>知识图谱</span></a>
-          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>知识校对</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
-          <a class="nav-link ${active === 'upload' ? 'active' : ''}" href="#/upload">${icon('upload')}<span>导入资料</span></a>
-          <a class="nav-link ${active === 'tasks' ? 'active' : ''}" href="#/tasks">${icon('clock')}<span>处理任务</span></a>
-        </div>
-        <div class="side-section">
           <div class="side-label">知识库</div>
+          <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>全部知识库</span></a>
           ${libraries || '<div class="side-label" style="padding-top:4px">暂无可见知识库</div>'}
         </div>
         <div class="side-section">
-          <div class="side-label">管理</div>
-          <a class="nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('users')}<span>管理控制台</span></a>
-          <a class="nav-link ${active === 'agent' ? 'active' : ''}" href="#/agent">${icon('spark')}<span>智能体接入</span></a>
+          <div class="side-label">工作台</div>
+          <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>全局检索</span></a>
+          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>校对队列</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
         </div>
+        ${state.me?.person?.isAdmin ? `<div class="side-section"><div class="side-label">管理</div><a class="nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('users')}<span>管理控制台</span></a></div>` : ''}
         <div class="side-spacer"></div>
         <div class="side-user">
           ${avatar(state.me?.person)}

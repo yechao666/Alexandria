@@ -190,7 +190,7 @@ async function route() {
       setContent(loading('正在读取文档登记册…'));
       const html = await renderDocuments(query);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '文档中心' }], active: 'documents' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '文档中心' }], active: 'documents' });
       document.title = '文档中心 · Alexandria';
       mountDocuments();
       return;
@@ -199,14 +199,14 @@ async function route() {
       setContent(loading('正在读取文档…'));
       const html = await renderSource(decodeURIComponent(parts.slice(1).join('/')));
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '文档中心', href: '#/documents' }, { label: '文档详情' }], active: 'documents' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '文档中心', href: '#/documents' }, { label: '文档详情' }], active: 'documents' });
       document.title = '文档详情 · Alexandria';
       mountSource(decodeURIComponent(parts.slice(1).join('/')));
       return;
     }
     if (parts[0] === 'page') {
       setContent(loading());
-      renderShell({ content: loading(), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识页' }], active: 'page' });
+      renderShell({ content: loading(), breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识页' }], active: 'page' });
       const pageRef = decodeURIComponent(parts.slice(1).join('/'));
       const result = await renderPage(pageRef);
       if (seq !== routeSeq) return;
@@ -222,14 +222,14 @@ async function route() {
     if (parts[0] === 'library') {
       const ref = decodeURIComponent(parts[1]);
       setContent(loading());
-      renderShell({ content: loading(), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识库' }], active: `library:${ref}` });
+      renderShell({ content: loading(), breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识库' }], active: `library:${ref}` });
       const tab = query.get('tab') === 'sources' ? 'documents' : (query.get('tab') ?? 'documents');
       const html = await renderLibrary(ref, tab);
       if (seq !== routeSeq) return;
       const library = state.currentLibrary?.library;
       renderShell({
         content: html,
-        breadcrumb: [{ label: '总览', href: '#/' }, { label: library?.name ?? '知识库' }],
+        breadcrumb: [{ label: '知识库', href: '#/' }, { label: library?.name ?? '知识库' }],
         active: `library:${library?.id ?? ref}`,
       });
       document.title = `${library?.name ?? '知识库'} · Alexandria`;
@@ -238,10 +238,10 @@ async function route() {
     }
     if (parts[0] === 'search') {
       setContent(loading('正在检索已编译的知识…'));
-      renderShell({ content: loading('正在检索已编译的知识…'), breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识检索' }], active: 'search' });
+      renderShell({ content: loading('正在检索已编译的知识…'), breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识检索' }], active: 'search' });
       const html = await renderSearch(query);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识检索' }], active: 'search' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识检索' }], active: 'search' });
       document.title = `${query.get('q') ?? '检索'} · Alexandria`;
       mountSearch();
       return;
@@ -249,7 +249,7 @@ async function route() {
     if (parts[0] === 'upload') {
       const html = await renderUpload(parts[1] ? decodeURIComponent(parts[1]) : '');
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '导入资料' }], active: 'upload' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '导入资料' }], active: 'upload' });
       document.title = '资料入库 · Alexandria';
       mountUpload(parts[1] ? decodeURIComponent(parts[1]) : '');
       return;
@@ -258,7 +258,7 @@ async function route() {
       setContent(loading('正在读取任务…'));
       const html = await renderTasks();
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '处理任务' }], active: 'tasks' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '处理任务' }], active: 'tasks' });
       document.title = '任务中心 · Alexandria';
       mountTasks();
       return;
@@ -267,7 +267,7 @@ async function route() {
       setContent(loading('正在绘制知识图谱…'));
       const html = await renderGraph(parts[1] ? decodeURIComponent(parts[1]) : '');
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识图谱' }], active: 'graph' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识图谱' }], active: 'graph' });
       document.title = '知识图谱 · Alexandria';
       mountGraphView();
       return;
@@ -277,7 +277,7 @@ async function route() {
       setContent(loading());
       const html = await renderAdmin(tab);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '管理控制台' }], active: 'admin' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '管理控制台' }], active: 'admin' });
       document.title = '团队与权限 · Alexandria';
       mountAdmin(tab);
       return;
@@ -286,7 +286,7 @@ async function route() {
       setContent(loading());
       const html = await renderReview(query);
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '知识校对' }], active: 'review' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '知识校对' }], active: 'review' });
       document.title = '校对台 · Alexandria';
       mountReview();
       return;
@@ -295,7 +295,7 @@ async function route() {
       setContent(loading());
       const html = await renderNotifications();
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '通知' }], active: 'notifications' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '通知' }], active: 'notifications' });
       document.title = '通知 · Alexandria';
       mountNotifications();
       return;
@@ -304,17 +304,17 @@ async function route() {
       setContent(loading());
       const html = await renderAgent();
       if (seq !== routeSeq) return;
-      renderShell({ content: html, breadcrumb: [{ label: '总览', href: '#/' }, { label: '智能体接入' }], active: 'agent' });
+      renderShell({ content: html, breadcrumb: [{ label: '知识库', href: '#/' }, { label: '智能体接入' }], active: 'agent' });
       document.title = '智能体接入 · Alexandria';
       mountAgent();
       return;
     }
     // home
     setContent(loading());
-    renderShell({ content: loading(), breadcrumb: [{ label: '总览' }], active: 'home' });
+    renderShell({ content: loading(), breadcrumb: [{ label: '知识库' }], active: 'home' });
     const html = await renderHome();
     if (seq !== routeSeq) return;
-    renderShell({ content: html, breadcrumb: [{ label: '总览' }], active: 'home' });
+    renderShell({ content: html, breadcrumb: [{ label: '知识库' }], active: 'home' });
     document.title = 'Alexandria · 企业知识基础设施';
     mountHome();
   } catch (error) {
@@ -323,7 +323,7 @@ async function route() {
       showLogin();
       return;
     }
-    renderShell({ content: errorView(error), breadcrumb: [{ label: '总览', href: '#/' }, { label: '出错了' }], active: '' });
+    renderShell({ content: errorView(error), breadcrumb: [{ label: '知识库', href: '#/' }, { label: '出错了' }], active: '' });
   }
 }
 

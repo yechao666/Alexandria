@@ -53,7 +53,11 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ![知识总览](docs/screenshots/30-home-enterprise.png)
 
-![知识库](docs/screenshots/31-library-enterprise.png)
+![知识库](docs/screenshots/34-library-docs-enterprise.png)
+
+![文档中心](docs/screenshots/34-documents-enterprise.png)
+
+![文档详情](docs/screenshots/34-source-enterprise.png)
 
 ![知识页](docs/screenshots/31-page-enterprise.png)
 

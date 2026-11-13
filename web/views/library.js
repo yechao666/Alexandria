@@ -64,7 +64,7 @@ export async function renderLibrary(ref, tab = 'documents') {
         ${catalogTree(nodes, detail.nodes, selected)}
         <div class="content-pad">
           <div class="list-toolbar">
-            <div class="section-head" style="margin:0;flex:1"><div><h2 style="font-size:22px">${selected ? esc(nodes.find((node) => node.id === selected)?.name ?? '目录') : '全部知识页'}</h2><div class="sub">知识页 ${visiblePages.length} · 文献 ${visibleSources.length}</div></div></div>
+            <div class="section-head" style="margin:0;flex:1"><div><h2 style="font-size:22px">${selected ? esc(nodes.find((node) => node.id === selected)?.name ?? '目录') : '全部知识页'}</h2><div class="sub">知识页 ${visiblePages.length} · 文档 ${visibleSources.length}</div></div></div>
             <input class="input" id="library-filter" placeholder="筛选标题…" style="width:180px">
             ${detail.canEdit ? `<button class="btn btn-sm" id="new-page">${icon('plus', 14)} 新建页</button>` : ''}
           </div>
@@ -110,7 +110,7 @@ export async function renderLibrary(ref, tab = 'documents') {
             <div class="desc">${esc(library.description)}</div>
             <div class="library-stats">
               <div><b>${fmtNumber(detail.counts.pages)}</b>知识页</div>
-              <div><b>${fmtNumber(detail.counts.sources)}</b>文献</div>
+              <div><b>${fmtNumber(detail.counts.sources)}</b>文档</div>
               <div><b>${fmtNumber(detail.counts.links)}</b>关联</div>
               <div><b>${fmtNumber(detail.counts.claims)}</b>主张</div>
               <div><b>${fmtNumber(detail.counts.conflicts)}</b>待裁决</div>

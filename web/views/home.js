@@ -16,133 +16,56 @@ import {
   selectField,
   textArea,
   formValues,
+  emptyState,
 } from '../assets/core.js';
 
 export async function renderHome() {
   const b = state.bootstrap ?? (await loadBootstrap());
   const libraries = state.libraries;
   const stats = state.stats ?? {};
-  const classes = aggregateClasses(b.classes ?? []);
-  const maxClass = Math.max(1, ...classes.map((item) => item.count));
-  const featured = libraries[0];
+  const sortedLibraries = [...libraries].sort((a, b) => String(a.ownerTeamName || '未绑定部门').localeCompare(String(b.ownerTeamName || '未绑定部门'), 'zh-CN') || String(a.name).localeCompare(String(b.name), 'zh-CN'));
 
-  const libraryCards = libraries
-    .map((library) => {
-      const coverColor = libraryColor(library.color);
-      const visibility = library.visibility === 'private' ? '私有' : library.visibility === 'public' ? '公开' : '组织内';
-      return `<a class="lib-card" href="#/library/${encodeURIComponent(library.slug)}">
-        <div class="lib-card-head">
-          <span class="lib-avatar" style="background:${coverColor}">${esc(library.name.slice(0, 1))}</span>
-          <span class="lib-card-title"><b>${esc(library.name)}</b><span>${esc(library.description || '暂无描述')}</span></span>
-          <span class="lib-chevron">${icon('chevron', 14)}</span>
-        </div>
-        <div class="lib-card-badges"><span class="badge ${library.visibility === 'private' ? 'ochre' : 'outline'}">${visibility}</span>${roleBadge(library.role)}<span class="badge outline">${(library.nodes ?? []).length} 个目录</span></div>
-        <div class="lib-card-stats">
-          <span><b>${fmtNumber(library.counts?.pages)}</b><i>知识页</i></span>
-          <span><b>${fmtNumber(library.counts?.sources)}</b><i>文献</i></span>
-          <span><b>${fmtNumber(library.counts?.links)}</b><i>关联</i></span>
-        </div>
-      </a>`;
-    })
-    .join('');
-
-  const recentRows = (b.recentPages ?? [])
-    .slice(0, 6)
-    .map(
-      (page) => `<tr><td><a class="library-row" href="#/page/${encodeURIComponent(page.id)}"><span class="activity-icon">${icon('file', 14)}</span><span style="min-width:0"><span class="name">${esc(page.title)}</span><span class="desc">${esc(page.libraryName)}</span></span></a></td><td><span class="badge outline">${esc(page.classKey ?? 'page')}</span></td><td class="faint small">${timeAgo(page.updatedAt)}</td></tr>`,
-    )
-    .join('');
-
-  const teamTree = renderTeamTree(b.teams ?? []);
-  const pending = Number(stats.reviewPending ?? 0);
-  const conflicts = Number(stats.conflicts ?? 0);
-  const composition = classes
-    .slice(0, 7)
-    .map(
-      (item) => `<div class="type-bar"><span>${esc(item.name)}</span><span class="track"><i class="fill" style="width:${Math.round((item.count / Math.max(1, ...classes.map((entry) => entry.count))) * 100)}%;background:${libraryColor(item.color)}"></i></span><span>${item.count}</span></div>`,
-    )
-    .join('');
+  const renderLibrary = (library) => {
+    const coverColor = libraryColor(library.color);
+    const visibility = library.visibility === 'private' ? '私有' : library.visibility === 'public' ? '公开' : '组织内';
+    const department = library.ownerTeamName || '未绑定部门';
+    return `<a class="lib-card kb-card" href="#/library/${encodeURIComponent(library.slug)}">
+      <div class="lib-card-head">
+        <span class="lib-avatar" style="background:${coverColor}">${esc(library.name.slice(0, 1))}</span>
+        <span class="lib-card-title"><b>${esc(library.name)}</b><span>${esc(library.description || '暂无描述')}</span></span>
+        <span class="lib-chevron">${icon('chevron', 14)}</span>
+      </div>
+      <div class="lib-card-badges"><span class="badge outline">${esc(department)}</span><span class="badge ${library.visibility === 'private' ? 'ochre' : 'outline'}">${visibility}</span>${roleBadge(library.role)}</div>
+      <div class="lib-card-stats">
+        <span><b>${fmtNumber(library.counts?.sources)}</b><i>文档</i></span>
+        <span><b>${fmtNumber(library.counts?.pages)}</b><i>知识页</i></span>
+        <span><b class="${Number(library.counts?.reviewPending) ? 'text-amber' : ''}">${fmtNumber(library.counts?.reviewPending ?? 0)}</b><i>待校对</i></span>
+      </div>
+      <div class="kb-card-foot"><span>${(library.nodes ?? []).length} 个目录 · ${fmtNumber(library.counts?.links)} 条关联</span><span>进入知识库 ${icon('arrow', 12)}</span></div>
+    </a>`;
+  };
 
   return `
     <section class="page-head">
-      <div>
-        <div class="eyebrow">KNOWLEDGE OPERATIONS · ENTERPRISE</div>
-        <h1>知识库总览</h1>
-        <p>统一管理组织知识资产、资料处理、权限与校对队列；所有内容按团队和可见性范围受控。</p>
-      </div>
-      <div class="page-actions">
-        <a class="btn" href="#/search">${icon('search', 14)} 检索</a>
-        <button class="btn" id="new-library-btn">${icon('plus', 14)} 新建知识库</button>
-        <a class="btn btn-primary" href="#/upload">${icon('upload', 14)} 导入资料</a>
-      </div>
+      <div><div class="eyebrow">KNOWLEDGE BASES · DOCUMENTS · PROVENANCE</div><h1>知识库</h1><p>按部门进入知识库。每个知识库同时管理原始文档、编译出的知识页与来源链路。</p></div>
+      <div class="page-actions"><a class="btn" href="#/search">${icon('search', 14)} 全局检索</a><button class="btn btn-primary" id="new-library-btn">${icon('plus', 14)} 新建知识库</button></div>
     </section>
 
-    <section class="kpi-grid">
-      <div class="kpi-card kpi-violet"><div><div class="label">知识资产</div><div class="value">${fmtNumber(stats.pages)}</div><div class="hint">原子化知识页</div></div><span class="kpi-icon">${icon('layers', 18)}</span></div>
-      <div class="kpi-card kpi-cyan"><div><div class="label">原始资料</div><div class="value">${fmtNumber(stats.sources)}</div><div class="hint">可回溯的文献与附件</div></div><span class="kpi-icon">${icon('file', 18)}</span></div>
-      <div class="kpi-card kpi-amber"><div><div class="label">待校对</div><div class="value">${fmtNumber(pending)}</div><div class="hint">${conflicts} 条矛盾待裁决</div></div><span class="kpi-icon">${icon('check', 18)}</span></div>
-      <div class="kpi-card kpi-green"><div><div class="label">组织成员</div><div class="value">${fmtNumber(stats.members)}</div><div class="hint">${fmtNumber(stats.libraries ?? libraries.length)} 个知识库</div></div><span class="kpi-icon">${icon('users', 18)}</span></div>
+    <section class="kb-summary">
+      <div><b>${fmtNumber(libraries.length)}</b><span>知识库</span></div>
+      <div><b>${fmtNumber(stats.sources)}</b><span>文档</span></div>
+      <div><b>${fmtNumber(stats.pages)}</b><span>知识页</span></div>
+      <div><b>${fmtNumber(stats.reviewPending ?? 0)}</b><span>待校对</span></div>
+      <div><b>${fmtNumber(stats.conflicts ?? 0)}</b><span>矛盾</span></div>
     </section>
 
-    <div class="dashboard-grid">
-      <div class="dashboard-main">
-        <div class="panel">
-          <div class="panel-head"><div><h3>知识库</h3><div class="small faint">按团队授权，库内再按目录、页面与文献细化</div></div><span class="badge jade">${libraries.length} 个可见</span></div>
-          <div class="panel-body"><div class="lib-grid">${libraryCards || '<div class="rail-empty">暂无可见知识库</div>'}</div></div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><div><h3>最近更新</h3><div class="small faint">编译、校对或编辑后的知识页</div></div><a class="link small" href="#/search">查看全部 ${icon('arrow', 12)}</a></div>
-          <div style="overflow:auto">
-            <table class="data-table">
-              <thead><tr><th>页面</th><th>类型</th><th>更新时间</th></tr></thead>
-              <tbody>${recentRows || '<tr><td colspan="3" class="muted" style="padding:18px">还没有知识页，先导入一份资料。</td></tr>'}</tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <aside class="dashboard-side">
-        <div class="panel">
-          <div class="panel-head"><h3>待办事项</h3><span class="badge ochre">${pending + conflicts}</span></div>
-          <div class="panel-body">
-            <div class="todo-list">
-              <a class="todo-item" href="#/review"><span class="todo-icon">${icon('check', 14)}</span><span class="todo-text"><b>待校对知识页</b><span>草稿需人工确认</span></span><span class="todo-count">${pending}</span></a>
-              <a class="todo-item" href="#/review?conflicts=1"><span class="todo-icon">${icon('shield', 14)}</span><span class="todo-text"><b>矛盾主张</b><span>需裁决后发布</span></span><span class="todo-count">${conflicts}</span></a>
-              <a class="todo-item" href="#/tasks"><span class="todo-icon">${icon('clock', 14)}</span><span class="todo-text"><b>处理任务</b><span>查看队列与失败项</span></span><span class="todo-count">›</span></a>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><h3>快捷入口</h3></div>
-          <div class="panel-body"><div class="quick-grid">
-            <a class="quick-action" href="#/upload">${icon('upload', 16)}<span>导入资料</span></a>
-            <a class="quick-action" href="#/search">${icon('search', 16)}<span>知识检索</span></a>
-            <a class="quick-action" href="#/review?conflicts=1">${icon('shield', 16)}<span>处理矛盾</span></a>
-            <a class="quick-action" href="#/admin?tab=review-analytics">${icon('graph', 16)}<span>校对报表</span></a>
-          </div></div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><h3>知识构成</h3><span class="small faint">按本体类型</span></div>
-          <div class="panel-body type-bars">${composition || '<div class="rail-empty">暂无数据</div>'}</div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><h3>组织架构</h3><a class="link small" href="#/admin">管理 ${icon('arrow', 12)}</a></div>
-          <div class="panel-body org-tree">${teamTree}</div>
-        </div>
-      </aside>
-    </div>`;
-
-  // bind after insertion by app: return markup only; events handled in mountHome
+    <div class="lib-grid">${sortedLibraries.map(renderLibrary).join('') || emptyState('还没有知识库', '先创建一个部门知识库，再导入文档。', '<button class="btn btn-primary" id="new-library-empty">新建知识库</button>')}</div>`;
 }
 
 export function mountHome() {
   const open = () => openCreateLibrary();
   document.getElementById('new-library-btn')?.addEventListener('click', open);
-  document.getElementById('new-library-card')?.addEventListener('click', open);
+  document.getElementById('new-library-empty')?.addEventListener('click', open);
 }
 
 function aggregateClasses(classes) {
