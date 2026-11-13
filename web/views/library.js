@@ -24,6 +24,7 @@ import {
   loadBootstrap,
 } from '../assets/core.js';
 import { mountGraph } from '../assets/graph.js';
+import { openFilePreview } from '../assets/preview.js';
 
 const TABS = [
   { key: 'documents', label: '文件' },
@@ -259,7 +260,9 @@ function bindDrive(library, detail) {
       inspector.innerHTML = `<div class="inspector-head"><span class="file-kind">${icon(source.kind === 'image' ? 'image' : 'file', 18)}<b>${esc(fileKind(source))}</b></span><div><b>${esc(source.title)}</b><span>${esc(source.filename)}</span></div></div>
         <div class="inspector-section"><div class="inspector-label">文件</div><dl class="inspector-kv"><dt>目录</dt><dd>${esc(source.node?.name ?? '未分类')}</dd><dt>大小</dt><dd>${fmtBytes(source.size)}</dd><dt>字数</dt><dd>${fmtNumber(source.wordCount)}</dd><dt>上传</dt><dd>${timeAgo(source.createdAt)}</dd></dl></div>
         <div class="inspector-section"><div class="inspector-label">关联知识点 · ${pages.length}</div><div class="inspector-pages">${pageRows || '<span class="faint small">尚未编译出知识点</span>'}</div>${pages.length > 8 ? `<a class="link small" href="#/library/${encodeURIComponent(library.slug)}?tab=pages">查看全部 ${pages.length} 个 →</a>` : ''}</div>
-        <div class="inspector-section"><div class="inspector-label">操作</div><div class="inspector-actions"><a class="btn btn-sm" href="#/source/${encodeURIComponent(source.id)}">${icon('external', 12)} 文档详情</a><a class="btn btn-sm btn-ghost" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('file', 12)} 原文</a>${data.canEdit ? `<button class="btn btn-sm btn-ghost" data-file-edit>${icon('edit', 12)} 编辑归档</button><button class="btn btn-sm btn-ghost" data-file-reprocess>${icon('refresh', 12)} 重编译</button><button class="btn btn-sm btn-ghost btn-danger" data-file-delete>${icon('trash', 12)} 删除</button>` : ''}</div></div>`;
+        <div class="inspector-section"><div class="inspector-label">操作</div><div class="inspector-actions"><button class="btn btn-sm btn-primary" data-file-preview>${icon('eye', 12)} 预览</button><button class="btn btn-sm" data-file-open>${icon('external', 12)} 文档详情</button><a class="btn btn-sm btn-ghost" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('file', 12)} 原文</a>${data.canEdit ? `<button class="btn btn-sm btn-ghost" data-file-edit>${icon('edit', 12)} 编辑归档</button><button class="btn btn-sm btn-ghost" data-file-reprocess>${icon('refresh', 12)} 重编译</button><button class="btn btn-sm btn-ghost btn-danger" data-file-delete>${icon('trash', 12)} 删除</button>` : ''}</div></div>`;
+      inspector.querySelector('[data-file-preview]')?.addEventListener('click', () => openFilePreview(source));
+      inspector.querySelector('[data-file-open]')?.addEventListener('click', () => go(`#/source/${encodeURIComponent(source.id)}`));
       inspector.querySelector('[data-file-edit]')?.addEventListener('click', () => openDriveMeta(library, detail, source));
       inspector.querySelector('[data-file-reprocess]')?.addEventListener('click', async () => {
         try { await api(`/api/sources/${encodeURIComponent(source.id)}/reprocess`, { method: 'POST' }); toast('已加入编译队列', 'success'); } catch (error) { toast(error.message, 'error'); }

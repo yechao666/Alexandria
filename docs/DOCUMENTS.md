@@ -43,5 +43,7 @@
 - [文档中心](screenshots/34-documents-enterprise.png)
 - [文档详情](screenshots/34-source-enterprise.png)
 - [知识库文件页](screenshots/34-library-docs-enterprise.png)
+- [文件预览](screenshots/36-file-preview-enterprise.png)
+- [图片预览](screenshots/37-file-preview-image-enterprise.png)
 - [选中文件与关联知识](screenshots/35-drive-selected-enterprise.png)
 - [知识片段筛选](screenshots/34-library-pages-enterprise.png)

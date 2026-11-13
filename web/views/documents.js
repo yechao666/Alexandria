@@ -17,6 +17,7 @@ import {
   openModal,
   closeModal,
 } from '../assets/core.js';
+import { openFilePreview } from '../assets/preview.js';
 
 const STATUS_LABEL = {
   ready: '已编译',
@@ -146,7 +147,7 @@ export async function renderSource(ref) {
       <div class="doc-breadcrumb"><a href="#/documents">文档中心</a><span>/</span><a href="#/library/${encodeURIComponent(source.library?.slug ?? '')}?tab=documents">${esc(source.library?.name ?? '知识库')}</a></div>
       <div class="between wrap" style="align-items:flex-start;gap:16px">
         <div class="doc-heading"><span class="doc-icon doc-icon-lg">${icon(source.kind === 'image' ? 'image' : 'file', 24)}</span><div><div class="row wrap" style="gap:7px">${statusPill(source.status)}<span class="badge outline">${kindLabel(source)}</span>${source.node ? `<span class="badge outline">${esc(source.node.name)}</span>` : ''}</div><h1>${esc(source.title)}</h1><p>${esc(source.filename)} · ${fmtBytes(source.size)} · ${fmtNumber(source.wordCount)} 字 · 上传于 ${timeAgo(source.createdAt)}${source.uploadedByName ? ` · ${esc(source.uploadedByName)}` : ''}</p></div></div>
-        <div class="btn-row"><a class="btn" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('external', 14)} 原始文件</a>${data.canEdit ? `<button class="btn" id="source-edit">${icon('edit', 14)} 编辑信息</button><button class="btn" id="source-reprocess">${icon('refresh', 14)} 重新编译</button>` : ''}<a class="btn btn-primary" href="#/library/${encodeURIComponent(source.library?.slug ?? '')}?tab=pages">查看知识库 ${icon('arrow', 14)}</a></div>
+        <div class="btn-row"><button class="btn btn-primary" id="source-preview">${icon('eye', 14)} 预览</button><a class="btn" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('external', 14)} 原始文件</a>${data.canEdit ? `<button class="btn" id="source-edit">${icon('edit', 14)} 编辑信息</button><button class="btn" id="source-reprocess">${icon('refresh', 14)} 重新编译</button>` : ''}<a class="btn btn-primary" href="#/library/${encodeURIComponent(source.library?.slug ?? '')}?tab=pages">查看知识库 ${icon('arrow', 14)}</a></div>
       </div>
     </div>
 
@@ -171,6 +172,12 @@ export async function renderSource(ref) {
 }
 
 export function mountSource(ref) {
+  document.getElementById('source-preview')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/sources/${encodeURIComponent(ref)}`);
+      openFilePreview(data.source);
+    } catch (error) { toast(error.message, 'error'); }
+  });
   document.getElementById('source-edit')?.addEventListener('click', async () => {
     try {
       const data = await api(`/api/sources/${encodeURIComponent(ref)}`);

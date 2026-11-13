@@ -57,6 +57,10 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ![文件与关联知识](docs/screenshots/35-drive-selected-enterprise.png)
 
+![文件预览](docs/screenshots/36-file-preview-enterprise.png)
+
+![图片预览](docs/screenshots/37-file-preview-image-enterprise.png)
+
 ![文档中心](docs/screenshots/34-documents-enterprise.png)
 
 ![文档详情](docs/screenshots/34-source-enterprise.png)
@@ -78,6 +82,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **本机 DSH** | 入库编译、语义检索重排、知识合成；无凭据时回退规则编译器与 FTS/图谱 |
 | **权限** | 组织层级（上级只读下级，下级不可反查上级）+ 库/页面/文献 ACL + 定向共享；每次查询先过滤 |
 | **文件管理** | 网盘式文件页：文件夹树、网格/列表、搜索、上传、编辑归档、重编译、删除 |
+| **文件预览** | 图片/PDF 原生预览；Office/文本显示入库提取文本，支持下载原文 |
 | **文档** | 12+ 格式；PDF 文本层、Office XML、图片 OCR、RTF/WPS 兜底；文档中心统一登记 |
 | **智能体** | `/api/agent/*` API Key、manifest、SKILL.md、lint、编译与写入 |
 | **可追溯** | 文档→知识页→主张全程来源链路；页面版本、审计事件、矛盾标记、回收站 |
