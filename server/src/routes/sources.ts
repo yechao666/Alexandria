@@ -102,7 +102,7 @@ export function registerSourceRoutes(router: Router): void {
         LEFT JOIN teams t ON t.id = l.owner_team_id
         LEFT JOIN catalog_nodes n ON n.id = s.node_id
        WHERE ${conditions.join(' AND ')}
-       ORDER BY s.created_at DESC LIMIT 500
+       ORDER BY s.created_at DESC LIMIT 2000
     `).all(...params) as unknown as Record<string, unknown>[];
     const visible = rows.filter((row) => Boolean(effectiveSourceRole(rc.app.db, actor, row as unknown as SourceRow)));
     const items = visible.map((row) => ({
