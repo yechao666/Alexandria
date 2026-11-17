@@ -64,18 +64,36 @@ export async function renderDocuments(query = new URLSearchParams()) {
   const sources = data.sources ?? [];
   const summary = data.summary ?? {};
   const selectedLibrary = params.get('library') ?? '';
+  const selectedNode = params.get('node') ?? '';
   const selectedStatus = params.get('status') ?? '';
   const q = params.get('q') ?? '';
-  const view = params.get('view') === 'list' ? 'list' : 'grid';
+  const view = params.get('view') === 'grid' ? 'grid' : 'list';
   const libraries = state.libraries ?? [];
+  const details = await Promise.all(libraries.map((library) => api(`/api/libraries/${encodeURIComponent(library.id)}`).catch(() => null)));
+  const byId = new Map(libraries.map((library, index) => [library.id, details[index]]));
   const departments = new Map();
   for (const library of libraries) {
     const name = library.ownerTeamName || '未绑定部门';
     if (!departments.has(name)) departments.set(name, []);
     departments.get(name).push(library);
   }
-  const folderRows = `<button class="drive-folder ${!selectedLibrary ? 'active' : ''}" data-doc-library="">${icon('folder', 14)}<span>全部文档</span><span class="count">${fmtNumber(summary.total)}</span></button>${[...departments.entries()].map(([department, items]) => `<div class="drive-dept">${esc(department)}</div>${items.map((library) => `<button class="drive-folder ${selectedLibrary === library.id ? 'active' : ''}" data-doc-library="${esc(library.id)}">${icon('folder', 14)}<span>${esc(library.name)}</span><span class="count">${fmtNumber(library.counts?.sources)}</span></button>`).join('')}`).join('')}`;
+  const treeRows = [...departments.entries()].map(([department, items]) => `<div class="tree-dept">${esc(department)}</div>${items.map((library) => {
+    const detail = byId.get(library.id);
+    const nodes = detail?.nodes ?? [];
+    const renderNode = (node) => {
+      const active = selectedLibrary === library.id && selectedNode === node.id;
+      return `<button class="tree-row tree-child ${active ? 'active' : ''}" data-doc-library="${esc(library.id)}" data-doc-node="${esc(node.id)}"><span class="tree-toggle"></span>${icon('folder', 13)}<span class="tree-name">${esc(node.name)}</span><span class="tree-count">${fmtNumber(node.sourceCount ?? 0)}</span></button>${(node.children ?? []).map((child) => renderNode(child)).join('').replaceAll('class="tree-row tree-child', 'class="tree-row tree-child tree-grandchild')}`;
+    };
+    return `<button class="tree-row ${selectedLibrary === library.id && !selectedNode ? 'active' : ''}" data-doc-library="${esc(library.id)}"><span class="tree-toggle" data-tree-toggle="${esc(library.id)}">${icon('chevron', 11)}</span>${icon('layers', 13)}<span class="tree-name">${esc(library.name)}</span><span class="tree-count">${fmtNumber(library.counts?.sources)}</span></button><div class="tree-children" data-tree-children="${esc(library.id)}">${nodes.map((node) => renderNode(node)).join('')}</div>`;
+  }).join('')}`).join('');
+  const folderRows = `<button class="tree-row ${!selectedLibrary ? 'active' : ''}" data-doc-library="" data-doc-node=""><span class="tree-toggle">${icon('file', 11)}</span><span class="tree-name">全部文档</span><span class="tree-count">${fmtNumber(summary.total)}</span></button>${treeRows}`;
   const current = libraries.find((library) => library.id === selectedLibrary);
+  const currentNodeName = (() => {
+    if (!current || !selectedNode) return '';
+    const detail = byId.get(current.id);
+    const walk = (nodes) => { for (const node of nodes ?? []) { if (node.id === selectedNode) return node.name; const found = walk(node.children); if (found) return found; } return ''; };
+    return walk(detail?.nodes ?? []);
+  })();
   const cards = sources.map((source) => `<div class="file-card ${view === 'list' ? 'file-row' : ''}" data-file-id="${esc(source.id)}" data-search="${esc(`${source.title} ${source.filename} ${source.libraryName} ${source.departmentName}`.toLowerCase())}" tabindex="0">
     <span class="file-kind ${source.kind === 'image' ? 'image' : ''}">${icon(source.kind === 'image' ? 'image' : 'file', 20)}<b>${esc(kindLabel(source))}</b></span>
     <div class="file-main"><div class="file-name">${esc(source.title)}</div><div class="file-meta">${esc(source.departmentName && source.departmentName !== source.libraryName ? `${source.departmentName} · ${source.libraryName}` : (source.libraryName || source.departmentName || '未归档'))} · ${fmtNumber(source.wordCount)} 字 · ${timeAgo(source.createdAt)}</div></div>
@@ -95,7 +113,7 @@ export async function renderDocuments(query = new URLSearchParams()) {
     </aside>
     <section class="drive-main">
       <div class="drive-toolbar">
-        <div class="drive-breadcrumb"><span>文档</span><span>/</span><b>${esc(current?.name ?? '全部文档')}</b></div>
+        <div class="drive-breadcrumb"><span>文档</span><span>/</span><b>${esc(current?.name ?? '全部文档')}${currentNodeName ? ` / ${esc(currentNodeName)}` : ''}</b></div>
         <form class="doc-search" id="doc-search"><input class="input" name="q" value="${esc(q)}" placeholder="搜索文档、文件名、部门…" aria-label="搜索文档"><button class="btn btn-sm" type="submit">${icon('search', 13)}</button></form>
         <select class="select" id="doc-status"><option value="">全部状态</option>${['ready', 'processing', 'failed'].map((status) => `<option value="${status}" ${selectedStatus === status ? 'selected' : ''}>${STATUS_LABEL[status]}</option>`).join('')}</select>
         <div class="drive-view-toggle"><button class="${view === 'grid' ? 'active' : ''}" data-doc-view="grid" title="网格">${icon('layers', 14)}</button><button class="${view === 'list' ? 'active' : ''}" data-doc-view="list" title="列表">${icon('menu', 14)}</button></div>
@@ -154,7 +172,14 @@ export function mountDocuments() {
     navigate({ q: new FormData(event.currentTarget).get('q') ?? '' });
   });
   document.getElementById('doc-status')?.addEventListener('change', (event) => navigate({ status: event.currentTarget.value }));
-  document.querySelectorAll('[data-doc-library]').forEach((button) => button.addEventListener('click', () => navigate({ library: button.dataset.docLibrary })));
+  document.querySelectorAll('[data-tree-toggle]').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const children = document.querySelector(`[data-tree-children="${CSS.escape(button.dataset.treeToggle)}"]`);
+    if (!children) return;
+    children.hidden = !children.hidden;
+    button.classList.toggle('collapsed', children.hidden);
+  }));
+  document.querySelectorAll('[data-doc-library]').forEach((button) => button.addEventListener('click', () => navigate({ library: button.dataset.docLibrary, node: button.dataset.docNode || '' })));
   document.querySelectorAll('[data-doc-view]').forEach((button) => button.addEventListener('click', () => navigate({ view: button.dataset.docView })));
   const input = document.querySelector('#doc-search input');
   if (input) {

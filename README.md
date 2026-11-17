@@ -4,7 +4,7 @@
 >
 > 基于 **LLM Wiki / Dynamic Knowledge Repository** 理念、**本体论** 与 **团队权限** 的企业知识库。纯 Node 26 + SQLite；语义编译/检索/合成默认调用**本机 DSH**，不可用时自动回退规则与本地检索。
 
-![文档优先工作台](docs/screenshots/40-document-first-enterprise.png)
+![浅色文档工作台](docs/screenshots/41-light-documents.png)
 
 ## 这是什么
 
@@ -49,11 +49,11 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ## 企业控制台
 
-![登录](docs/screenshots/29-login-enterprise.png)
+![登录](docs/screenshots/43-light-login.png)
 
-![文档优先工作台](docs/screenshots/40-document-first-enterprise.png)
+![浅色文档工作台](docs/screenshots/41-light-documents.png)
 
-![知识库视图](docs/screenshots/30-home-enterprise.png)
+![知识库视图](docs/screenshots/42-light-libraries.png)
 
 ![知识库文件页](docs/screenshots/34-library-docs-enterprise.png)
 
@@ -78,7 +78,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | 能力 | 实现 |
 | --- | --- |
 | **分库** | 每个知识库独立的本体、目录树、权限、检索范围 |
-| **文档主线** | 登录后先进文档工作台；按部门/知识库筛选，右侧检查器展示文件与关联知识点；Wiki 作为知识层辅线 |
+| **文档主线** | 浅色网盘式工作台：部门/知识库/目录树、文件列表、右侧检查器；先管理文件，再看关联知识 |
 | **分类组织** | 文档按部门/知识库/目录归档；知识页按本体类型筛选；库内目录树组织主题 |
 | **知识编译** | 本机 DSH 抽取概念、实体、事实、主张与上下位关联；生成文献页/概念页/实体页 |
 | **本体论** | 类型 + 属性 + 关系；内置类型带属性定义，可扩展类型/属性；页面按类型渲染属性表单 |

@@ -84,6 +84,7 @@ export function registerSourceRoutes(router: Router): void {
       conditions.push('s.library_id = ?');
       params.push(library.id);
     }
+    if (rc.query('node')) { conditions.push('s.node_id = ?'); params.push(rc.query('node')); }
     if (rc.query('status')) {
       const status = rc.query('status');
       if (status === 'processing') conditions.push("s.status IN ('processing','queued')");
@@ -95,10 +96,11 @@ export function registerSourceRoutes(router: Router): void {
       const q = `%${rc.query('q')}%`; params.push(q, q, q);
     }
     const rows = rc.app.db.prepare(`
-      SELECT s.*, l.name AS library_name, l.slug AS library_slug, t.name AS department_name,
+      SELECT s.*, l.name AS library_name, l.slug AS library_slug, t.name AS department_name, n.name AS node_name,
              (SELECT COUNT(*) FROM page_sources ps WHERE ps.source_id = s.id) AS compiled_pages
         FROM sources s JOIN libraries l ON l.id = s.library_id
         LEFT JOIN teams t ON t.id = l.owner_team_id
+        LEFT JOIN catalog_nodes n ON n.id = s.node_id
        WHERE ${conditions.join(' AND ')}
        ORDER BY s.created_at DESC LIMIT 500
     `).all(...params) as unknown as Record<string, unknown>[];
@@ -118,6 +120,7 @@ export function registerSourceRoutes(router: Router): void {
       librarySlug: row.library_slug,
       departmentName: row.department_name || row.library_name,
       nodeId: row.node_id,
+      nodeName: row.node_name,
       compiledPages: Number(row.compiled_pages ?? 0),
       uploadedBy: row.uploaded_by,
       uploadedByName: row.uploaded_by ? (rc.app.db.prepare('SELECT name FROM persons WHERE id = ?').get(String(row.uploaded_by)) as unknown as { name: string } | undefined)?.name ?? null : null,

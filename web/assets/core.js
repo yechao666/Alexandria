@@ -231,56 +231,35 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
     )
     .join('');
   document.getElementById('app').innerHTML = `
-    <div class="shell">
-      <aside class="sidebar">
-        <a class="brand" href="#/">
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="app-brand" href="#/">
           <span class="brand-mark">A</span>
-          <span class="brand-text"><span class="brand-name">ALEXANDRIA</span><span class="brand-sub">企业知识基础设施</span></span>
+          <span class="brand-copy"><b>ALEXANDRIA</b><small>企业文档知识库</small></span>
         </a>
-        <div class="workspace-switcher" title="当前工作空间">
-          <span class="ws-icon">EK</span>
-          <span class="ws-text"><b>企业知识空间</b><span>Production · 组织级</span></span>
-          <span class="ws-chevron">${icon('chevron', 12) || '▾'}</span>
-        </div>
-        <div class="side-section">
-          <a class="nav-link ${active === 'documents' ? 'active' : ''}" href="#/">${icon('file')}<span>文档</span></a>
-        </div>
-        <div class="side-section">
-          <div class="side-label">知识库</div>
-          <a class="nav-link ${active === 'libraries' ? 'active' : ''}" href="#/libraries">${icon('layers')}<span>全部知识库</span></a>
-          ${libraries || '<div class="side-label" style="padding-top:4px">暂无可见知识库</div>'}
-        </div>
-        <div class="side-section">
-          <div class="side-label">工作台</div>
-          <a class="nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search')}<span>全局检索</span></a>
-          <a class="nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check')}<span>校对队列</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
-        </div>
-        ${state.me?.person?.isAdmin ? `<div class="side-section"><div class="side-label">管理</div><a class="nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('users')}<span>管理控制台</span></a></div>` : ''}
-        <div class="side-spacer"></div>
-        <div class="side-user">
+        <nav class="app-nav" aria-label="主导航">
+          <a class="app-nav-link ${['documents', 'home', 'source'].includes(active) ? 'active' : ''}" href="#/">${icon('folder', 15)}<span>文档</span></a>
+          <a class="app-nav-link ${active === 'libraries' || active === 'page' || String(active).startsWith('library:') ? 'active' : ''}" href="#/libraries">${icon('layers', 15)}<span>知识库</span></a>
+          <a class="app-nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search', 15)}<span>搜索</span></a>
+          <a class="app-nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check', 15)}<span>校对</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
+          ${state.me?.person?.isAdmin ? `<a class="app-nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('settings', 15)}<span>管理</span></a>` : ''}
+        </nav>
+        <form class="topbar-search" id="top-search">
+          ${icon('search', 16)}
+          <input name="q" placeholder="搜索文档、知识、人员…" autocomplete="off" aria-label="搜索">
+          <kbd>⌘K</kbd>
+        </form>
+        <div class="app-actions">
+          <a class="icon-btn notif-btn" href="#/notifications" title="通知" aria-label="通知">${icon('bell', 17)}${Number(state.bootstrap?.stats?.notificationsUnread ?? 0) > 0 ? `<span class="notif-dot">${state.bootstrap.stats.notificationsUnread}</span>` : ''}</a>
+          <a class="btn btn-primary" href="#/upload">${icon('upload', 14)} 导入</a>
+          <button class="icon-btn" id="security-btn" title="安全设置" aria-label="安全设置">${icon('lock', 16)}</button>
+          <button class="icon-btn" id="logout-btn" title="退出登录" aria-label="退出登录">${icon('logout', 16)}</button>
           ${avatar(state.me?.person)}
-          <div class="meta"><div class="name">${escapeHtml(state.me?.person?.name ?? '')}</div><div class="title">${escapeHtml(state.me?.person?.title ?? '')}</div></div>
-          <button class="icon-btn" id="security-btn" title="安全设置" aria-label="安全设置">${icon('lock', 16)}</button><button class="icon-btn" id="logout-btn" title="退出登录" aria-label="退出登录">${icon('logout', 16)}</button>
         </div>
-      </aside>
-      <div class="main">
-        <header class="topbar">
-          <button class="icon-btn mobile-toggle" id="nav-toggle" aria-label="菜单">${icon('menu')}</button>
-          <div class="breadcrumb">${crumbs}</div>
-          <div class="topbar-meta"><span class="live-status"><i></i>实时</span><span class="env-badge">PRODUCTION</span><span class="small faint hide-sm">组织级权限</span></div>
-          <form class="topbar-search" id="top-search">
-            ${icon('search', 16)}
-            <input name="q" placeholder="搜索知识、文档、人员…" autocomplete="off" aria-label="搜索">
-            <kbd>⌘K</kbd>
-          </form>
-          <a class="icon-btn notif-btn hide-sm" href="#/notifications" title="通知" aria-label="通知">${icon('bell', 17)}${Number(state.bootstrap?.stats?.notificationsUnread ?? 0) > 0 ? `<span class="notif-dot">${state.bootstrap.stats.notificationsUnread}</span>` : ''}</a>
-          <a class="btn btn-sm hide-sm" href="#/upload">${icon('upload', 14)} 上传</a>
-        </header>
-        <main class="content" id="content">${content ?? ''}</main>
-      </div>
-    </div>
-    <div class="scrim" id="scrim"></div>`;
-
+      </header>
+      <div class="app-subbar"><div class="breadcrumb">${crumbs}</div><div class="subbar-meta">企业知识空间 · 组织级权限</div></div>
+      <main class="content" id="content">${content ?? ''}</main>
+    </div>`;
   document.getElementById('security-btn')?.addEventListener('click', async () => {
     const openSecurity = async () => {
       try {
