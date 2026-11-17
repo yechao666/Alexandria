@@ -8,6 +8,8 @@ import { notifyPerson } from '../domain/notifications.ts';
 import { errors } from '../http/respond.ts';
 import { newId, nowIso, parseJson } from '../lib/ids.ts';
 import { pageContext, pageToView, getPage, createPage, updatePage, deletePage, attachSource, resolvePageRef, mergePages, snapshotAndTrashPage, restorePageFromTrash } from '../knowledge/pages.ts';
+import { parsePageBlocks, replacePageBlock } from '../knowledge/blocks.ts';
+import { publish } from '../realtime.ts';
 import { relatedPages } from '../knowledge/search.ts';
 import { canEdit, pageAccess, pageListDto, parseList } from './helpers.ts';
 import type { PageRow } from '../types.ts';
@@ -126,6 +128,24 @@ export function registerPageRoutes(router: Router): void {
     rc.json({ total: visible.length, pages: visible.slice(offset, offset + limit).map((page) => pageListDto(rc.app.db, page)) });
   });
 
+  router.get('/api/pages/:id/blocks', (rc) => {
+    const { page } = pageAccess(rc, rc.params.id!);
+    rc.json({ blocks: parsePageBlocks(page.body) });
+  });
+
+  router.patch('/api/pages/:id/blocks/:blockId', async (rc) => {
+    const { actor, page, library } = pageAccess(rc, rc.params.id!, 'editor');
+    const body = await rc.body<{ markdown?: string }>();
+    const markdown = String(body.markdown ?? '').trim();
+    if (!markdown) throw errors.badRequest('块内容不能为空');
+    const nextBody = replacePageBlock(page.body, rc.params.blockId!, markdown);
+    if (nextBody === null) throw errors.notFound('块不存在');
+    const updated = updatePage(rc.app.db, page, { body: nextBody, note: '块级编辑' }, actor);
+    audit(rc.app.db, { actor, action: 'page.block.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { blockId: rc.params.blockId } });
+    publish({ type: 'page.updated', pageId: page.id, libraryId: library.id, actorId: actor.person.id, actorName: actor.person.name, data: { title: updated.title, version: updated.version } });
+    rc.json({ page: pageListDto(rc.app.db, updated), blocks: parsePageBlocks(updated.body) });
+  });
+
   router.get('/api/pages/:id', (rc) => {
     const { actor, page, role } = pageAccess(rc, rc.params.id!);
     rc.json({ ...pageDetail(rc, page, role, actor), role, canEdit: canEdit(role) });
@@ -175,6 +195,7 @@ export function registerPageRoutes(router: Router): void {
     const { page, library, role } = pageAccess(rc, rc.params.id!);
     if (!canEdit(role)) throw errors.forbidden('需要编辑权限');
     const body = await rc.body<Record<string, unknown>>();
+    if (body.version !== undefined && Number(body.version) !== page.version) throw errors.conflict('页面已被其他成员更新，请刷新后重试');
     if (body.classKey !== undefined) {
       const exists = rc.app.db
         .prepare('SELECT 1 FROM ontology_classes WHERE library_id = ? AND key = ?')
@@ -210,6 +231,7 @@ export function registerPageRoutes(router: Router): void {
       actor,
     );
     audit(rc.app.db, { actor, action: 'page.update', targetType: 'page', targetId: page.id, libraryId: library.id, detail: { version: updated.version } });
+    publish({ type: 'page.updated', pageId: page.id, libraryId: library.id, actorId: actor.person.id, actorName: actor.person.name, data: { title: updated.title, version: updated.version } });
     rc.json({ page: pageListDto(rc.app.db, updated) });
   });
 

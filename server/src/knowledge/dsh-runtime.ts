@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Env } from '../env.ts';
 
@@ -138,24 +139,34 @@ export function runDshSync(env: Env, prompt: string, options: { timeoutMs?: numb
   if (!key) return null;
   const prepared = prepareHome(env);
   if (!prepared) return null;
-  const result = spawnSync(env.dsh.bin, ['--profile', env.dsh.profile, '--json', '-'], {
-    cwd: prepared.cwd,
-    env: {
-      ...process.env,
-      DSH_HOME: prepared.home,
-      DEEPSEEK_API_KEY: key,
-      DSH_HIVE_RUNTIME_DISABLED: '1',
-    },
-    input: prompt,
-    encoding: 'utf8',
-    timeout: options.timeoutMs ?? env.dsh.timeoutMs,
-    killSignal: 'SIGKILL',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (result.status !== 0 || !result.stdout) return null;
+  const directory = mkdtempSync(join(tmpdir(), 'alexandria-dsh-'));
+  const outputPath = join(directory, 'stdout.jsonl');
+  const fd = openSync(outputPath, 'w');
+  let result;
+  try {
+    result = spawnSync(env.dsh.bin, ['--profile', env.dsh.profile, '--json', '-'], {
+      cwd: prepared.cwd,
+      env: {
+        ...process.env,
+        DSH_HOME: prepared.home,
+        DEEPSEEK_API_KEY: key,
+        DSH_HIVE_RUNTIME_DISABLED: '1',
+      },
+      input: prompt,
+      stdio: ['pipe', fd, 'ignore'],
+      timeout: options.timeoutMs ?? env.dsh.timeoutMs,
+      killSignal: 'SIGKILL',
+    });
+  } finally {
+    try { closeSync(fd); } catch { /* ignore */ }
+  }
+  let stdout = '';
+  try { stdout = readFileSync(outputPath, 'utf8'); } catch { /* ignore */ }
+  try { rmSync(directory, { recursive: true, force: true }); } catch { /* ignore */ }
+  if (result.error || result.status !== 0 || !stdout) return null;
   let text = '';
   let finalText = '';
-  for (const line of result.stdout.split('\n')) {
+  for (const line of stdout.split('\n')) {
     if (!line.trim()) continue;
     try {
       const event = JSON.parse(line) as { type?: string; text?: string };

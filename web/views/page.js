@@ -87,7 +87,7 @@ export async function renderPage(ref) {
               ${page.creatorName ? `<span>创建者 ${esc(page.creatorName)}</span>` : ''}
               <span class="mono">${esc(page.slug)}</span>
             </div>
-            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a>${page.classKey !== 'source' ? `<button class="btn btn-sm" id="merge-page">${icon('layers', 14)} 合并重复</button>` : ''}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
+            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button><button class="btn btn-sm btn-ghost" id="block-edit">${icon('layers', 14)} 块编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a>${page.classKey !== 'source' ? `<button class="btn btn-sm" id="merge-page">${icon('layers', 14)} 合并重复</button>` : ''}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
           </header>
           ${page.supersededBy ? `<div class="callout small" style="margin:14px 0">此页已合并到 <a href="#/page/${encodeURIComponent(page.supersededBy)}">目标页面</a>；历史内容仍保留。</div>` : ''}
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
@@ -116,6 +116,7 @@ export async function renderPage(ref) {
 export async function mountPage(ref) {
   const detail = await api(`/api/pages/${encodeURIComponent(ref)}`);
   const page = detail.page;
+  setupPageEvents(page);
   const libraryDetail = await api(`/api/libraries/${encodeURIComponent(page.libraryId)}`).catch(() => null);
 
   document.getElementById('set-parent')?.addEventListener('click', async () => {
@@ -227,6 +228,36 @@ export async function mountPage(ref) {
     }
   });
 
+  document.getElementById('block-edit')?.addEventListener('click', async () => {
+    try {
+      const data = await api(`/api/pages/${encodeURIComponent(page.id)}/blocks`);
+      const blocks = data.blocks ?? [];
+      if (!blocks.length) { toast('此页还没有可编辑的块', 'info'); return; }
+      const options = blocks.map((block) => `<option value="${esc(block.id)}">${esc(block.heading)} · ${block.level ? `H${block.level}` : '开头'}</option>`).join('');
+      openModal({
+        title: '块级编辑',
+        body: `<p class="small muted">只修改选中的章节，未选中的内容保持原样。</p><div class="field" style="margin-top:10px"><label>选择块</label><select class="select" id="block-select">${options}</select></div><div class="field" style="margin-top:10px"><label>块内容</label><textarea class="textarea" id="block-markdown" rows="14">${esc(blocks[0].markdown)}</textarea></div>`,
+        footer: `<button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="save-block">保存块</button>`,
+        onMount: (modal) => {
+          const select = modal.querySelector('#block-select');
+          const area = modal.querySelector('#block-markdown');
+          select?.addEventListener('change', () => { const block = blocks.find((item) => item.id === select.value); if (block && area) area.value = block.markdown; });
+          modal.querySelector('#save-block')?.addEventListener('click', async () => {
+            const blockId = select?.value;
+            const markdown = area?.value.trim();
+            if (!blockId || !markdown) return;
+            try {
+              await api(`/api/pages/${encodeURIComponent(page.id)}/blocks/${encodeURIComponent(blockId)}`, { method: 'PATCH', body: JSON.stringify({ markdown }) });
+              closeModal();
+              toast('块已更新', 'success');
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            } catch (error) { toast(error.message, 'error'); }
+          });
+        },
+      });
+    } catch (error) { toast(error.message, 'error'); }
+  });
+
   document.getElementById('edit-page')?.addEventListener('click', () => {
     openPageEditor({ id: page.libraryId, name: detail.library.name, slug: detail.library.slug }, libraryDetail, page, detail.properties ?? []);
   });
@@ -331,4 +362,22 @@ export async function mountPage(ref) {
   } catch {
     /* 忽略图谱失败 */
   }
+}
+
+function setupPageEvents(page) {
+  window.__alexPageEvents?.close?.();
+  const pageEvents = new EventSource('/api/events');
+  pageEvents.addEventListener('page.updated', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.pageId !== page.id || data.actorId === state.me?.person?.id) return;
+      const noModal = !document.querySelector('.modal-backdrop');
+      toast(`《${data.title || page.title}》已被 ${data.actorName || '其他成员'} 更新`, 'info');
+      if (noModal) setTimeout(() => window.dispatchEvent(new HashChangeEvent('hashchange')), 700);
+    } catch {
+      /* 忽略格式异常事件 */
+    }
+  });
+  window.__alexPageEvents = pageEvents;
+  window.addEventListener('hashchange', () => pageEvents.close(), { once: true });
 }

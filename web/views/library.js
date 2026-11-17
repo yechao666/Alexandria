@@ -709,6 +709,7 @@ export function openPageEditor(library, detail, page = null, pageProperties = []
           tags: values.tags.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
           aliases: values.aliases.split(/[,，]/).map((item) => item.trim()).filter(Boolean),
           confidence: Number(values.confidence),
+          version: page?.version,
           properties,
         };
         try {

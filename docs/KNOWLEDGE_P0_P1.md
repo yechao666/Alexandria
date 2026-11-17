@@ -37,12 +37,21 @@
 - 块级引用：
   - Markdown 支持 `[[page#h-anchor]]`。
   - 解析到目标页后按 block 参数滚动到对应标题。
+- 块级编辑器：
+  - `GET /api/pages/:id/blocks`
+  - `PATCH /api/pages/:id/blocks/:blockId`
+  - 页面内“块编辑”弹窗只替换选中章节。
+- 实时同步：
+  - `GET /api/events` SSE。
+  - 页面更新/块更新后向同库在线客户端推送 `page.updated`。
+  - 页面打开时订阅；他人更新会提示并自动刷新。
+- 并发保护：页面编辑携带 version，过期版本返回 409。
 - 页面目录已使用标题锚点。
 
 ## 未完成
 
-- 实时多人协作编辑（CRDT/OT/WebSocket 协同）。
-- 块级编辑器（当前是 Markdown 页面编辑 + 标题级 block 引用）。
+- 多人同时编辑的 CRDT/OT 合并与多人光标。
+- SSE 目前是更新通知/自动刷新，不是字符级协同。
 
 ## 验证
 

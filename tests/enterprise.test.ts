@@ -423,3 +423,22 @@ test('MCP JSON-RPC 入口支持工具发现与检索', async () => {
   });
   assert.ok(Array.isArray(JSON.parse(called.result.content[0].text)));
 });
+
+test('块级编辑只替换目标章节', async () => {
+  const created = await j<{ page: { id: string } }>('/api/libraries/lib_eng/pages', admin.token, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '块编辑验收', body: '## 第一节\n旧内容\n\n## 第二节\n保持不变\n' }),
+  });
+  const pageId = created.page.id;
+  const blocks = await j<{ blocks: { id: string; heading: string }[] }>(`/api/pages/${pageId}/blocks`, admin.token);
+  const first = blocks.blocks.find((block) => block.heading === '第一节');
+  assert.ok(first);
+  await j(`/api/pages/${pageId}/blocks/${first.id}`, admin.token, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ markdown: '## 第一节\n新内容\n' }),
+  });
+  const detail = await j<{ page: { body: string } }>(`/api/pages/${pageId}`, admin.token);
+  assert.match(detail.page.body, /新内容/);
+  assert.match(detail.page.body, /保持不变/);
+  assert.doesNotMatch(detail.page.body, /旧内容/);
+});
