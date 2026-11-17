@@ -8,7 +8,6 @@ import {
   classBadge,
   statusBadge,
   confidence,
-  reviewBadge,
   avatar,
   toast,
   openModal,
@@ -77,7 +76,7 @@ export async function renderPage(ref) {
       <div class="article-layout">
         <article>
           <header class="article-head">
-            <div class="row wrap">${classBadge(page)}${statusBadge(page.status)}${reviewBadge(page.reviewStatus)}${page.tags?.slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('') ?? ''}</div>
+            <div class="row wrap">${classBadge(page)}${statusBadge(page.status)}${page.tags?.slice(0, 3).map((tag) => `<span class="tag">${esc(tag)}</span>`).join('') ?? ''}</div>
             <h1>${esc(page.title)}</h1>
             <div class="summary">${esc(page.summary)}</div>
             <div class="article-meta">
@@ -87,7 +86,7 @@ export async function renderPage(ref) {
               ${page.creatorName ? `<span>创建者 ${esc(page.creatorName)}</span>` : ''}
               <span class="mono">${esc(page.slug)}</span>
             </div>
-            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button><button class="btn btn-sm btn-ghost" id="block-edit">${icon('layers', 14)} 块编辑</button>${page.reviewStatus === 'approved' ? `<button class="btn btn-sm btn-ghost" id="review-reopen">${icon('refresh', 14)} 撤回校对</button>` : `<button class="btn btn-sm btn-clay" id="review-approve">${icon('check', 14)} 批准此页</button><button class="btn btn-sm" id="review-changes">${icon('edit', 14)} 要求修改</button>`}<a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a>${page.classKey !== 'source' ? `<button class="btn btn-sm" id="merge-page">${icon('layers', 14)} 合并重复</button>` : ''}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
+            ${detail.canEdit ? `<div class="btn-row" style="margin-top:16px"><button class="btn btn-sm" id="edit-page">${icon('edit', 14)} 编辑</button><button class="btn btn-sm btn-ghost" id="block-edit">${icon('layers', 14)} 块编辑</button><a class="btn btn-sm" href="/api/pages/${encodeURIComponent(page.id)}/markdown" target="_blank">${icon('file', 14)} 导出 MD</a>${page.classKey !== 'source' ? `<button class="btn btn-sm" id="merge-page">${icon('layers', 14)} 合并重复</button>` : ''}<button class="btn btn-sm btn-ghost btn-danger" id="delete-page">${icon('trash', 14)} 删除</button></div>` : ''}
           </header>
           ${page.supersededBy ? `<div class="callout small" style="margin:14px 0">此页已合并到 <a href="#/page/${encodeURIComponent(page.supersededBy)}">目标页面</a>；历史内容仍保留。</div>` : ''}
           <div class="article-body" id="article-body">${body || '<p class="muted">暂无正文。</p>'}</div>
@@ -95,7 +94,7 @@ export async function renderPage(ref) {
         <aside class="rail">
           ${hierarchyCard}
           ${accessCard}
-          <div class="rail-card"><div class="title">校对状态 <span>${reviewBadge(page.reviewStatus)}</span></div><div class="small muted">${page.reviewedAt ? `最近审核：${timeAgo(page.reviewedAt)}${page.reviewerName ? ` · ${esc(page.reviewerName)}` : ''}` : '尚未经过人工校对'}</div>${page.reviewNote ? `<div class="review-note">${esc(page.reviewNote)}</div>` : ''}</div>
+          
           ${toc ? `<div class="rail-card"><div class="title">本页目录</div><div class="toc">${toc}</div></div>` : ''}
           <div class="rail-card"><div class="title">来源 <span>${sourcesAttached.length}</span></div><div class="rail-list">${sources || '<div class="rail-empty">该页尚未关联文献</div>'}</div></div>
           ${propertyRows ? `<div class="rail-card"><div class="title">本体属性</div><div class="property-list">${propertyRows}</div></div>` : ''}
@@ -271,21 +270,6 @@ export async function mountPage(ref) {
       toast(error.message, 'error');
     }
   });
-  const review = async (action, note = '') => {
-    try {
-      await api(`/api/pages/${encodeURIComponent(page.id)}/review`, { method: 'POST', body: { action, note } });
-      toast(action === 'approve' ? '已批准' : action === 'request_changes' ? '已退回修改' : '已撤回校对', 'success');
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-    } catch (error) {
-      toast(error.message, 'error');
-    }
-  };
-  document.getElementById('review-approve')?.addEventListener('click', () => review('approve'));
-  document.getElementById('review-changes')?.addEventListener('click', () => {
-    const note = prompt('说明需要修改什么（必填）：');
-    if (note?.trim()) review('request_changes', note.trim());
-  });
-  document.getElementById('review-reopen')?.addEventListener('click', () => review('reopen'));
   document.querySelectorAll('[data-claim-resolution]').forEach((button) => {
     button.addEventListener('click', async () => {
       try {
@@ -310,7 +294,7 @@ export async function mountPage(ref) {
           const canResolve = detail.canEdit || comment.authorId === state.me?.person?.id;
           return `<div class="comment-item ${comment.status === 'resolved' ? 'resolved' : ''}"><div class="comment-head">${avatar({ name: comment.authorName, avatarColor: comment.authorColor }, 'sm')}<b>${esc(comment.authorName)}</b><span>${timeAgo(comment.createdAt)}</span>${comment.status === 'resolved' ? '<span class="badge jade">已解决</span>' : ''}</div><div class="comment-body">${esc(comment.body)}</div>${canResolve && comment.status !== 'resolved' ? `<div class="comment-actions"><button class="btn btn-sm btn-ghost" data-resolve-comment="${esc(comment.id)}">标为解决</button></div>` : ''}</div>`;
         }).join('')
-      : '<div class="rail-empty">还没有评论；校对意见可以留在这里。</div>';
+      : '<div class="rail-empty">还没有评论；讨论可以留在这里。</div>';
     commentsList.querySelectorAll('[data-resolve-comment]').forEach((button) => {
       button.addEventListener('click', async () => {
         try {

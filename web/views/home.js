@@ -39,7 +39,7 @@ export async function renderHome() {
       <div class="lib-card-stats">
         <span><b>${fmtNumber(library.counts?.sources)}</b><i>文档</i></span>
         <span><b>${fmtNumber(library.counts?.pages)}</b><i>知识页</i></span>
-        <span><b class="${Number(library.counts?.reviewPending) ? 'text-amber' : ''}">${fmtNumber(library.counts?.reviewPending ?? 0)}</b><i>待校对</i></span>
+        <span><b>${fmtNumber(library.counts?.links ?? 0)}</b><i>关联</i></span>
       </div>
       <div class="kb-card-foot"><span>${(library.nodes ?? []).length} 个目录 · ${fmtNumber(library.counts?.links)} 条关联</span><span>进入知识库 ${icon('arrow', 12)}</span></div>
     </a>`;
@@ -55,7 +55,7 @@ export async function renderHome() {
       <div><b>${fmtNumber(libraries.length)}</b><span>知识库</span></div>
       <div><b>${fmtNumber(stats.sources)}</b><span>文档</span></div>
       <div><b>${fmtNumber(stats.pages)}</b><span>知识页</span></div>
-      <div><b>${fmtNumber(stats.reviewPending ?? 0)}</b><span>待校对</span></div>
+      <div><b>${fmtNumber(stats.links ?? 0)}</b><span>关联</span></div>
       <div><b>${fmtNumber(stats.conflicts ?? 0)}</b><span>矛盾</span></div>
     </section>
 

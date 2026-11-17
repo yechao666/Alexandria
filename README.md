@@ -4,7 +4,7 @@
 >
 > 基于 **LLM Wiki / Dynamic Knowledge Repository** 理念、**本体论** 与 **团队权限** 的企业知识库。纯 Node 26 + SQLite；语义编译/检索/合成默认调用**本机 DSH**，不可用时自动回退规则与本地检索。
 
-![浅色文档工作台](docs/screenshots/41-light-documents.png)
+![Wiki 知识工作台](docs/screenshots/48-knowledge-workspace.png)
 
 ## 这是什么
 
@@ -51,7 +51,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 
 ![登录](docs/screenshots/43-light-login.png)
 
-![浅色文档工作台](docs/screenshots/41-light-documents.png)
+![Wiki 知识工作台](docs/screenshots/48-knowledge-workspace.png)
 
 ![知识库视图](docs/screenshots/42-light-libraries.png)
 
@@ -79,6 +79,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | --- | --- |
 | **分库** | 每个知识库独立的本体、目录树、权限、检索范围 |
 | **文档主线** | 浅色网盘式工作台：部门/知识库/目录树、文件列表、右侧检查器；先管理文件，再看关联知识 |
+| **Wiki 知识** | 页面、类型、标签、双向链接、局部图谱；开发版隐藏校对 |
 | **电力行业资料** | 已导入 206 篇中国能源新闻网公开资料；含 617 个实体、15 个决策、57 个矛盾对象 |
 | **电力行业标准** | 已导入 510 条 DL/T、NB/T 标准条目与适用范围；覆盖 9 个分类 |
 | **Agent 互操作** | POST /mcp（JSON-RPC）：search/read/graph/write_page/lint；Markdown + git 导出 |
@@ -278,6 +279,7 @@ cd ../alexandria && node server/src/main.ts
 - [文档与知识信息架构](docs/DOCUMENTS.md)：文档中心、文档详情、来源链路与知识片段筛选。
 - [电力行业资料导入记录](docs/POWER_CORPUS.md)：206 篇公开资料的来源、分类与导入方式。
 - [电力行业标准库导入记录](docs/POWER_STANDARDS.md)：510 条标准的来源、分类、全文说明与脚本。
+- [Wiki 知识工作台](docs/WIKI_UI.md)：类型导航、双向链接、局部图谱与开发版校对策略。
 - [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
 - **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。

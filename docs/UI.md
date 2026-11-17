@@ -70,6 +70,7 @@ Alexandria 的 Web 控制台对齐同工作区的 **AIWO / Mnemos / Hive / Haos*
 
 - [登录](screenshots/43-light-login.png)
 - [浅色文档工作台](screenshots/41-light-documents.png)
+- [Wiki 知识工作台](screenshots/48-knowledge-workspace.png)
 - [知识库视图](screenshots/42-light-libraries.png)
 - [知识库文件页](screenshots/34-library-docs-enterprise.png)
 - [文件与关联知识](screenshots/35-drive-selected-enterprise.png)

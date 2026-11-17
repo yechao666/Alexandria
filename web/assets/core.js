@@ -233,9 +233,9 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
   const existingShell = document.querySelector('.app-shell');
   const navActive = {
     documents: ['documents', 'home', 'source'].includes(active),
-    libraries: active === 'libraries' || active === 'page' || String(active).startsWith('library:'),
+    knowledge: active === 'knowledge' || active === 'page' || active === 'graph',
+    libraries: active === 'libraries' || String(active).startsWith('library:'),
     search: active === 'search',
-    review: active === 'review',
     admin: active === 'admin',
   };
   if (!existingShell) {
@@ -248,9 +248,9 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
         </a>
         <nav class="app-nav" aria-label="主导航">
           <a class="app-nav-link ${['documents', 'home', 'source'].includes(active) ? 'active' : ''}" href="#/" data-nav="documents">${icon('folder', 15)}<span>文档</span></a>
-          <a class="app-nav-link ${active === 'libraries' || active === 'page' || String(active).startsWith('library:') ? 'active' : ''}" href="#/libraries" data-nav="libraries">${icon('layers', 15)}<span>知识库</span></a>
+          <a class="app-nav-link ${active === 'knowledge' || active === 'page' || active === 'graph' ? 'active' : ''}" href="#/knowledge" data-nav="knowledge">${icon('graph', 15)}<span>知识</span></a>
+          <a class="app-nav-link ${active === 'libraries' || String(active).startsWith('library:') ? 'active' : ''}" href="#/libraries" data-nav="libraries">${icon('layers', 15)}<span>资料库</span></a>
           <a class="app-nav-link ${active === 'search' ? 'active' : ''}" href="#/search" data-nav="search">${icon('search', 15)}<span>搜索</span></a>
-          <a class="app-nav-link ${active === 'review' ? 'active' : ''}" href="#/review" data-nav="review">${icon('check', 15)}<span>校对</span><span class="nav-count" id="nav-review-count">${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? state.bootstrap.stats.reviewPending : ''}</span></a>
           ${state.me?.person?.isAdmin ? `<a class="app-nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin" data-nav="admin">${icon('settings', 15)}<span>管理</span></a>` : ''}
         </nav>
         <form class="topbar-search" id="top-search">

@@ -11,6 +11,7 @@ import {
   parseHash,
 } from './assets/core.js';
 import { renderHome, mountHome } from './views/home.js';
+import { renderKnowledge, mountKnowledge } from './views/knowledge.js';
 import { renderDocuments, mountDocuments, renderSource, mountSource } from './views/documents.js';
 import { renderLibrary, mountLibrary } from './views/library.js';
 import { renderPage, mountPage } from './views/page.js';
@@ -185,6 +186,19 @@ async function route() {
       if (seq !== routeSeq) return;
       const block = query.get('block');
       location.replace(`#/page/${encodeURIComponent(result.page.id)}${block ? `?block=${encodeURIComponent(block)}` : ''}`);
+      return;
+    }
+    if (parts[0] === 'review') {
+      location.replace('#/knowledge');
+      return;
+    }
+    if (parts[0] === 'knowledge') {
+      setContent(loading('正在读取知识页面…'));
+      const html = await renderKnowledge(query);
+      if (seq !== routeSeq) return;
+      renderShell({ content: html, breadcrumb: [{ label: '知识', href: '#/knowledge' }], active: 'knowledge' });
+      mountKnowledge(query);
+      document.title = '知识工作台 · Alexandria';
       return;
     }
     if (parts[0] === 'libraries') {
