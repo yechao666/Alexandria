@@ -230,6 +230,15 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
         : `<span class="current">${escapeHtml(item.label)}</span>`,
     )
     .join('');
+  const existingShell = document.querySelector('.app-shell');
+  const navActive = {
+    documents: ['documents', 'home', 'source'].includes(active),
+    libraries: active === 'libraries' || active === 'page' || String(active).startsWith('library:'),
+    search: active === 'search',
+    review: active === 'review',
+    admin: active === 'admin',
+  };
+  if (!existingShell) {
   document.getElementById('app').innerHTML = `
     <div class="app-shell">
       <header class="app-header">
@@ -238,11 +247,11 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
           <span class="brand-copy"><b>ALEXANDRIA</b><small>企业文档知识库</small></span>
         </a>
         <nav class="app-nav" aria-label="主导航">
-          <a class="app-nav-link ${['documents', 'home', 'source'].includes(active) ? 'active' : ''}" href="#/">${icon('folder', 15)}<span>文档</span></a>
-          <a class="app-nav-link ${active === 'libraries' || active === 'page' || String(active).startsWith('library:') ? 'active' : ''}" href="#/libraries">${icon('layers', 15)}<span>知识库</span></a>
-          <a class="app-nav-link ${active === 'search' ? 'active' : ''}" href="#/search">${icon('search', 15)}<span>搜索</span></a>
-          <a class="app-nav-link ${active === 'review' ? 'active' : ''}" href="#/review">${icon('check', 15)}<span>校对</span>${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? `<span class="nav-count">${state.bootstrap.stats.reviewPending}</span>` : ''}</a>
-          ${state.me?.person?.isAdmin ? `<a class="app-nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin">${icon('settings', 15)}<span>管理</span></a>` : ''}
+          <a class="app-nav-link ${['documents', 'home', 'source'].includes(active) ? 'active' : ''}" href="#/" data-nav="documents">${icon('folder', 15)}<span>文档</span></a>
+          <a class="app-nav-link ${active === 'libraries' || active === 'page' || String(active).startsWith('library:') ? 'active' : ''}" href="#/libraries" data-nav="libraries">${icon('layers', 15)}<span>知识库</span></a>
+          <a class="app-nav-link ${active === 'search' ? 'active' : ''}" href="#/search" data-nav="search">${icon('search', 15)}<span>搜索</span></a>
+          <a class="app-nav-link ${active === 'review' ? 'active' : ''}" href="#/review" data-nav="review">${icon('check', 15)}<span>校对</span><span class="nav-count" id="nav-review-count">${Number(state.bootstrap?.stats?.reviewPending ?? 0) > 0 ? state.bootstrap.stats.reviewPending : ''}</span></a>
+          ${state.me?.person?.isAdmin ? `<a class="app-nav-link ${active === 'admin' ? 'active' : ''}" href="#/admin" data-nav="admin">${icon('settings', 15)}<span>管理</span></a>` : ''}
         </nav>
         <form class="topbar-search" id="top-search">
           ${icon('search', 16)}
@@ -260,6 +269,24 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
       <div class="app-subbar"><div class="breadcrumb">${crumbs}</div><div class="subbar-meta">企业知识空间 · 组织级权限</div></div>
       <main class="content" id="content">${content ?? ''}</main>
     </div>`;
+  }
+  const root = document.querySelector('.app-shell');
+  if (root && existingShell) {
+    const contentEl = root.querySelector('#content');
+    if (contentEl) contentEl.innerHTML = content ?? '';
+    const crumbEl = root.querySelector('.breadcrumb');
+    if (crumbEl) crumbEl.innerHTML = crumbs;
+  }
+  if (root) {
+    root.querySelectorAll('[data-nav]').forEach((link) => link.classList.toggle('active', Boolean(navActive[link.dataset.nav])));
+    const count = root.querySelector('#nav-review-count');
+    if (count) {
+      const pending = Number(state.bootstrap?.stats?.reviewPending ?? 0);
+      count.textContent = pending > 0 ? String(pending) : '';
+      count.style.display = pending > 0 ? '' : 'none';
+    }
+  }
+  if (!existingShell) {
   document.getElementById('security-btn')?.addEventListener('click', async () => {
     const openSecurity = async () => {
       try {
@@ -346,6 +373,7 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
     if (q) go(`#/search?q=${encodeURIComponent(q)}`);
   });
   document.querySelectorAll('.sidebar .nav-link').forEach((link) => link.addEventListener('click', () => document.body.classList.remove('nav-open')));
+  }
 }
 
 export function textField({ label, name, value = '', placeholder = '', type = 'text', span = false }) {
