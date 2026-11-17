@@ -255,7 +255,7 @@ function bindDrive(library, detail) {
     try {
       const data = await api(`/api/sources/${encodeURIComponent(card.dataset.fileId)}`);
       const source = data.source;
-      const pages = source.compiledPages ?? [];
+      const pages = (source.compiledPages ?? []).filter((page, index, all) => all.findIndex((item) => item.title === page.title) === index);
       const pageRows = pages.slice(0, 8).map((page) => `<a class="inspector-page" href="#/page/${encodeURIComponent(page.id)}"><span class="dot" style="background:${libraryColor(page.classColor)}"></span><span>${esc(page.title)}</span></a>`).join('');
       inspector.innerHTML = `<div class="inspector-head"><span class="file-kind">${icon(source.kind === 'image' ? 'image' : 'file', 18)}<b>${esc(fileKind(source))}</b></span><div><b>${esc(source.title)}</b><span>${esc(source.filename)}</span></div></div>
         <div class="inspector-section"><div class="inspector-label">文件</div><dl class="inspector-kv"><dt>目录</dt><dd>${esc(source.node?.name ?? '未分类')}</dd><dt>大小</dt><dd>${fmtBytes(source.size)}</dd><dt>字数</dt><dd>${fmtNumber(source.wordCount)}</dd><dt>上传</dt><dd>${timeAgo(source.createdAt)}</dd></dl></div>

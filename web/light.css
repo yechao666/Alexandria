@@ -334,3 +334,4 @@ h1, h2, h3, h4 { color: var(--ink); font-family: var(--sans); }
 .tree-children[hidden] { display: none; }
 .tree-toggle.collapsed .icon { transform: rotate(-90deg); }
 .tree-toggle .icon { transition: transform .15s; color:#94a3b8; }
+.inspector-head .file-kind b { display: none; }

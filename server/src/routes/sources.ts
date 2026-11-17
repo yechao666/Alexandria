@@ -178,6 +178,7 @@ export function registerSourceRoutes(router: Router): void {
       title: title || undefined,
       nodeId,
       actor,
+      dsh: rc.header('x-compile') === 'rule' ? false : undefined,
     });
     rc.json(
       {
