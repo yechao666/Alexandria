@@ -1374,3 +1374,9 @@ h1, h2, h3, h4, .section-head h2, .library-title-row h1, .article-head h1, .page
 .sheet-preview table { border-collapse:collapse; font-size:11px; background:#fff; }
 .sheet-preview td, .sheet-preview th { border:1px solid #cbd5e1; padding:3px 6px; white-space:nowrap; }
 .sheet-preview tr:nth-child(even) td { background:#f8fafc; }
+/* Document-first global workspace */
+.drive-dept { padding:10px 8px 3px; color:var(--faint); font-size:9px; letter-spacing:.08em; text-transform:uppercase; }
+.drive-toolbar .doc-search { flex:1; display:flex; gap:5px; min-width:180px; }
+.drive-toolbar .doc-search .input { width:100%; }
+.drive-toolbar .select { width:auto; min-width:110px; }
+.drive-folders .drive-folder .count { font-variant-numeric:tabular-nums; }

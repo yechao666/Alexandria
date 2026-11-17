@@ -63,48 +63,81 @@ export async function renderDocuments(query = new URLSearchParams()) {
   const data = await api(`/api/sources?${params.toString()}`).catch(() => ({ sources: [], summary: {}, facets: {} }));
   const sources = data.sources ?? [];
   const summary = data.summary ?? {};
-  const libraries = data.facets?.libraries ?? [];
   const selectedLibrary = params.get('library') ?? '';
   const selectedStatus = params.get('status') ?? '';
   const q = params.get('q') ?? '';
+  const view = params.get('view') === 'list' ? 'list' : 'grid';
+  const libraries = state.libraries ?? [];
+  const departments = new Map();
+  for (const library of libraries) {
+    const name = library.ownerTeamName || '未绑定部门';
+    if (!departments.has(name)) departments.set(name, []);
+    departments.get(name).push(library);
+  }
+  const folderRows = `<button class="drive-folder ${!selectedLibrary ? 'active' : ''}" data-doc-library="">${icon('folder', 14)}<span>全部文档</span><span class="count">${fmtNumber(summary.total)}</span></button>${[...departments.entries()].map(([department, items]) => `<div class="drive-dept">${esc(department)}</div>${items.map((library) => `<button class="drive-folder ${selectedLibrary === library.id ? 'active' : ''}" data-doc-library="${esc(library.id)}">${icon('folder', 14)}<span>${esc(library.name)}</span><span class="count">${fmtNumber(library.counts?.sources)}</span></button>`).join('')}`).join('')}`;
+  const current = libraries.find((library) => library.id === selectedLibrary);
+  const cards = sources.map((source) => `<div class="file-card ${view === 'list' ? 'file-row' : ''}" data-file-id="${esc(source.id)}" data-search="${esc(`${source.title} ${source.filename} ${source.libraryName} ${source.departmentName}`.toLowerCase())}" tabindex="0">
+    <span class="file-kind ${source.kind === 'image' ? 'image' : ''}">${icon(source.kind === 'image' ? 'image' : 'file', 20)}<b>${esc(kindLabel(source))}</b></span>
+    <div class="file-main"><div class="file-name">${esc(source.title)}</div><div class="file-meta">${esc(source.departmentName && source.departmentName !== source.libraryName ? `${source.departmentName} · ${source.libraryName}` : (source.libraryName || source.departmentName || '未归档'))} · ${fmtNumber(source.wordCount)} 字 · ${timeAgo(source.createdAt)}</div></div>
+    <div class="file-links"><b>${fmtNumber(source.compiledPages)}</b><span>知识点</span></div>
+    ${statusPill(source.status)}
+    <span class="file-chevron">${icon('chevron', 14)}</span>
+  </div>`).join('');
 
-  const rows = sources.map((source) => `<tr class="doc-row" data-href="#/source/${encodeURIComponent(source.id)}" tabindex="0">
-    <td><div class="doc-title-cell"><span class="doc-icon">${icon(source.kind === 'image' ? 'image' : 'file', 17)}</span><div><b>${esc(source.title)}</b><span>${esc(source.filename)} · ${kindLabel(source)} · ${fmtBytes(source.size)}</span></div></div></td>
-    <td><div class="doc-dept"><b>${esc(source.departmentName || '未绑定部门')}</b><span>${esc(source.libraryName)}</span></div></td>
-    <td><span class="badge outline">${kindLabel(source)}</span></td>
-    <td class="num-cell"><a class="doc-pages-link" href="#/library/${encodeURIComponent(source.librarySlug)}?tab=pages">${fmtNumber(source.compiledPages)} 页知识</a></td>
-    <td>${statusPill(source.status)}</td>
-    <td class="small faint">${esc(source.uploadedByName || '—')}<br>${timeAgo(source.createdAt)}</td>
-    <td><span class="icon-btn">${icon('chevron', 14)}</span></td>
-  </tr>`).join('');
-
-  return `
-    <section class="page-head">
-      <div><div class="eyebrow">DOCUMENT REGISTRY · DEPARTMENTS · PROVENANCE</div><h1>文档中心</h1><p>按部门与知识库管理原始资料；每份文档保留原文、处理状态、编译出的知识页与来源链路。</p></div>
-      <div class="page-actions"><a class="btn btn-primary" href="#/upload">${icon('upload', 14)} 导入文档</a></div>
-    </section>
-
-    <section class="kpi-grid kpi-grid-4">
-      <div class="kpi-card kpi-violet"><div><div class="label">文档总数</div><div class="value">${fmtNumber(summary.total)}</div><div class="hint">可见范围内的原始资料</div></div><span class="kpi-icon">${icon('file', 18)}</span></div>
-      <div class="kpi-card kpi-green"><div><div class="label">已编译</div><div class="value">${fmtNumber(summary.ready)}</div><div class="hint">已产生知识页</div></div><span class="kpi-icon">${icon('check', 18)}</span></div>
-      <div class="kpi-card kpi-amber"><div><div class="label">处理中</div><div class="value">${fmtNumber(summary.processing)}</div><div class="hint">解析 / 编译队列</div></div><span class="kpi-icon">${icon('clock', 18)}</span></div>
-      <div class="kpi-card kpi-red"><div><div class="label">失败 / 空编译</div><div class="value">${fmtNumber((summary.failed ?? 0) + (summary.withoutKnowledge ?? 0))}</div><div class="hint">${fmtNumber(summary.failed)} 失败 · ${fmtNumber(summary.withoutKnowledge)} 无知识页</div></div><span class="kpi-icon">${icon('shield', 18)}</span></div>
-    </section>
-
-    <div class="panel doc-panel">
-      <div class="doc-toolbar">
-        <form class="doc-search" id="doc-search"><input class="input" name="q" value="${esc(q)}" placeholder="搜索文档标题、文件名、摘要…" aria-label="搜索文档"><button class="btn btn-sm" type="submit">${icon('search', 13)} 搜索</button></form>
-        <select class="select" id="doc-library"><option value="">全部部门 / 知识库</option>${libraries.map((library) => `<option value="${esc(library.id)}" ${selectedLibrary === library.id ? 'selected' : ''}>${esc(library.name)} · ${library.count}</option>`).join('')}</select>
+  return `<section class="page-head">
+    <div><div class="eyebrow">DOCUMENTS FIRST · KNOWLEDGE ATTACHED</div><h1>文档</h1><p>先管理熟悉的文件，再查看文件编译出的知识。按部门与知识库归档，原文、状态、来源与知识点都在同一处。</p></div>
+    <div class="page-actions"><a class="btn" href="#/libraries">${icon('layers', 14)} 知识库视图</a><a class="btn btn-primary" href="#/upload">${icon('upload', 14)} 导入文档</a></div>
+  </section>
+  <div class="drive-layout">
+    <aside class="drive-folders">
+      <div class="drive-folders-head"><span>部门 / 知识库</span><span>${sources.length}</span></div>
+      ${folderRows}
+    </aside>
+    <section class="drive-main">
+      <div class="drive-toolbar">
+        <div class="drive-breadcrumb"><span>文档</span><span>/</span><b>${esc(current?.name ?? '全部文档')}</b></div>
+        <form class="doc-search" id="doc-search"><input class="input" name="q" value="${esc(q)}" placeholder="搜索文档、文件名、部门…" aria-label="搜索文档"><button class="btn btn-sm" type="submit">${icon('search', 13)}</button></form>
         <select class="select" id="doc-status"><option value="">全部状态</option>${['ready', 'processing', 'failed'].map((status) => `<option value="${status}" ${selectedStatus === status ? 'selected' : ''}>${STATUS_LABEL[status]}</option>`).join('')}</select>
-        <span class="small faint" style="margin-left:auto">${sources.length} 份文档</span>
+        <div class="drive-view-toggle"><button class="${view === 'grid' ? 'active' : ''}" data-doc-view="grid" title="网格">${icon('layers', 14)}</button><button class="${view === 'list' ? 'active' : ''}" data-doc-view="list" title="列表">${icon('menu', 14)}</button></div>
       </div>
-      <div style="overflow:auto">
-        <table class="data-table doc-table">
-          <thead><tr><th>文档</th><th>部门 / 知识库</th><th>类型</th><th>编译知识</th><th>状态</th><th>上传者</th><th></th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7">${emptyState('还没有文档', '导入第一份资料，系统会保留原文并编译出知识页。', '<a class="btn btn-primary" href="#/upload">导入文档</a>')}</td></tr>`}</tbody>
-        </table>
-      </div>
-    </div>`;
+      <div class="drive-summary"><span><b>${fmtNumber(summary.total)}</b> 文档</span><span><b>${fmtNumber(summary.ready)}</b> 已编译</span><span><b>${fmtNumber(summary.processing)}</b> 处理中</span><span><b>${fmtNumber(summary.failed)}</b> 失败</span><span><b>${fmtNumber(summary.withoutKnowledge)}</b> 无知识点</span></div>
+      <div class="file-grid ${view === 'list' ? 'view-list' : ''}" id="file-grid">${cards || emptyState('还没有文档', '导入第一份资料，系统会保留原文并编译出知识点。', '<a class="btn btn-primary" href="#/upload">导入文档</a>')}</div>
+    </section>
+    <aside class="file-inspector" id="file-inspector"><div class="inspector-empty">${icon('file', 24)}<b>选择一个文件</b><span>查看文件信息、原文预览和它关联的知识点。</span></div></aside>
+  </div>`;
+}
+
+function bindFileInspector() {
+  const grid = document.getElementById('file-grid');
+  if (!grid) return;
+  const select = async (card) => {
+    grid.querySelectorAll('.file-card').forEach((item) => item.classList.toggle('selected', item === card));
+    const inspector = document.getElementById('file-inspector');
+    if (!inspector) return;
+    inspector.innerHTML = `<div class="inspector-empty">${icon('clock', 20)}<b>正在读取文件…</b></div>`;
+    try {
+      const data = await api(`/api/sources/${encodeURIComponent(card.dataset.fileId)}`);
+      const source = data.source;
+      const pages = source.compiledPages ?? [];
+      const pageRows = pages.slice(0, 8).map((page) => `<a class="inspector-page" href="#/page/${encodeURIComponent(page.id)}"><span class="dot" style="background:${libraryColor(page.classColor)}"></span><span>${esc(page.title)}</span></a>`).join('');
+      inspector.innerHTML = `<div class="inspector-head"><span class="file-kind">${icon(source.kind === 'image' ? 'image' : 'file', 18)}<b>${esc(kindLabel(source))}</b></span><div><b>${esc(source.title)}</b><span>${esc(source.filename)}</span></div></div>
+        <div class="inspector-section"><div class="inspector-label">文件</div><dl class="inspector-kv"><dt>部门</dt><dd>${esc(source.library?.name ?? '—')}</dd><dt>目录</dt><dd>${esc(source.node?.name ?? '未分类')}</dd><dt>大小</dt><dd>${fmtBytes(source.size)}</dd><dt>上传</dt><dd>${timeAgo(source.createdAt)}</dd></dl></div>
+        <div class="inspector-section"><div class="inspector-label">关联知识点 · ${pages.length}</div><div class="inspector-pages">${pageRows || '<span class="faint small">尚未编译出知识点</span>'}</div>${pages.length > 8 ? `<a class="link small" href="#/library/${encodeURIComponent(source.library?.slug ?? '')}?tab=pages">查看全部 ${pages.length} 个 →</a>` : ''}</div>
+        <div class="inspector-section"><div class="inspector-label">操作</div><div class="inspector-actions"><button class="btn btn-sm btn-primary" data-file-preview>${icon('eye', 12)} 预览</button><button class="btn btn-sm" data-file-open>${icon('external', 12)} 文档详情</button><a class="btn btn-sm btn-ghost" href="/api/sources/${encodeURIComponent(source.id)}/download" target="_blank">${icon('file', 12)} 下载</a></div></div>`;
+      inspector.querySelector('[data-file-preview]')?.addEventListener('click', () => openFilePreview(source));
+      inspector.querySelector('[data-file-open]')?.addEventListener('click', () => go(`#/source/${encodeURIComponent(source.id)}`));
+    } catch (error) {
+      inspector.innerHTML = `<div class="inspector-empty">${icon('x', 18)}<b>读取失败</b><span>${esc(error.message)}</span></div>`;
+    }
+  };
+  grid.addEventListener('click', (event) => {
+    const card = event.target.closest('.file-card');
+    if (card && grid.contains(card)) select(card);
+  });
+  grid.addEventListener('keydown', (event) => {
+    const card = event.target.closest('.file-card');
+    if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); select(card); }
+  });
 }
 
 export function mountDocuments() {
@@ -113,23 +146,26 @@ export function mountDocuments() {
     for (const [key, value] of Object.entries(updates)) {
       if (value) params.set(key, value); else params.delete(key);
     }
-    go(`#/documents${params.toString() ? `?${params.toString()}` : ''}`);
+    const base = location.hash.startsWith('#/documents') ? '#/documents' : '#/';
+    go(`${base}${params.toString() ? `?${params.toString()}` : ''}`);
   };
   document.getElementById('doc-search')?.addEventListener('submit', (event) => {
     event.preventDefault();
     navigate({ q: new FormData(event.currentTarget).get('q') ?? '' });
   });
-  document.getElementById('doc-library')?.addEventListener('change', (event) => navigate({ library: event.currentTarget.value }));
   document.getElementById('doc-status')?.addEventListener('change', (event) => navigate({ status: event.currentTarget.value }));
-  document.querySelectorAll('.doc-row').forEach((row) => {
-    row.addEventListener('click', (event) => {
-      if (event.target.closest('a')) return;
-      go(row.dataset.href);
+  document.querySelectorAll('[data-doc-library]').forEach((button) => button.addEventListener('click', () => navigate({ library: button.dataset.docLibrary })));
+  document.querySelectorAll('[data-doc-view]').forEach((button) => button.addEventListener('click', () => navigate({ view: button.dataset.docView })));
+  const input = document.querySelector('#doc-search input');
+  if (input) {
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      document.querySelectorAll('#file-grid .file-card').forEach((card) => {
+        card.style.display = (card.dataset.search ?? card.textContent.toLowerCase()).includes(q) ? '' : 'none';
+      });
     });
-    row.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); go(row.dataset.href); }
-    });
-  });
+  }
+  bindFileInspector();
 }
 
 export async function renderSource(ref) {

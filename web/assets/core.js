@@ -243,8 +243,11 @@ export function renderShell({ content, breadcrumb = [], active = '' }) {
           <span class="ws-chevron">${icon('chevron', 12) || '▾'}</span>
         </div>
         <div class="side-section">
+          <a class="nav-link ${active === 'documents' ? 'active' : ''}" href="#/">${icon('file')}<span>文档</span></a>
+        </div>
+        <div class="side-section">
           <div class="side-label">知识库</div>
-          <a class="nav-link ${active === 'home' ? 'active' : ''}" href="#/">${icon('layers')}<span>全部知识库</span></a>
+          <a class="nav-link ${active === 'libraries' ? 'active' : ''}" href="#/libraries">${icon('layers')}<span>全部知识库</span></a>
           ${libraries || '<div class="side-label" style="padding-top:4px">暂无可见知识库</div>'}
         </div>
         <div class="side-section">
