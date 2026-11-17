@@ -149,6 +149,7 @@ export function runDshSync(env: Env, prompt: string, options: { timeoutMs?: numb
     input: prompt,
     encoding: 'utf8',
     timeout: options.timeoutMs ?? env.dsh.timeoutMs,
+    killSignal: 'SIGKILL',
     maxBuffer: 32 * 1024 * 1024,
   });
   if (result.status !== 0 || !result.stdout) return null;

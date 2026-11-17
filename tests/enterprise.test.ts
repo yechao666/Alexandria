@@ -408,3 +408,18 @@ test('文档中心跨知识库列出文档并可编辑归档信息', async () =>
   });
   assert.equal(moved.source.node?.name, target.name);
 });
+
+test('MCP JSON-RPC 入口支持工具发现与检索', async () => {
+  const init = await j<{ result: { protocolVersion: string } }>('/mcp', admin.token, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+  });
+  assert.equal(init.result.protocolVersion, '2024-11-05');
+  const tools = await j<{ result: { tools: { name: string }[] } }>('/mcp', admin.token, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+  });
+  assert.ok(tools.result.tools.some((tool) => tool.name === 'search'));
+  const called = await j<{ result: { content: { text: string }[] } }>('/mcp', admin.token, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search', arguments: { query: '知识', limit: 3 } } }),
+  });
+  assert.ok(Array.isArray(JSON.parse(called.result.content[0].text)));
+});

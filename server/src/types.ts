@@ -59,6 +59,9 @@ export interface PageRow {
   read_when: string;
   owner_person_id: string | null;
   superseded_by: string | null;
+  effective_date: string | null;
+  expires_at: string | null;
+  superseded_at: string | null;
   metadata: string;
   version: number;
   created_by: string | null;

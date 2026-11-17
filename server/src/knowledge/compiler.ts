@@ -128,6 +128,19 @@ function collectCandidates(extracted: ExtractResult): Candidate[] {
   return [...byTitle.values()].sort((a, b) => b.score - a.score);
 }
 
+function entityNameSimilar(left: string, right: string): boolean {
+  const a = normalizeTitle(left).replace(/[有限公司集团股份]/g, '');
+  const b = normalizeTitle(right).replace(/[有限公司集团股份]/g, '');
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a)) && Math.abs(a.length - b.length) <= 8) return true;
+  const bigrams = (value: string) => new Set(Array.from({ length: Math.max(0, value.length - 1) }, (_, index) => value.slice(index, index + 2)));
+  const one = bigrams(a); const two = bigrams(b);
+  if (!one.size || !two.size) return false;
+  let overlap = 0; for (const item of one) if (two.has(item)) overlap += 1;
+  return (2 * overlap) / (one.size + two.size) >= 0.86;
+}
+
 function findExisting(db: Db, libraryId: string, title: string): PageRow | null {
   const normalized = normalizeTitle(title);
   if (!normalized) return null;
@@ -140,7 +153,7 @@ function findExisting(db: Db, libraryId: string, title: string): PageRow | null 
     if (normalizeTitle(page.title) === normalized) return page;
     if (parseJson<string[]>(page.aliases, []).some((alias) => normalizeTitle(alias) === normalized)) return page;
   }
-  return null;
+  return pages.find((page) => page.class_key !== 'source' && page.status !== 'archived' && entityNameSimilar(page.title, title)) ?? null;
 }
 
 function sourceBody(source: SourceRow, extracted: ExtractResult, conceptLinks: string[], claims: ExtractedClaim[]): string {
@@ -206,6 +219,38 @@ function sourcePageFor(db: Db, sourceId: string): PageRow | null {
     )
     .get(sourceId) as unknown as PageRow | undefined;
   return row ?? null;
+}
+
+function ruleEntities(text: string, title: string): { name: string; type: string; description: string }[] {
+  const found = new Map<string, { name: string; type: string; description: string }>();
+  const add = (name: string, type: string, description: string) => {
+    const clean = name.replace(/^[「『“"']|[」』”"']$/g, '').trim();
+    if (clean.length < 2 || clean.length > 36) return;
+    if (!found.has(clean)) found.set(clean, { name: clean, type, description });
+  };
+  for (const match of `${title}\n${text}`.matchAll(/([\u4e00-\u9fa5A-Za-z0-9·（）()]{2,30}(?:公司|集团|电网|能源局|发改委|电力公司|研究院|设计院|大学|交易中心|监管办|能源监管局))/g)) add(match[1], '组织', '资料中出现的组织机构');
+  for (const match of text.matchAll(/(?:GB(?:\/T)?|DL(?:\/T)?|NB(?:\/T)?|IEC|IEEE)\s?[\d.\-—]+/gi)) add(match[0].replace(/\s+/g, ' '), '标准', '资料中出现的标准编号');
+  for (const name of ['特高压', '变压器', '换流阀', '换流站', 'GIS', '风机', '光伏组件', '储能电池', '电缆', '电抗器', '断路器']) {
+    if (text.includes(name)) add(name, '设备', '资料中出现的电力设备或技术');
+  }
+  return [...found.values()].slice(0, 10);
+}
+
+function inferDate(text: string): string | undefined {
+  const match = text.match(/(20\d{2})\s*[年\-/]\s*(\d{1,2})\s*[月\-/]\s*(\d{1,2})/);
+  if (!match) return undefined;
+  const month = String(Number(match[2])).padStart(2, '0');
+  const day = String(Number(match[3])).padStart(2, '0');
+  return `${match[1]}-${month}-${day}`;
+}
+
+function ruleDecisions(text: string, title: string): { title: string; decision: string; rationale: string; effectiveDate?: string }[] {
+  if (!/通知|方案|意见|规划|办法|决定|批复|条例|规则|细则/.test(title)) return [];
+  const sentence = splitSentences(text).find((item) => /(?:决定|明确|要求|规定|印发|批复|同意|不得|应当)/.test(item) && item.length >= 18 && item.length <= 240);
+  if (!sentence) return [];
+  const clean = sentence.replace(/^[-•*\d.\s]+/, '').trim();
+  const heading = title.replace(/^关于印发|^关于|的通知$|的意见$|的批复$/g, '').trim();
+  return [{ title: (heading.length >= 2 ? heading : title).slice(0, 80), decision: truncate(clean, 220), rationale: `由《${title}》的规则编译提取，需人工确认依据与责任主体。`, effectiveDate: inferDate(text) }];
 }
 
 export function compileSource(db: Db, source: SourceRow, extracted: ExtractResult, options: CompileOptions = {}): CompileReport {
@@ -406,6 +451,54 @@ export function compileSource(db: Db, source: SourceRow, extracted: ExtractResul
     conceptLinks.push(page.slug);
     pagesCreated += 1;
     log.push(`创建概念页《${page.title}》`);
+  }
+
+  const entityPages: { id: string; title: string }[] = [];
+  if (db.prepare("SELECT 1 FROM ontology_classes WHERE library_id = ? AND key = 'entity'").get(source.library_id)) {
+    for (const entity of ruleEntities(extracted.text, source.title)) {
+      const existing = findExisting(db, source.library_id, entity.name);
+      if (existing) {
+        attachSource(db, existing.id, source.id, 'mentions', '', entity.description);
+        addLink(db, source.library_id, sourcePage.id, existing.id, 'mentions', 'semantic', 0.6);
+        entityPages.push({ id: existing.id, title: existing.title });
+        continue;
+      }
+      const page = createPage(db, {
+        libraryId: source.library_id, nodeId: source.node_id, classKey: 'entity', title: entity.name,
+        slug: `entities/${slugify(entity.name, 'entity')}`,
+        summary: truncate(entity.description, 180), tldr: truncate(entity.description, 120),
+        body: `## 实体说明\n${entity.description}\n\n## 来源\n- [[${sourcePage.slug}|《${source.title}》]]`,
+        status: 'draft', confidence: 0.45, tags: [entity.type], aliases: [],
+        metadata: { compiledBy: 'rule', compiledFrom: source.id, entityType: entity.type },
+        createdBy: actor?.person.id ?? null,
+      }, actor);
+      attachSource(db, page.id, source.id, 'mentions', '', entity.description);
+      addLink(db, source.library_id, sourcePage.id, page.id, 'mentions', 'semantic', 0.6);
+      entityPages.push({ id: page.id, title: page.title });
+      pagesCreated += 1;
+    }
+    if (entityPages.length) log.push(`抽取实体/设备 ${entityPages.length} 个`);
+  }
+
+  const decisionPages: { id: string; title: string }[] = [];
+  if (db.prepare("SELECT 1 FROM ontology_classes WHERE library_id = ? AND key = 'decision'").get(source.library_id)) {
+    for (const decision of ruleDecisions(extracted.text, source.title)) {
+      const existing = db.prepare("SELECT * FROM pages WHERE library_id = ? AND class_key = 'decision' AND lower(title) = lower(?)").get(source.library_id, decision.title) as unknown as PageRow | undefined;
+      const body = [`## 决策`, decision.decision, '', `## 依据`, decision.rationale, '', `## 来源`, `- [[${sourcePage.slug}|《${source.title}》]]`, ''].join('\n');
+      let page: PageRow;
+      if (existing) {
+        page = updatePage(db, existing, { body, summary: truncate(decision.decision, 180), confidence: Math.max(existing.confidence, 0.5), effectiveDate: decision.effectiveDate ?? existing.effective_date ?? null, metadata: { ...parseJson<Record<string, unknown>>(existing.metadata, {}), compiledBy: 'rule', compiledFrom: source.id }, note: `规则编译吸收《${source.title}》` }, actor);
+        pagesUpdated += 1;
+      } else {
+        page = createPage(db, { libraryId: source.library_id, nodeId: source.node_id, classKey: 'decision', title: decision.title, slug: `decisions/${slugify(decision.title, 'decision')}`, summary: truncate(decision.decision, 180), tldr: truncate(decision.decision, 120), body, status: 'draft', confidence: 0.45, tags: ['规则提取决策'], aliases: [], metadata: { compiledBy: 'rule', compiledFrom: source.id, rationale: decision.rationale, effectiveDate: decision.effectiveDate ?? null }, effectiveDate: decision.effectiveDate ?? null, createdBy: actor?.person.id ?? null }, actor);
+        pagesCreated += 1;
+      }
+      attachSource(db, page.id, source.id, 'derived-from', '', decision.decision);
+      addLink(db, source.library_id, page.id, sourcePage.id, 'derived-from', 'semantic', 0.8);
+      addLink(db, source.library_id, sourcePage.id, page.id, 'mentions', 'semantic', 0.6);
+      decisionPages.push({ id: page.id, title: page.title });
+    }
+    if (decisionPages.length) log.push(`抽取决策 ${decisionPages.length} 个`);
   }
 
   // 同一来源编译出的概念互为相关，构成可扩展的关联路径。

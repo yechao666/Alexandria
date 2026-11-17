@@ -23,6 +23,9 @@ export interface PageInput {
   readWhen?: string[];
   ownerPersonId?: string | null;
   supersededBy?: string | null;
+  effectiveDate?: string | null;
+  expiresAt?: string | null;
+  supersededAt?: string | null;
   metadata?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   createdBy?: string | null;
@@ -31,6 +34,9 @@ export interface PageInput {
 export interface PageView extends PageRow {
   reviewStatus: string;
   reviewNote: string;
+  effectiveDate: string | null;
+  expiresAt: string | null;
+  supersededAt: string | null;
   reviewerName: string | null;
   tagsList: string[];
   aliasesList: string[];
@@ -77,6 +83,9 @@ export function pageToView(db: Db, row: PageRow): PageView {
     ...row,
     reviewStatus: row.review_status,
     reviewNote: row.review_note,
+    effectiveDate: row.effective_date,
+    expiresAt: row.expires_at,
+    supersededAt: row.superseded_at,
     reviewerName: reviewer?.name ?? null,
     tagsList: parseJson<string[]>(row.tags, []),
     aliasesList: parseJson<string[]>(row.aliases, []),
@@ -229,6 +238,8 @@ export function validatePageProperties(
     .prepare('SELECT key, class_key, name, type, required, options FROM ontology_properties WHERE library_id = ? AND (class_key = ? OR class_key IS NULL)')
     .all(libraryId, classKey) as unknown as PropertyDefinition[];
   const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
+  const missing = definitions.filter((definition) => definition.required && (input[definition.key] === undefined || input[definition.key] === null || input[definition.key] === '')).map((definition) => definition.name);
+  if (missing.length) throw errors.badRequest(`缺少必填属性：${missing.join('、')}`);
   const result: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(input)) {
     if (raw === undefined || raw === null || raw === '') continue;
@@ -312,6 +323,9 @@ export function createPage(db: Db, input: PageInput, actor?: Actor | null): Page
     now,
   );
   setPageProperties(db, id, properties);
+  if (input.effectiveDate !== undefined || input.expiresAt !== undefined || input.supersededAt !== undefined) {
+    db.prepare('UPDATE pages SET effective_date = ?, expires_at = ?, superseded_at = ? WHERE id = ?').run(input.effectiveDate ?? null, input.expiresAt ?? null, input.supersededAt ?? null, id);
+  }
   const page = getPage(db, id)!;
   db.prepare(
     'INSERT INTO page_revisions (id, page_id, version, snapshot, editor_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -339,6 +353,9 @@ export interface PagePatch {
   readWhen?: string[];
   ownerPersonId?: string | null;
   supersededBy?: string | null;
+  effectiveDate?: string | null;
+  expiresAt?: string | null;
+  supersededAt?: string | null;
   metadata?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   note?: string;
@@ -385,6 +402,9 @@ export function updatePage(db: Db, page: PageRow, patch: PagePatch, actor: Actor
   if (patch.readWhen !== undefined) set('read_when', JSON.stringify(patch.readWhen));
   if (patch.ownerPersonId !== undefined) set('owner_person_id', patch.ownerPersonId);
   if (patch.supersededBy !== undefined) set('superseded_by', patch.supersededBy);
+  if (patch.effectiveDate !== undefined) set('effective_date', patch.effectiveDate);
+  if (patch.expiresAt !== undefined) set('expires_at', patch.expiresAt);
+  if (patch.supersededAt !== undefined) set('superseded_at', patch.supersededAt);
   if (patch.metadata !== undefined) set('metadata', JSON.stringify(patch.metadata));
   set('version', page.version + 1);
   set('updated_by', actor?.person.id ?? null);

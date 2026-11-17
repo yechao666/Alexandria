@@ -361,14 +361,14 @@ export function processJob(db: Db, env: Env, jobId: string): void {
   }
 }
 
-export function reprocessSource(db: Db, env: Env, sourceId: string): string {
+export function reprocessSource(db: Db, env: Env, sourceId: string, compiler: 'rule' | 'dsh' = 'rule'): string {
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as unknown as SourceRow | undefined;
   if (!source) throw errors.notFound('文献不存在');
   const jobId = newId('job');
   db.prepare(
     `INSERT INTO ingest_jobs (id, library_id, source_id, status, stage, progress, compiler, log, created_at)
-     VALUES (?, ?, ?, 'queued', 'queued', 0, 'rule', '[]', ?)`,
-  ).run(jobId, source.library_id, source.id, nowIso());
+     VALUES (?, ?, ?, 'queued', 'queued', 0, ?, '[]', ?)`,
+  ).run(jobId, source.library_id, source.id, compiler, nowIso());
   db.prepare("UPDATE sources SET status = 'queued', error = NULL WHERE id = ?").run(source.id);
   enqueueJob(db, env, jobId);
   return jobId;

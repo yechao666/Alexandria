@@ -300,7 +300,8 @@ export function registerSourceRoutes(router: Router): void {
     if (source.status === 'processing' || source.status === 'queued') {
       throw errors.conflict('该文献正在处理中');
     }
-    const jobId = reprocessSource(rc.app.db, rc.app.env, source.id);
+    const compiler = rc.query('compiler') === 'dsh' ? 'dsh' : 'rule';
+    const jobId = reprocessSource(rc.app.db, rc.app.env, source.id, compiler);
     audit(rc.app.db, { actor, action: 'source.reprocess', targetType: 'source', targetId: source.id, libraryId: library.id });
     rc.json({ jobId }, 202);
   });

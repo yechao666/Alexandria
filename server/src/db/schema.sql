@@ -290,6 +290,9 @@ CREATE TABLE IF NOT EXISTS pages (
   read_when      TEXT NOT NULL DEFAULT '[]',
   owner_person_id TEXT REFERENCES persons(id) ON DELETE SET NULL,
   superseded_by  TEXT,
+  effective_date TEXT,
+  expires_at     TEXT,
+  superseded_at  TEXT,
   metadata       TEXT NOT NULL DEFAULT '{}',
   version        INTEGER NOT NULL DEFAULT 1,
   created_by     TEXT REFERENCES persons(id) ON DELETE SET NULL,
@@ -311,6 +314,23 @@ CREATE TABLE IF NOT EXISTS page_sources (
   PRIMARY KEY (page_id, source_id, relation)
 );
 CREATE INDEX IF NOT EXISTS idx_page_sources_source ON page_sources(source_id);
+
+CREATE TABLE IF NOT EXISTS contradictions (
+  id                TEXT PRIMARY KEY,
+  library_id        TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+  subject           TEXT NOT NULL,
+  predicate         TEXT NOT NULL,
+  claim_id          TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  rival_claim_id    TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  status            TEXT NOT NULL DEFAULT 'unresolved',
+  severity          TEXT NOT NULL DEFAULT 'medium',
+  owner_person_id   TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  effective_date    TEXT,
+  created_at        TEXT NOT NULL,
+  resolved_at       TEXT,
+  UNIQUE(claim_id, rival_claim_id)
+);
+CREATE INDEX IF NOT EXISTS idx_contradictions_status ON contradictions(status, library_id);
 
 CREATE TABLE IF NOT EXISTS claims (
   id          TEXT PRIMARY KEY,

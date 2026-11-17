@@ -153,6 +153,10 @@ export function detectConflicts(db: Db, pageId: string): { count: number; detail
       db.prepare(
         "UPDATE pages SET status = 'draft', review_status = 'unreviewed', review_note = ?, updated_at = ? WHERE id IN (?, ?)",
       ).run(`检测到与《${rival.title}》的主张矛盾`, nowIso(), pageId, rival.page_id);
+      const libraryRow = db.prepare('SELECT library_id FROM pages WHERE id = ?').get(pageId) as unknown as { library_id: string } | undefined;
+      if (libraryRow) {
+        db.prepare("INSERT OR IGNORE INTO contradictions (id, library_id, subject, predicate, claim_id, rival_claim_id, status, severity, created_at) VALUES (?, ?, ?, ?, ?, ?, 'unresolved', 'medium', ?)").run(newId('con'), libraryRow.library_id, claim.subject, claim.predicate, claim.id, rival.id, nowIso());
+      }
       count += 1;
       details.push(`「${claim.subject}」在《${rival.title}》中的说法与本页不一致`);
     }

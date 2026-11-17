@@ -131,10 +131,12 @@ function inline(text, options) {
     return `\u0000CODE${codeTokens.length - 1}\u0000`;
   });
   value = value.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => {
-    const slug = target.trim();
-    const text = (label ?? target).trim();
+    const [rawSlug, anchor] = String(target).split('#');
+    const slug = rawSlug.trim();
+    const text = (label ?? rawSlug).trim();
     const library = options.libraryId ? encodeURIComponent(options.libraryId) : '';
-    return `<a class="wikilink" href="#/resolve/${library}/${encodeURIComponent(slug)}">${text}</a>`;
+    const suffix = anchor ? `?block=${encodeURIComponent(anchor.trim())}` : '';
+    return `<a class="wikilink" href="#/resolve/${library}/${encodeURIComponent(slug)}${suffix}">${text}</a>`;
   });
   value = value.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+)\)/g, (_, label, href) => {
     return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;

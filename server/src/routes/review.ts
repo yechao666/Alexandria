@@ -261,6 +261,26 @@ export function registerReviewRoutes(router: Router): void {
     });
   });
 
+  router.patch('/api/contradictions/:id', async (rc) => {
+    const actor = requireActor(rc);
+    const row = rc.app.db.prepare('SELECT * FROM contradictions WHERE id = ?').get(rc.params.id!) as unknown as { id: string; library_id: string } | undefined;
+    if (!row) throw errors.notFound('矛盾对象不存在');
+    requireLibrary(rc.app.db, actor, row.library_id, 'editor');
+    const body = await rc.body<{ status?: string; severity?: string; ownerPersonId?: string | null; effectiveDate?: string | null }>();
+    const fields: string[] = [];
+    const values: (string | null)[] = [];
+    if (body.status !== undefined) { if (!['unresolved', 'resolved', 'ignored'].includes(String(body.status))) throw errors.badRequest('矛盾状态无效'); fields.push('status = ?'); values.push(String(body.status)); }
+    if (body.severity !== undefined) { if (!['low', 'medium', 'high'].includes(String(body.severity))) throw errors.badRequest('严重度无效'); fields.push('severity = ?'); values.push(String(body.severity)); }
+    if (body.ownerPersonId !== undefined) { fields.push('owner_person_id = ?'); values.push(body.ownerPersonId ? String(body.ownerPersonId) : null); }
+    if (body.effectiveDate !== undefined) { fields.push('effective_date = ?'); values.push(body.effectiveDate ? String(body.effectiveDate) : null); }
+    if (!fields.length) throw errors.badRequest('没有可更新的字段');
+    fields.push('resolved_at = ?'); values.push(body.status === 'resolved' ? nowIso() : null);
+    values.push(row.id);
+    rc.app.db.prepare(`UPDATE contradictions SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    audit(rc.app.db, { actor, action: 'contradiction.update', targetType: 'contradiction', targetId: row.id, libraryId: row.library_id, detail: body });
+    rc.json({ ok: true });
+  });
+
   router.get('/api/review/conflicts', (rc) => {
     const actor = requireActor(rc);
     const libraries = visibleLibraries(rc.app.db, actor);
@@ -274,12 +294,18 @@ export function registerReviewRoutes(router: Router): void {
       predicate: string;
       object: string;
       text: string;
+      contradictionId: string | null;
+      severity: string;
+      contradictionStatus: string;
+      effectiveDate: string | null;
     }[] = [];
     for (const library of libraries) {
       const rows = rc.app.db
         .prepare(
-          `SELECT c.id, c.page_id, c.subject, c.predicate, c.object, c.text, p.title AS page_title
+          `SELECT c.id, c.page_id, c.subject, c.predicate, c.object, c.text, p.title AS page_title,
+                  con.id AS contradiction_id, con.severity, con.status AS contradiction_status, con.effective_date
              FROM claims c JOIN pages p ON p.id = c.page_id
+             LEFT JOIN contradictions con ON con.claim_id = c.id
             WHERE p.library_id = ? AND c.status = 'conflicted' ORDER BY p.updated_at DESC LIMIT 100`,
         )
         .all(library.id) as unknown as {
@@ -290,6 +316,10 @@ export function registerReviewRoutes(router: Router): void {
         object: string;
         text: string;
         page_title: string;
+        contradiction_id: string | null;
+        severity: string | null;
+        contradiction_status: string | null;
+        effective_date: string | null;
       }[];
       for (const row of rows) {
         result.push({
@@ -302,6 +332,10 @@ export function registerReviewRoutes(router: Router): void {
           predicate: row.predicate,
           object: row.object,
           text: row.text,
+          contradictionId: row.contradiction_id ?? null,
+          severity: row.severity ?? 'medium',
+          contradictionStatus: row.contradiction_status ?? 'unresolved',
+          effectiveDate: row.effective_date ?? null,
         });
       }
     }
@@ -387,6 +421,7 @@ export function registerReviewRoutes(router: Router): void {
         const keep = resolution === 'keep';
         rc.app.db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(keep ? 'active' : 'ignored', claim.id);
         for (const rival of rivals) rc.app.db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(keep ? 'resolved' : 'active', rival.id);
+        rc.app.db.prepare("UPDATE contradictions SET status = 'resolved', resolved_at = ? WHERE claim_id = ?").run(nowIso(), claim.id);
         for (const pageId of new Set([page.id, ...rivals.map((rival) => rival.page_id)])) {
           rc.app.db
             .prepare("UPDATE pages SET review_status = 'unreviewed', review_note = ?, updated_at = ? WHERE id = ? AND review_status = 'approved'")

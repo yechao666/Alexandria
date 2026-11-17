@@ -29,6 +29,19 @@ interface DshFact {
   confidence?: number;
 }
 
+interface DshDecision {
+  title?: string;
+  decision?: string;
+  rationale?: string;
+  alternatives?: string[];
+  owner?: string;
+  effectiveDate?: string;
+  status?: string;
+  related?: string[];
+  claims?: DshClaim[];
+  confidence?: number;
+}
+
 interface DshConcept {
   title?: string;
   parent?: string;
@@ -50,6 +63,7 @@ interface DshCompilation {
   claims?: DshClaim[];
   entities?: DshEntity[];
   facts?: DshFact[];
+  decisions?: DshDecision[];
   concepts?: DshConcept[];
 }
 
@@ -73,6 +87,19 @@ function findSourcePage(db: Db, sourceId: string): PageRow | null {
   );
 }
 
+function entityNameSimilar(left: string, right: string): boolean {
+  const a = normalizeTitle(left).replace(/[有限公司集团股份]/g, '');
+  const b = normalizeTitle(right).replace(/[有限公司集团股份]/g, '');
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a)) && Math.abs(a.length - b.length) <= 8) return true;
+  const bigrams = (value: string) => new Set(Array.from({ length: Math.max(0, value.length - 1) }, (_, index) => value.slice(index, index + 2)));
+  const one = bigrams(a); const two = bigrams(b);
+  if (!one.size || !two.size) return false;
+  let overlap = 0; for (const item of one) if (two.has(item)) overlap += 1;
+  return (2 * overlap) / (one.size + two.size) >= 0.86;
+}
+
 function findExisting(db: Db, libraryId: string, title: string): PageRow | null {
   const normalized = normalizeTitle(title);
   const pages = db.prepare('SELECT * FROM pages WHERE library_id = ?').all(libraryId) as unknown as PageRow[];
@@ -83,6 +110,7 @@ function findExisting(db: Db, libraryId: string, title: string): PageRow | null 
       page.status !== 'archived' &&
       parseJson<string[]>(page.aliases, []).some((alias) => normalizeTitle(alias) === normalized),
     ) ??
+    pages.find((page) => page.class_key !== 'source' && page.status !== 'archived' && entityNameSimilar(page.title, title)) ??
     null
   );
 }
@@ -154,11 +182,11 @@ function buildPrompt(source: SourceRow, extracted: ExtractResult, db: Db, classe
     '只输出一个 JSON 对象，不要输出 Markdown、解释或代码围栏之外的文字。',
     '',
     'JSON 结构：',
-    '{"sourceSummary":"一句话摘要","tldr":"一句话结论","claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"entities":[{"name":"实体名","type":"组织/人物/产品/标准/指标","description":"一句话","aliases":["别名"]}],"facts":[{"subject":"主语","predicate":"关系","object":"宾语","confidence":0.6}],"concepts":[{"title":"稳定名词","classKey":"concept","parent":"上位概念标题","summary":"一句话","definition":"定义","points":["要点"],"tags":["标签"],"aliases":["别名"],"readWhen":["何时读这一页"],"confidence":0.6,"claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"related":["已有页面 slug 或标题"]}]}',
+    '{"sourceSummary":"一句话摘要","tldr":"一句话结论","claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"entities":[{"name":"实体名","type":"组织/人物/产品/标准/指标","description":"一句话","aliases":["别名"]}],"facts":[{"subject":"主语","predicate":"关系","object":"宾语","confidence":0.6}],"decisions":[{"title":"稳定决策名","decision":"决定了什么","rationale":"为什么这样决定","alternatives":["备选方案"],"owner":"责任主体","effectiveDate":"YYYY-MM-DD","status":"active|superseded","related":["相关概念标题"],"claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"confidence":0.6}],"concepts":[{"title":"稳定名词","classKey":"concept","parent":"上位概念标题","summary":"一句话","definition":"定义","points":["要点"],"tags":["标签"],"aliases":["别名"],"readWhen":["何时读这一页"],"confidence":0.6,"claims":[{"text":"","subject":"","predicate":"","object":"","confidence":0.6}],"related":["已有页面 slug 或标题"]}]}',
     '',
     '规则：',
     '- 一页只讲一个概念；标题必须是 2–30 字的稳定名词，不要句子、不要章节编号。',
-    '- 最多 8 个概念；entities 抽取资料中出现的组织、人物、产品、标准、指标等；facts 抽取可核对的主谓宾事实。\n- 分层：用 parent 指向更上位的概念（或已有页面标题）；没有把握时留空。\n- 没有足够信息时对应数组可以为空。',
+    '- 最多 8 个概念；entities 抽取资料中出现的组织、人物、产品、标准、指标等；facts 抽取可核对的主谓宾事实。\n- decisions 抽取明确的政策选择、方案决定、批复、规则变更或管理决定：必须有 decision 与 rationale；没有明确决定时留空，不要把普通事实当决策。\n- 分层：用 parent 指向更上位的概念（或已有页面标题）；没有把握时留空。\n- 没有足够信息时对应数组可以为空。',
     '- 每条主张尽量带来源语境；不要编造资料中不存在的数字、人物或结论。',
     '- 优先复用已有页面；related 使用已有页面的 slug 或标题，避免制造重复页。',
     '- classKey 必须来自给定本体类型；不确定时用 concept。',
@@ -187,7 +215,7 @@ export function dshCompileSource(
     .prepare('SELECT key, name FROM ontology_classes WHERE library_id = ? ORDER BY sort_order')
     .all(source.library_id) as unknown as { key: string; name: string }[];
   const prompt = buildPrompt(source, extracted, db, classes);
-  const output = runDshSync(env, prompt, { timeoutMs: Math.max(60_000, env.dsh.timeoutMs), maxChars: 32_000 });
+  const output = runDshSync(env, prompt, { timeoutMs: Math.max(180_000, env.dsh.timeoutMs), maxChars: 32_000 });
   const parsed = extractJson<DshCompilation>(output);
   if (!parsed || !Array.isArray(parsed.concepts)) return null;
 
@@ -206,7 +234,10 @@ export function dshCompileSource(
     .filter((entity): entity is DshEntity & { name: string } => typeof entity.name === 'string' && entity.name.trim().length >= 2)
     .slice(0, 12);
   const facts = (Array.isArray(parsed.facts) ? parsed.facts : []).slice(0, 30);
-  const log: string[] = [`DSH 返回 ${concepts.length} 个概念、${entities.length} 个实体、${facts.length} 条事实`];
+  const decisions = (Array.isArray(parsed.decisions) ? parsed.decisions : [])
+    .filter((decision): decision is DshDecision & { title: string; decision: string } => typeof decision.title === 'string' && decision.title.trim().length >= 2 && typeof decision.decision === 'string' && decision.decision.trim().length >= 4)
+    .slice(0, 5);
+  const log: string[] = [`DSH 返回 ${concepts.length} 个概念、${entities.length} 个实体、${facts.length} 条事实、${decisions.length} 个决策`];
   let pagesCreated = 0;
   let pagesUpdated = 0;
   let conflicts = 0;
@@ -400,6 +431,50 @@ export function dshCompileSource(
     pagesCreated += 1;
     linkedEntities.push({ id: page.id, slug: page.slug, title: page.title });
   }
+  const decisionPages: { id: string; slug: string; title: string }[] = [];
+  const decisionPropertyRows = db.prepare("SELECT key, options FROM ontology_properties WHERE library_id = ? AND class_key = 'decision'").all(source.library_id) as unknown as { key: string; options: string }[];
+  const decisionProperties = new Set(decisionPropertyRows.map((row) => row.key));
+  const decisionStatusOptions = parseJson<string[]>(decisionPropertyRows.find((row) => row.key === 'status')?.options, []);
+  for (const decision of decisions) {
+    const title = decision.title.trim();
+    const effectiveDate = String(decision.effectiveDate ?? '').trim() || (extracted.text.match(/(20\d{2})\s*[年\-/]\s*(\d{1,2})\s*[月\-/]\s*(\d{1,2})/)?.[0] ? `${extracted.text.match(/(20\d{2})/)?.[1]}-${String(Number(extracted.text.match(/(20\d{2})\s*[年\-/]\s*(\d{1,2})/) ?.[2] ?? 1)).padStart(2, '0')}-${String(Number(extracted.text.match(/(20\d{2})\s*[年\-/]\s*(\d{1,2})\s*[月\-/]\s*(\d{1,2})/)?.[3] ?? 1)).padStart(2, '0')}` : '');
+    const status = decision.status === 'superseded' ? 'superseded' : 'active';
+    const rationale = String(decision.rationale ?? '').trim();
+    const alternatives = (Array.isArray(decision.alternatives) ? decision.alternatives : []).map(String).filter(Boolean).slice(0, 6);
+    const owner = String(decision.owner ?? '').trim();
+    const existing = db.prepare("SELECT * FROM pages WHERE library_id = ? AND class_key = 'decision' AND lower(title) = lower(?)").get(source.library_id, title) as unknown as PageRow | undefined;
+    const body = [
+      '## 决策', decision.decision.trim(), '',
+      '## 依据', rationale || '资料未提供明确理由，需人工补充。', '',
+      '## 备选方案', alternatives.length ? alternatives.map((item) => `- ${item}`).join('\n') : '资料未记录备选方案。', '',
+      '## 责任主体', owner || '待确认', '',
+      '## 生效信息', `生效日期：${effectiveDate || '待确认'} · 状态：${status}`, '',
+      '## 来源', `- [[${sourcePage.slug}|《${source.title}》]]`, '',
+    ].join('\n');
+    const properties: Record<string, unknown> = {};
+    if (decisionProperties.has('decidedAt') && effectiveDate) properties.decidedAt = effectiveDate;
+    const mappedStatus = decisionStatusOptions.includes(status) ? status : status === 'active' && decisionStatusOptions.includes('已采纳') ? '已采纳' : status === 'superseded' && decisionStatusOptions.includes('已废弃') ? '已废弃' : null;
+    if (decisionProperties.has('status') && mappedStatus) properties.status = mappedStatus;
+    const metadata = { compiledBy: 'dsh', compiledFrom: source.id, decisionOwner: owner || null, effectiveDate: effectiveDate || null, status, rationale, alternatives };
+    let page: PageRow;
+    if (existing) {
+      page = updatePage(db, existing, { body, summary: truncate(decision.decision.trim(), 180), tldr: truncate(decision.decision.trim(), 120), confidence: Math.max(existing.confidence, Math.min(0.9, Number(decision.confidence ?? 0.65))), metadata: { ...parseJson<Record<string, unknown>>(existing.metadata, {}), ...metadata }, properties: Object.keys(properties).length ? properties : undefined, effectiveDate: effectiveDate || null, note: `DSH 从《${source.title}》更新决策` }, actor ?? null);
+      pagesUpdated += 1;
+    } else {
+      page = createPage(db, { libraryId: source.library_id, nodeId: source.node_id, classKey: 'decision', title, slug: `decisions/${slugify(title, 'decision')}`, summary: truncate(decision.decision.trim(), 180), tldr: truncate(decision.decision.trim(), 120), body, status: 'draft', confidence: Math.min(0.9, Number(decision.confidence ?? 0.65)), tags: ['决策'], aliases: [], readWhen: ['需要了解决策依据时'], metadata, properties: Object.keys(properties).length ? properties : undefined, createdBy: actor?.person.id ?? null }, actor ?? null);
+      pagesCreated += 1;
+    }
+    attachSource(db, page.id, source.id, 'derived-from', '', decision.decision.trim());
+    addLink(db, source.library_id, page.id, sourcePage.id, 'derived-from', 'frontmatter', 1.2);
+    addLink(db, source.library_id, sourcePage.id, page.id, 'mentions', 'frontmatter', 1);
+    saveClaims(db, page.id, (decision.claims ?? []).map((claim) => toClaim(claim, title, '决策')).filter((claim): claim is ExtractedClaim => Boolean(claim)), source.id);
+    decisionPages.push({ id: page.id, slug: page.slug, title: page.title });
+  }
+  for (const decision of decisionPages) {
+    const row = concepts.find((concept) => normalizeTitle(concept.title) === normalizeTitle(decision.title));
+    if (row?.parent) { const parent = findByRef(db, source.library_id, row.parent); if (parent && parent.id !== decision.id) addLink(db, source.library_id, decision.id, parent.id, 'related-to', 'semantic', 0.5); }
+  }
+
   for (const fact of facts) {
     const subject = findByRef(db, source.library_id, String(fact.subject ?? '').trim());
     const object = findByRef(db, source.library_id, String(fact.object ?? '').trim());
@@ -426,6 +501,6 @@ export function dshCompileSource(
   );
   conflicts += detectConflicts(db, sourcePage.id).count;
   for (const concept of linked) conflicts += detectConflicts(db, concept.id).count;
-  log.push(`DSH 编译完成：${pagesCreated} 新建 / ${pagesUpdated} 更新 / ${conflicts} 处矛盾`);
+  log.push(`DSH 编译完成：${pagesCreated} 新建 / ${pagesUpdated} 更新 / ${conflicts} 处矛盾 / ${decisionPages.length} 个决策`);
   return { sourcePageId: sourcePage.id, pagesCreated, pagesUpdated, conflicts, log, conceptIds: linked.map((item) => item.id) };
 }

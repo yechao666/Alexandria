@@ -20,6 +20,7 @@ const MANIFEST = {
   description:
     '面向 DSH 智能体的 LLM Wiki 知识库：知识在入库时被编译为带本体类型、主张与关联的页面；查询时走词法 + 图谱 + 编译知识，而非查询期 RAG。',
   auth: 'Authorization: Bearer <alex_ak_...>（只读或写入密钥）',
+  mcp: 'POST /mcp（JSON-RPC 2.0，initialize / tools/list / tools/call；search/read/graph）',
   principles: [
     '先搜索已有知识，再决定创建还是更新页面',
     '写入完整页面，保留既有 tags/aliases/sources/claims，不要静默丢弃',

@@ -183,7 +183,8 @@ async function route() {
       const ref = decodeURIComponent(parts.slice(2).join('/'));
       const result = await api(`/api/resolve?library=${encodeURIComponent(libraryId)}&ref=${encodeURIComponent(ref)}`);
       if (seq !== routeSeq) return;
-      location.replace(`#/page/${encodeURIComponent(result.page.id)}`);
+      const block = query.get('block');
+      location.replace(`#/page/${encodeURIComponent(result.page.id)}${block ? `?block=${encodeURIComponent(block)}` : ''}`);
       return;
     }
     if (parts[0] === 'libraries') {

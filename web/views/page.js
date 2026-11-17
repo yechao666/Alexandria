@@ -314,6 +314,10 @@ export async function mountPage(ref) {
       toast(error.message, 'error');
     }
   });
+  const block = new URLSearchParams(location.hash.split('?')[1] ?? '').get('block');
+  if (block) {
+    requestAnimationFrame(() => document.getElementById(block)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   document.getElementById('page-graph');
   try {
     const neighbors = await api(`/api/pages/${encodeURIComponent(page.id)}/neighbors`);
