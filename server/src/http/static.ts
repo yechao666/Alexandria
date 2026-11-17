@@ -40,7 +40,9 @@ export function serveStatic(rc: RequestContext): void {
   rc.res.statusCode = 200;
   rc.res.setHeader('content-type', mimeOf(filePath));
   rc.res.setHeader('content-length', String(stat.size));
-  rc.res.setHeader('cache-control', filePath.endsWith('index.html') ? 'no-cache' : 'public, max-age=3600');
+  const vendor = requested.startsWith('/vendor/');
+  const index = filePath.endsWith('index.html');
+  rc.res.setHeader('cache-control', index || !vendor ? 'no-store, no-cache, must-revalidate' : 'public, max-age=86400');
   if (rc.method === 'HEAD') {
     rc.res.end();
     return;
