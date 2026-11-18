@@ -22,6 +22,7 @@ function failMain(db: Db, jobId: string, message: string): void {
 }
 
 function pump(): void {
+  if (process.env.ALEXANDRIA_PAUSE_QUEUE === '1') return;
   while (active < maxConcurrency && pending.length) {
     const item = pending.shift()!;
     active += 1;

@@ -288,6 +288,7 @@ cd ../alexandria && node server/src/main.ts
 - [多级目录](docs/MULTILEVEL_TREE.md)：任意深度文档树、折叠、筛选与父级聚合。
 - [标准全文入库](docs/STANDARD_FULLTEXT.md)：真实标准 PDF 下载、替换与 OCR 重编译。
 - [正则预抽取规则](docs/REGEX_RULES.md)：公共/项目规则、内置规则集与 DSH prompt 注入。
+- [电力知识库重建](docs/REBUILD.md)：清空旧数据、只保留电力资料与最终标准 PDF。
 - [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
 - **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。
