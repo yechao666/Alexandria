@@ -25,11 +25,12 @@ const TABS = [
   { key: 'observability', label: '运行状态' },
   { key: 'access-matrix', label: '权限矩阵' },
   { key: 'review-analytics', label: '校对报表' },
+  { key: 'regex', label: '正则规则' },
 ];
 
 export async function renderAdmin(tab = 'teams') {
   const isAdmin = Boolean(state.me?.person?.isAdmin);
-  const [teamsData, peopleData, wecom, keysData, syncRunsData, securityData, observability, matrixData, analyticsData] = await Promise.all([
+  const [teamsData, peopleData, wecom, keysData, syncRunsData, securityData, observability, matrixData, analyticsData, regexData] = await Promise.all([
     api('/api/teams'),
     api('/api/people'),
     api('/api/integrations/wecom').catch(() => null),
@@ -39,6 +40,7 @@ export async function renderAdmin(tab = 'teams') {
     api('/api/admin/observability').catch(() => null),
     api('/api/admin/access-matrix').catch(() => ({ libraries: [], persons: [] })),
     api('/api/review/analytics?days=30').catch(() => null),
+    api('/api/regex-rules').catch(() => ({ rules: [], libraries: [] })),
   ]);
   const teams = teamsData.teams ?? [];
   const people = peopleData.people ?? [];
@@ -109,6 +111,23 @@ export async function renderAdmin(tab = 'teams') {
       </div>`
     : '<div class="empty">企业微信集成信息不可用</div>';
 
+  const regexRules = regexData?.rules ?? [];
+  const regexLibraries = regexData?.libraries ?? [];
+  const regexBody = `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">正则预抽取规则</h2><div class="sub muted">在 DSH 编译前先执行；公共规则对所有知识库生效，项目规则只对指定知识库生效。</div></div><span class="badge jade">${regexRules.length} 条</span></div>
+    <div class="grid grid-2" style="align-items:start">
+      <div class="panel"><div class="panel-head"><h3>规则列表</h3><span class="small muted">优先级越小越先执行</span></div><div class="panel-body" style="padding:0;max-height:620px;overflow:auto"><table class="org-table"><thead><tr><th>名称</th><th>分类</th><th>范围</th><th>优先级</th><th></th></tr></thead><tbody>${regexRules.map((rule) => `<tr><td><b>${esc(rule.name)}</b><br><code style="font-size:10px">${esc(rule.pattern)}</code></td><td>${esc(rule.category)}</td><td>${rule.scope === 'public' ? '<span class="badge outline">公共</span>' : `<span class="badge jade">项目</span> <span class="small faint">${esc(regexLibraries.find((library) => library.id === rule.library_id)?.name ?? '')}</span>`}</td><td>${rule.priority}</td><td><button class="btn btn-sm btn-ghost btn-danger" data-delete-regex="${esc(rule.id)}">删除</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted" style="padding:16px">暂无规则</td></tr>'}</tbody></table></div></div>
+      <div class="panel"><div class="panel-head"><h3>新建规则</h3></div><div class="panel-body"><form id="regex-form" class="form-grid">
+        <div class="field"><label>名称</label><input class="input" name="name" placeholder="例如：邮箱"></div>
+        <div class="field"><label>分类</label><input class="input" name="category" value="通用"></div>
+        <div class="field span-2"><label>正则表达式</label><input class="input mono" name="pattern" placeholder="[A-Za-z0-9._%+-]+@..."></div>
+        <div class="field"><label>Flags</label><input class="input" name="flags" value="g"></div>
+        <div class="field"><label>优先级</label><input class="input" name="priority" type="number" value="100"></div>
+        <div class="field"><label>范围</label><select class="select" name="scope"><option value="public">公共</option><option value="library">项目</option></select></div>
+        <div class="field"><label>知识库（项目规则）</label><select class="select" name="libraryId"><option value="">—</option>${regexLibraries.map((library) => `<option value="${esc(library.id)}">${esc(library.name)}</option>`).join('')}</select></div>
+        <div class="field span-2"><label>说明</label><input class="input" name="description"></div>
+      </form><div class="btn-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" id="save-regex">创建规则</button></div></div></div>
+    </div>`;
+
   const bodies = {
     teams: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">团队与组织架构</h2><div class="sub muted">知识库绑定团队后，团队负责人自动成为库所有者，成员获得编辑权限。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-team">+ 新建团队</button>' : ''}</div><div class="callout small" style="margin-bottom:14px">组织层级策略：上级负责人可只读下级团队知识库；下级成员默认看不到上级团队内容，需显式共享。</div><div class="grid grid-2">${teamCards || '<div class="empty">暂无团队</div>'}</div>`,
     people: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">成员目录</h2><div class="sub muted">账号由管理员开通，认证源优先绑定企业微信 / OIDC。</div></div>${isAdmin ? '<button class="btn btn-primary btn-sm" id="new-person">+ 邀请成员</button>' : ''}</div>
@@ -116,6 +135,7 @@ export async function renderAdmin(tab = 'teams') {
     wecom: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">企业微信</h2><div class="sub muted">OAuth 登录、部门/成员同步与机器人通知；本地默认连接 wecom-mock。</div></div><span class="badge ${wecom?.configured ? 'jade' : 'outline'}">${wecom?.mode === 'mock' ? 'Mock 联调' : '生产接入'}</span></div>${wecomBody}`,
     observability: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">运行状态</h2><div class="sub muted">进程、队列、存储、任务与安全事件；用于日常巡检与容量观察。</div></div><span class="row"><button class="btn btn-sm" id="integrity-check">数据体检</button><span class="badge ${observability ? 'jade' : 'clay'}">${observability ? '采集中' : '不可用'}</span></span></div>${observability ? `<div class="grid grid-3"><div class="panel panel-pad"><div class="small faint">任务队列</div><div style="font-size:28px;font-weight:650">${observability.queue.active} <span style="font-size:13px;color:var(--muted)">执行</span> / ${observability.queue.pending} <span style="font-size:13px;color:var(--muted)">排队</span></div><div class="small muted" style="margin-top:8px">任务：${(observability.jobs ?? []).map((item) => `${esc(item.key)} ${item.c}`).join(' · ') || '暂无'}</div></div><div class="panel panel-pad"><div class="small faint">内容规模</div><div style="font-size:28px;font-weight:650">${observability.counts.pages} <span style="font-size:13px;color:var(--muted)">知识页</span></div><div class="small muted" style="margin-top:8px">${observability.counts.sources} 文献 · ${observability.counts.claims} 主张 · ${observability.counts.links} 关联</div></div><div class="panel panel-pad"><div class="small faint">安全事件（24h）</div><div style="font-size:28px;font-weight:650">${(observability.security ?? []).reduce((sum, item) => sum + Number(item.c), 0)}</div><div class="small muted" style="margin-top:8px">${(observability.security ?? []).map((item) => `${esc(item.key)} ${item.c}`).join(' · ') || '无'}</div></div></div><div class="grid grid-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><h3>存储与备份</h3></div><div class="panel-body"><div class="kv"><dt>SQLite</dt><dd>${Math.round((observability.storage.databaseBytes ?? 0) / 1024 / 1024 * 10) / 10} MB</dd><dt>WAL</dt><dd>${Math.round((observability.storage.walBytes ?? 0) / 1024 / 1024 * 10) / 10} MB</dd><dt>备份</dt><dd>${(observability.storage.backups ?? []).length} 份</dd></div></div></div><div class="panel"><div class="panel-head"><h3>进程</h3></div><div class="panel-body"><div class="kv"><dt>Node</dt><dd class="mono">${esc(observability.process.node)}</dd><dt>平台</dt><dd>${esc(observability.process.platform)}</dd><dt>运行</dt><dd>${Math.round(observability.process.uptimeSeconds / 60)} 分钟</dd><dt>内存</dt><dd>${Math.round((observability.process.memory.rss ?? 0) / 1024 / 1024)} MB RSS</dd></div></div></div></div>` : '<div class="empty">无法读取运行状态</div>'}`,
     'review-analytics': `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">校对报表</h2><div class="sub muted">最近 30 天：待校对、批准、矛盾、置信度与负责人分布。</div></div><span class="badge jade">${analytics ? '已生成' : '暂无数据'}</span></div>${analytics ? `<div class="grid grid-4"><div class="panel panel-pad"><div class="small faint">总页面</div><div style="font-size:28px;font-weight:650">${analytics.total}</div></div><div class="panel panel-pad"><div class="small faint">待校对</div><div style="font-size:28px;font-weight:650;color:var(--ochre)">${analytics.pending}</div></div><div class="panel panel-pad"><div class="small faint">30 天批准</div><div style="font-size:28px;font-weight:650;color:var(--jade)">${analytics.approvedInPeriod}</div></div><div class="panel panel-pad"><div class="small faint">低置信度</div><div style="font-size:28px;font-weight:650;color:var(--clay)">${analytics.confidence.low}</div></div></div><div class="grid grid-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><h3>按知识库</h3></div><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>知识库</th><th>待校对</th><th>批准</th><th>矛盾</th></tr></thead><tbody>${analytics.byLibrary.map((item) => `<tr><td>${esc(item.name)}</td><td>${item.pending}</td><td>${item.approved}</td><td>${item.conflicts}</td></tr>`).join('') || '<tr><td colspan="4" class="muted" style="padding:16px">暂无</td></tr>'}</tbody></table></div></div><div class="panel"><div class="panel-head"><h3>负责人</h3></div><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>成员</th><th>待校对页</th></tr></thead><tbody>${analytics.byAssignee.map((item) => `<tr><td>${esc(item.name)}</td><td>${item.count}</td></tr>`).join('') || '<tr><td colspan="2" class="muted" style="padding:16px">暂无指派</td></tr>'}</tbody></table></div></div></div>` : '<div class="empty">暂无校对报表</div>'}`,
+    regex: regexBody,
     'access-matrix': `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">权限矩阵</h2><div class="sub muted">按人/库展示 effectiveRole（含团队归属、组织层级与显式授权）；仅组织管理员可见。</div></div><span class="badge jade">${matrixRows ? '已计算' : '暂无数据'}</span></div><div class="panel"><div class="panel-body" style="padding:0;overflow:auto"><table class="org-table"><thead><tr><th>成员</th>${matrixLibraries.map((library) => `<th>${esc(library.name)}</th>`).join('')}</tr></thead><tbody>${matrixRows || '<tr><td colspan="5" class="muted" style="padding:18px">暂无成员</td></tr>'}</tbody></table></div></div>`,
     security: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">安全审计</h2><div class="sub muted">登录、API Key、授权/访问策略变更与限流事件；仅组织管理员可见。</div></div><span class="row"><a class="btn btn-sm" href="/api/admin/security/export?days=30">导出安全 CSV</a><a class="btn btn-sm" href="/api/admin/audit/export?days=30">导出审计 CSV</a><span class="badge ${securityData?.counts?.some((item) => item.severity === 'critical') ? 'clay' : 'jade'}">最近 7 天</span></span></div><div class="panel"><div class="panel-body" style="padding:0"><table class="org-table"><thead><tr><th>时间</th><th>级别</th><th>事件</th><th>操作者</th><th>对象</th><th>IP</th></tr></thead><tbody>${securityRows || '<tr><td colspan="6" class="muted" style="padding:18px">暂无安全事件</td></tr>'}</tbody></table></div></div>`,
     keys: `<div class="between" style="margin-bottom:14px"><div><h2 style="font-size:24px">API 密钥</h2><div class="sub muted">供 DSH 智能体或外部系统读写知识；只读密钥不能调用写接口。</div></div><button class="btn btn-primary btn-sm" id="new-key">+ 创建密钥</button></div>
@@ -204,6 +224,23 @@ export function mountAdmin(tab = 'teams') {
       toast(error.message, 'error');
     }
   });
+  document.getElementById('save-regex')?.addEventListener('click', async () => {
+    const form = document.getElementById('regex-form');
+    if (!form) return;
+    try {
+      await api('/api/regex-rules', { method: 'POST', body: formValues(form) });
+      toast('正则规则已创建', 'success');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch (error) { toast(error.message, 'error'); }
+  });
+  document.querySelectorAll('[data-delete-regex]').forEach((button) => button.addEventListener('click', async () => {
+    if (!confirm('删除这条正则规则？')) return;
+    try {
+      await api(`/api/regex-rules/${encodeURIComponent(button.dataset.deleteRegex)}`, { method: 'DELETE' });
+      toast('规则已删除', 'success');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch (error) { toast(error.message, 'error'); }
+  }));
 }
 
 function teamCard(team, isAdmin) {

@@ -1,3 +1,21 @@
+CREATE TABLE IF NOT EXISTS regex_rules (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  category      TEXT NOT NULL DEFAULT '通用',
+  description   TEXT NOT NULL DEFAULT '',
+  pattern       TEXT NOT NULL,
+  flags         TEXT NOT NULL DEFAULT 'g',
+  capture_group INTEGER NOT NULL DEFAULT 0,
+  scope         TEXT NOT NULL DEFAULT 'public',
+  library_id    TEXT REFERENCES libraries(id) ON DELETE CASCADE,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  priority      INTEGER NOT NULL DEFAULT 100,
+  created_by    TEXT REFERENCES persons(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_regex_rules_scope ON regex_rules(scope, library_id, enabled, priority);
+
 -- Alexandria schema v1
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;

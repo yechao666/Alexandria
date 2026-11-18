@@ -2,10 +2,11 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
+import { ensurePublicRegexRules } from '../knowledge/regex-rules.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export type Db = DatabaseSync;
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
@@ -105,6 +106,7 @@ export function migrate(db: Db): void {
     state TEXT PRIMARY KEY, return_to TEXT NOT NULL DEFAULT '/', created_at TEXT NOT NULL, expires_at TEXT NOT NULL
   )`);
 
+  ensurePublicRegexRules(db);
   db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION));
 }
 

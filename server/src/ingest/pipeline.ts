@@ -16,6 +16,7 @@ import { indexSource } from '../knowledge/pages.ts';
 import { audit } from '../domain/audit.ts';
 import { errors } from '../http/respond.ts';
 import { ensureDefaultOntology } from '../knowledge/ontology.ts';
+import { extractRegexMatches, loadRegexRules, regexSummary } from '../knowledge/regex-rules.ts';
 
 export interface IngestInput {
   buffer: Buffer;
@@ -138,7 +139,8 @@ export function ingestBuffer(db: Db, env: Env, libraryId: string, input: IngestI
   );
 
   const jobId = newId('job');
-  const useDsh = input.dsh !== false && dshAvailable(env);
+  const requireDsh = process.env.ALEXANDRIA_REQUIRE_DSH !== '0';
+  const useDsh = dshAvailable(env) && (requireDsh || input.dsh !== false);
   db.prepare(
     `INSERT INTO ingest_jobs (id, library_id, source_id, status, stage, progress, compiler, log, created_at)
      VALUES (?, ?, ?, 'queued', 'queued', 0, ?, '[]', ?)`,
@@ -264,6 +266,13 @@ export function processJob(db: Db, env: Env, jobId: string): void {
 
     jobEvent(db, jobId, 'assets', 'succeeded', `资产 ${assetIds.length} 个，OCR 文本 ${ocrAppend ? '已' : '未'}追加`, 50, Date.now() - stepStarted);
     stepStarted = Date.now();
+    const regexRules = loadRegexRules(db, source.library_id);
+    const regexMatches = extractRegexMatches(regexRules, extractedText);
+    const regexInfo = regexSummary(regexMatches);
+    jobLog(db, jobId, `正则预抽取：${regexInfo.total} 个匹配，${Object.keys(regexInfo.byCategory).length} 个类型`);
+    jobEvent(db, jobId, 'regex', 'succeeded', `正则预抽取 ${regexInfo.total} 个匹配`, 52, Date.now() - stepStarted);
+    stepStarted = Date.now();
+
     const excerpt = truncate(extractedText, 240);
     const sectionsMeta = extracted.sections.map((section) => ({
       title: section.title,
@@ -273,6 +282,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     }));
     const metadata = {
       ...extracted.metadata,
+      regex: { total: regexInfo.total, byCategory: regexInfo.byCategory, samples: regexInfo.samples.slice(0, 60).map((match) => ({ name: match.name, category: match.category, value: match.value })) },
       sections: sectionsMeta,
       warnings: extracted.warnings,
       extractedBy: extracted.kind,
@@ -303,15 +313,14 @@ export function processJob(db: Db, env: Env, jobId: string): void {
     let report = null;
     if (jobCompiler === 'dsh') {
       jobLog(db, jobId, '调用本机 DSH 编译知识：概念、主张、关联');
-      report = dshCompileSource(db, env, refreshed, { ...extracted, text: extractedText }, null);
+      report = dshCompileSource(db, env, refreshed, { ...extracted, text: extractedText, metadata: { ...extracted.metadata, regex: regexInfo } }, null);
       if (report) {
         for (const line of report.log) jobLog(db, jobId, line);
       } else {
-        jobLog(db, jobId, 'DSH 编译失败，回退到规则编译器');
+        throw new Error('DSH 编译失败：严格模式下不回退规则编译器');
       }
-    }
-    if (!report) {
-      jobLog(db, jobId, '开始规则知识编译：抽取概念、主张与关联');
+    } else {
+      jobLog(db, jobId, '未启用 DSH，使用规则编译器（ALEXANDRIA_REQUIRE_DSH=0）');
       report = compileSource(db, refreshed, { ...extracted, text: extractedText }, { actor: null, maxConcepts: 10 });
     }
 
@@ -362,6 +371,7 @@ export function processJob(db: Db, env: Env, jobId: string): void {
 }
 
 export function reprocessSource(db: Db, env: Env, sourceId: string, compiler: 'rule' | 'dsh' = 'rule'): string {
+  if (process.env.ALEXANDRIA_REQUIRE_DSH !== '0' && dshAvailable(env)) compiler = 'dsh';
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(sourceId) as unknown as SourceRow | undefined;
   if (!source) throw errors.notFound('文献不存在');
   const jobId = newId('job');

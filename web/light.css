@@ -345,3 +345,7 @@ h1, h2, h3, h4 { color: var(--ink); font-family: var(--sans); }
 .tree-row.tree-child .tree-toggle[data-node-toggle] { cursor:pointer; }
 .tree-row.tree-child .tree-toggle.tree-leaf { opacity:0; }
 .tree-row.tree-child .tree-toggle.collapsed .icon { transform:rotate(-90deg); }
+.regex-samples { display:grid; gap:4px; }
+.regex-sample { display:flex; gap:10px; align-items:baseline; padding:5px 0; border-bottom:1px solid #f1f5f9; font-size:11px; }
+.regex-sample span { min-width:84px; color:#64748b; }
+.regex-sample code { color:#334155; font-size:10.5px; word-break:break-all; }

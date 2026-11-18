@@ -285,6 +285,7 @@ export async function renderSource(ref) {
           <div class="panel-head"><h3>文档摘要</h3></div>
           <div class="panel-body"><p class="doc-excerpt">${esc(source.excerpt || '暂无摘要')}</p></div>
         </div>
+        ${source.metadata?.regex ? `<div class="panel"><div class="panel-head"><div><h3>正则预抽取</h3><div class="small faint">在 DSH 之前由规则代码命中，DSH 会优先采用这些结构</div></div><span class="badge jade">${Number(source.metadata.regex.total ?? 0)} 个</span></div><div class="panel-body"><div class="row wrap" style="gap:6px;margin-bottom:10px">${Object.entries(source.metadata.regex.byCategory ?? {}).map(([name, count]) => `<span class="badge outline">${esc(name)} ${Number(count)}</span>`).join('')}</div><div class="regex-samples">${(source.metadata.regex.samples ?? []).slice(0, 12).map((match) => `<div class="regex-sample"><span>${esc(match.name)}</span><code>${esc(match.value)}</code></div>`).join('') || '<span class="faint small">暂无样例</span>'}</div></div></div>` : ''}
         ${log ? `<div class="panel"><div class="panel-head"><h3>处理日志</h3><span class="small faint">最近 ${Math.min(20, source.job?.log?.length ?? 0)} 条</span></div><div class="panel-body"><div class="timeline">${log}</div></div></div>` : ''}
       </div>
       <aside class="doc-detail-side">

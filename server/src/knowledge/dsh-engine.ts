@@ -195,6 +195,12 @@ function buildPrompt(source: SourceRow, extracted: ExtractResult, db: Db, classe
     `知识库本体类型：${classes.map((klass) => `${klass.key}(${klass.name})`).join('、')}`,
     `已有页面：${existing.map((page) => `${page.slug} | ${page.title} | ${page.class_key}`).join('；') || '无'}`,
     '',
+    (() => {
+      const regex = (extracted.metadata as Record<string, unknown> | undefined)?.regex as { total?: number; byCategory?: Record<string, number>; samples?: { name: string; category: string; value: string }[] } | undefined;
+      if (!regex?.samples?.length) return '正则预抽取：无';
+      return `正则预抽取（已由代码命中，必须优先采用，不要改动原值）：总计 ${regex.total ?? regex.samples.length} 个；分类 ${Object.entries(regex.byCategory ?? {}).map(([key, value]) => `${key}:${value}`).join('、')}；样例：${regex.samples.map((match) => `${match.name}=${match.value}`).join('；')}`;
+    })(),
+    '',
     `资料标题：${source.title}`,
     `资料格式：${extracted.kind}`,
     '资料正文：',

@@ -8,6 +8,7 @@ import { registerAdminRoutes } from './admin.ts';
 import { registerAgentRoutes } from './agent.ts';
 import { registerMcpRoutes } from './mcp.ts';
 import { registerEventRoutes } from './events.ts';
+import { registerRegexRoutes } from './regex.ts';
 import { registerReviewRoutes } from './review.ts';
 import { registerWecomAuthRoutes } from './wecom.ts';
 import { registerOidcRoutes } from './oidc.ts';
@@ -27,6 +28,7 @@ export function createRouter(): Router {
   registerAgentRoutes(router);
   registerMcpRoutes(router);
   registerEventRoutes(router);
+  registerRegexRoutes(router);
   registerReviewRoutes(router);
   registerWecomAuthRoutes(router);
   registerOidcRoutes(router);
