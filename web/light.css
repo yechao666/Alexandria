@@ -335,3 +335,13 @@ h1, h2, h3, h4 { color: var(--ink); font-family: var(--sans); }
 .tree-toggle.collapsed .icon { transform: rotate(-90deg); }
 .tree-toggle .icon { transition: transform .15s; color:#94a3b8; }
 .inspector-head .file-kind b { display: none; }
+/* multi-level document tree */
+.tree-tools { display:flex; gap:5px; padding:0 4px 6px; }
+.tree-tools input { flex:1; min-width:0; height:26px; border:1px solid #e2e8f0; border-radius:6px; padding:0 7px; font-size:10px; outline:none; background:#f8fafc; color:#334155; }
+.tree-tools input:focus { border-color:#bfdbfe; background:#fff; }
+.tree-tools button { width:26px; height:26px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; color:#94a3b8; display:grid; place-items:center; cursor:pointer; }
+.tree-tools button:hover { color:#2563eb; border-color:#bfdbfe; }
+.tree-row.tree-child { padding-left: calc(7px + var(--tree-depth, 1) * 14px) !important; }
+.tree-row.tree-child .tree-toggle[data-node-toggle] { cursor:pointer; }
+.tree-row.tree-child .tree-toggle.tree-leaf { opacity:0; }
+.tree-row.tree-child .tree-toggle.collapsed .icon { transform:rotate(-90deg); }

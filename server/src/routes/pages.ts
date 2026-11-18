@@ -113,8 +113,8 @@ export function registerPageRoutes(router: Router): void {
       params.push(rc.query('class'));
     }
     if (rc.query('status')) {
-      conditions.push('status = ?');
-      params.push(rc.query('status'));
+      if (rc.query('status') === 'visible') conditions.push("status <> 'archived'");
+      else { conditions.push('status = ?'); params.push(rc.query('status')); }
     }
     if (rc.query('q')) {
       conditions.push('(title LIKE ? OR summary LIKE ? OR body LIKE ?)');

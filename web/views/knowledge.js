@@ -27,10 +27,10 @@ export async function renderKnowledge(query = new URLSearchParams()) {
   if (!detail) return empty('无法读取知识库');
   const classes = detail.classes ?? [];
   const counts = await Promise.all(classes.map(async (klass) => {
-    const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/pages?class=${encodeURIComponent(klass.key)}&limit=1`).catch(() => ({ total: 0 }));
+    const data = await api(`/api/libraries/${encodeURIComponent(library.id)}/pages?class=${encodeURIComponent(klass.key)}&status=visible&limit=1`).catch(() => ({ total: 0 }));
     return { ...klass, count: Number(data.total ?? 0) };
   }));
-  const pagesData = await api(`/api/libraries/${encodeURIComponent(library.id)}/pages?limit=500`).catch(() => ({ pages: [] }));
+  const pagesData = await api(`/api/libraries/${encodeURIComponent(library.id)}/pages?status=visible&limit=500`).catch(() => ({ pages: [] }));
   const pages = (pagesData.pages ?? []).map((page) => ({
     id: page.id, title: page.title, summary: page.summary || page.tldr || '', classKey: page.classKey,
     className: page.className, classColor: page.classColor, tags: page.tags ?? [], updatedAt: page.updatedAt,

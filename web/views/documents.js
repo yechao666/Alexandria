@@ -70,6 +70,16 @@ export async function renderDocuments(query = new URLSearchParams()) {
   const libraries = state.libraries ?? [];
   const details = await Promise.all(libraries.map((library) => api(`/api/libraries/${encodeURIComponent(library.id)}`).catch(() => null)));
   const byId = new Map(libraries.map((library, index) => [library.id, details[index]]));
+  const nodeSourceTotal = (node) => (Number(node.sourceCount ?? 0) + (node.children ?? []).reduce((sum, child) => sum + nodeSourceTotal(child), 0));
+  const nodePath = new Map();
+  const walkPaths = (nodes, parent = []) => {
+    for (const node of nodes ?? []) {
+      const path = [...parent, node.id];
+      nodePath.set(node.id, path);
+      walkPaths(node.children, path);
+    }
+  };
+  for (const detail of byId.values()) walkPaths(detail.nodes ?? []);
   const departments = new Map();
   for (const library of libraries) {
     const name = library.ownerTeamName || '未绑定部门';
@@ -79,11 +89,13 @@ export async function renderDocuments(query = new URLSearchParams()) {
   const treeRows = [...departments.entries()].map(([department, items]) => `<div class="tree-dept">${esc(department)}</div>${items.map((library) => {
     const detail = byId.get(library.id);
     const nodes = detail?.nodes ?? [];
-    const renderNode = (node) => {
+    const renderNode = (node, depth = 1) => {
       const active = selectedLibrary === library.id && selectedNode === node.id;
-      return `<button class="tree-row tree-child ${active ? 'active' : ''}" data-doc-library="${esc(library.id)}" data-doc-node="${esc(node.id)}" data-name="${esc(node.name)}"><span class="tree-toggle"></span>${icon('folder', 13)}<span class="tree-name">${esc(node.name)}</span><span class="tree-count">${fmtNumber(node.sourceCount ?? 0)}</span></button>${(node.children ?? []).map((child) => renderNode(child)).join('').replaceAll('class="tree-row tree-child', 'class="tree-row tree-child tree-grandchild')}`;
+      const children = node.children ?? [];
+      const row = `<button class="tree-row tree-child ${active ? 'active' : ''}" style="--tree-depth:${Math.min(depth, 6)}" data-doc-library="${esc(library.id)}" data-doc-node="${esc(node.id)}" data-name="${esc(node.name)}"><span class="tree-toggle ${children.length ? '' : 'tree-leaf'}" ${children.length ? `data-node-toggle="${esc(node.id)}"` : ''}>${children.length ? icon('chevron', 11) : ''}</span>${icon(children.length ? 'folder' : 'file', 13)}<span class="tree-name">${esc(node.name)}</span><span class="tree-count">${fmtNumber(nodeSourceTotal(node))}</span></button>`;
+      return `${row}${children.length ? `<div class="tree-children" data-tree-children-node="${esc(node.id)}">${children.map((child) => renderNode(child, depth + 1)).join('')}</div>` : ''}`;
     };
-    return `<button class="tree-row ${selectedLibrary === library.id && !selectedNode ? 'active' : ''}" data-doc-library="${esc(library.id)}" data-name="${esc(library.name)}"><span class="tree-toggle" data-tree-toggle="${esc(library.id)}">${icon('chevron', 11)}</span>${icon('layers', 13)}<span class="tree-name">${esc(library.name)}</span><span class="tree-count">${fmtNumber(library.counts?.sources)}</span></button><div class="tree-children" data-tree-children="${esc(library.id)}">${nodes.map((node) => renderNode(node)).join('')}</div>`;
+    return `<button class="tree-row ${selectedLibrary === library.id && !selectedNode ? 'active' : ''}" data-doc-library="${esc(library.id)}" data-name="${esc(library.name)}"><span class="tree-toggle ${selectedLibrary === library.id ? '' : 'collapsed'}" data-tree-toggle="${esc(library.id)}">${icon('chevron', 11)}</span>${icon('layers', 13)}<span class="tree-name">${esc(library.name)}</span><span class="tree-count">${fmtNumber(library.counts?.sources)}</span></button><div class="tree-children" data-tree-children="${esc(library.id)}" ${selectedLibrary === library.id ? '' : 'hidden'}>${nodes.map((node) => renderNode(node)).join('')}</div>`;
   }).join('')}`).join('');
   const folderRows = `<button class="tree-row ${!selectedLibrary ? 'active' : ''}" data-doc-library="" data-doc-node="" data-name="全部文档"><span class="tree-toggle">${icon('file', 11)}</span><span class="tree-name">全部文档</span><span class="tree-count">${fmtNumber(summary.total)}</span></button>${treeRows}`;
   const current = libraries.find((library) => library.id === selectedLibrary);
@@ -93,7 +105,7 @@ export async function renderDocuments(query = new URLSearchParams()) {
     const walk = (nodes) => { for (const node of nodes ?? []) { if (node.id === selectedNode) return node.name; const found = walk(node.children); if (found) return found; } return ''; };
     return walk(detail?.nodes ?? []);
   })();
-  const cards = sources.map((source) => `<div class="file-card ${view === 'list' ? 'file-row' : ''}" data-file-id="${esc(source.id)}" data-library="${esc(source.libraryId)}" data-node="${esc(source.nodeId || '')}" data-status="${esc(source.status)}" data-search="${esc(`${source.title} ${source.filename} ${source.libraryName} ${source.departmentName}`.toLowerCase())}" tabindex="0">
+  const cards = sources.map((source) => `<div class="file-card ${view === 'list' ? 'file-row' : ''}" data-file-id="${esc(source.id)}" data-library="${esc(source.libraryId)}" data-node="${esc(source.nodeId || '')}" data-node-path="${esc((nodePath.get(source.nodeId) ?? []).join(','))}" data-status="${esc(source.status)}" data-search="${esc(`${source.title} ${source.filename} ${source.libraryName} ${source.departmentName}`.toLowerCase())}" tabindex="0">
     <span class="file-kind ${source.kind === 'image' ? 'image' : ''}">${icon(source.kind === 'image' ? 'image' : 'file', 20)}<b>${esc(kindLabel(source))}</b></span>
     <div class="file-main"><div class="file-name">${esc(source.title)}</div><div class="file-meta">${esc(source.departmentName && source.departmentName !== source.libraryName ? `${source.departmentName} · ${source.libraryName}` : (source.libraryName || source.departmentName || '未归档'))} · ${fmtNumber(source.wordCount)} 字 · ${timeAgo(source.createdAt)}</div></div>
     <div class="file-links"><b>${fmtNumber(source.compiledPages)}</b><span>知识点</span></div>
@@ -108,6 +120,7 @@ export async function renderDocuments(query = new URLSearchParams()) {
   <div class="drive-layout">
     <aside class="drive-folders">
       <div class="drive-folders-head"><span>部门 / 知识库</span><span>${sources.length}</span></div>
+      <div class="tree-tools"><input id="doc-tree-search" placeholder="筛选目录…"><button id="doc-tree-collapse" title="收起全部">${icon('layers', 12)}</button></div>
       ${folderRows}
     </aside>
     <section class="drive-main">
@@ -176,7 +189,7 @@ export function mountDocuments() {
     let visible = 0;
     cards.forEach((card) => {
       let match = !state.library || card.dataset.library === state.library;
-      if (match && state.node) match = card.dataset.node === state.node;
+      if (match && state.node) match = card.dataset.node === state.node || (card.dataset.nodePath ?? '').split(',').includes(state.node);
       if (match && state.status) match = state.status === 'processing' ? ['processing', 'queued'].includes(card.dataset.status) : card.dataset.status === state.status;
       if (match && state.q) match = (card.dataset.search ?? '').includes(state.q.toLowerCase());
       card.style.display = match ? '' : 'none';
@@ -196,6 +209,24 @@ export function mountDocuments() {
     syncUrl();
   };
   apply();
+  document.querySelector('.drive-folders .tree-row.active')?.scrollIntoView({ block: 'nearest' });
+  document.querySelectorAll('[data-node-toggle]').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const children = document.querySelector(`[data-tree-children-node="${CSS.escape(button.dataset.nodeToggle)}"]`);
+    if (!children) return;
+    children.hidden = !children.hidden;
+    button.classList.toggle('collapsed', children.hidden);
+  }));
+  document.getElementById('doc-tree-collapse')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const collapse = ![...document.querySelectorAll('[data-tree-children]')].every((el) => el.hidden);
+    document.querySelectorAll('[data-tree-children], [data-tree-children-node]').forEach((el) => { el.hidden = collapse; });
+    document.querySelectorAll('[data-tree-toggle], [data-node-toggle]').forEach((el) => el.classList.toggle('collapsed', collapse));
+  });
+  document.getElementById('doc-tree-search')?.addEventListener('input', (event) => {
+    const value = event.currentTarget.value.trim().toLowerCase();
+    document.querySelectorAll('.drive-folders .tree-row').forEach((row) => { row.style.display = !value || (row.dataset.name ?? '').toLowerCase().includes(value) ? '' : 'none'; });
+  });
   document.querySelectorAll('[data-tree-toggle]').forEach((button) => button.addEventListener('click', (event) => {
     event.stopPropagation();
     const children = document.querySelector(`[data-tree-children="${CSS.escape(button.dataset.treeToggle)}"]`);
@@ -206,6 +237,12 @@ export function mountDocuments() {
   document.querySelectorAll('[data-doc-library]').forEach((button) => button.addEventListener('click', () => {
     state.library = button.dataset.docLibrary || '';
     state.node = button.dataset.docNode || '';
+    if (state.library && !state.node) {
+      const children = document.querySelector(`[data-tree-children="${CSS.escape(state.library)}"]`);
+      const toggle = document.querySelector(`[data-tree-toggle="${CSS.escape(state.library)}"]`);
+      if (children) children.hidden = false;
+      toggle?.classList.remove('collapsed');
+    }
     apply();
   }));
   document.getElementById('doc-status')?.addEventListener('change', (event) => { state.status = event.currentTarget.value; apply(); });

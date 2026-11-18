@@ -5,6 +5,7 @@ import { newId, nowIso, parseJson, slugify, truncate } from '../lib/ids.ts';
 import { normalizeTitle } from './terms.ts';
 import { runDshSync, extractJson } from './dsh-runtime.ts';
 import { saveClaims, detectConflicts, type ExtractedClaim } from './claims.ts';
+import { canonicalEntityName, isValidEntityName } from './entities.ts';
 import { addLink, attachSource, createPage, getPage, updatePage } from './pages.ts';
 
 interface DshClaim {
@@ -231,7 +232,8 @@ export function dshCompileSource(
     })
     .slice(0, 8);
   const entities = (Array.isArray(parsed.entities) ? parsed.entities : [])
-    .filter((entity): entity is DshEntity & { name: string } => typeof entity.name === 'string' && entity.name.trim().length >= 2)
+    .map((entity) => ({ ...entity, name: typeof entity.name === 'string' ? canonicalEntityName(entity.name) : '' }))
+    .filter((entity): entity is DshEntity & { name: string } => typeof entity.name === 'string' && isValidEntityName(entity.name))
     .slice(0, 12);
   const facts = (Array.isArray(parsed.facts) ? parsed.facts : []).slice(0, 30);
   const decisions = (Array.isArray(parsed.decisions) ? parsed.decisions : [])

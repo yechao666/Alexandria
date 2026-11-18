@@ -3,6 +3,7 @@ import type { Actor, ExtractResult, PageRow, SourceRow } from '../types.ts';
 import { nowIso, parseJson, slugify, truncate } from '../lib/ids.ts';
 import { keyphrases, normalizeTitle, splitSentences } from './terms.ts';
 import { extractClaims, saveClaims, detectConflicts, type ExtractedClaim } from './claims.ts';
+import { extractRuleEntities } from './entities.ts';
 import {
   addLink,
   attachSource,
@@ -219,21 +220,6 @@ function sourcePageFor(db: Db, sourceId: string): PageRow | null {
     )
     .get(sourceId) as unknown as PageRow | undefined;
   return row ?? null;
-}
-
-function ruleEntities(text: string, title: string): { name: string; type: string; description: string }[] {
-  const found = new Map<string, { name: string; type: string; description: string }>();
-  const add = (name: string, type: string, description: string) => {
-    const clean = name.replace(/^[「『“"']|[」』”"']$/g, '').trim();
-    if (clean.length < 2 || clean.length > 36) return;
-    if (!found.has(clean)) found.set(clean, { name: clean, type, description });
-  };
-  for (const match of `${title}\n${text}`.matchAll(/([\u4e00-\u9fa5A-Za-z0-9·（）()]{2,30}(?:公司|集团|电网|能源局|发改委|电力公司|研究院|设计院|大学|交易中心|监管办|能源监管局))/g)) add(match[1], '组织', '资料中出现的组织机构');
-  for (const match of text.matchAll(/(?:GB(?:\/T)?|DL(?:\/T)?|NB(?:\/T)?|IEC|IEEE)\s?[\d.\-—]+/gi)) add(match[0].replace(/\s+/g, ' '), '标准', '资料中出现的标准编号');
-  for (const name of ['特高压', '变压器', '换流阀', '换流站', 'GIS', '风机', '光伏组件', '储能电池', '电缆', '电抗器', '断路器']) {
-    if (text.includes(name)) add(name, '设备', '资料中出现的电力设备或技术');
-  }
-  return [...found.values()].slice(0, 10);
 }
 
 function inferDate(text: string): string | undefined {
@@ -455,7 +441,7 @@ export function compileSource(db: Db, source: SourceRow, extracted: ExtractResul
 
   const entityPages: { id: string; title: string }[] = [];
   if (db.prepare("SELECT 1 FROM ontology_classes WHERE library_id = ? AND key = 'entity'").get(source.library_id)) {
-    for (const entity of ruleEntities(extracted.text, source.title)) {
+    for (const entity of extractRuleEntities(extracted.text, source.title)) {
       const existing = findExisting(db, source.library_id, entity.name);
       if (existing) {
         attachSource(db, existing.id, source.id, 'mentions', '', entity.description);
