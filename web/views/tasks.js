@@ -31,10 +31,12 @@ function taskRow(task) {
 export async function renderTasks() {
   const data = await api('/api/tasks?limit=80').catch(() => ({ tasks: [] }));
   const tasks = data.tasks ?? [];
+  const activeTask = tasks.find((task) => task.status === 'running');
   const queue = data.queue ?? { active: 0, pending: 0 };
   const counts = {
     total: tasks.length,
-    running: tasks.filter((task) => task.status === 'running' || task.status === 'queued').length,
+    active: tasks.filter((task) => task.status === 'running').length,
+    queued: tasks.filter((task) => task.status === 'queued').length,
     failed: tasks.filter((task) => task.status === 'failed').length,
     succeeded: tasks.filter((task) => task.status === 'succeeded').length,
   };
@@ -43,8 +45,8 @@ export async function renderTasks() {
     <div class="between" style="margin:8px 0 18px"><div><h1 style="font-size:28px;letter-spacing:-.02em;margin:0">处理任务</h1><div class="sub muted">资料处理被拆成可观察的步骤：解析、OCR、索引、DSH 编译。Worker 队列 ${queue.active} 执行 / ${queue.pending} 排队；失败可重试，排队任务可取消。</div></div><a class="btn btn-primary" href="#/upload">${icon('upload', 15)} 上传资料</a></div>
     <div class="grid grid-4" style="margin-bottom:16px">
       <div class="panel panel-pad"><div class="small faint">任务总数</div><div style="font-size:30px;font-weight:650">${counts.total}</div></div>
-      <div class="panel panel-pad"><div class="small faint">执行中</div><div style="font-size:30px;font-weight:650;color:var(--ochre)">${counts.running}</div></div>
-      <div class="panel panel-pad"><div class="small faint">已完成</div><div style="font-size:30px;font-weight:650;color:var(--jade)">${counts.succeeded}</div></div>
+      <div class="panel panel-pad"><div class="small faint">执行中</div><div style="font-size:30px;font-weight:650;color:var(--ochre)">${counts.active}</div>${activeTask ? `<div class="small muted" style="margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(activeTask.source_title || activeTask.source_filename || '')} · ${activeTask.progress ?? 0}%</div>` : ''}</div>
+      <div class="panel panel-pad"><div class="small faint">排队中</div><div style="font-size:30px;font-weight:650">${queue.pending ?? counts.queued}</div></div>
       <div class="panel panel-pad"><div class="small faint">失败</div><div style="font-size:30px;font-weight:650;color:var(--clay)">${counts.failed}</div></div>
     </div>
     <div class="panel"><div class="panel-head"><h3>处理任务</h3><span class="small muted">点击查看步骤与日志</span></div>

@@ -393,7 +393,11 @@ export function registerSourceRoutes(router: Router): void {
       .prepare(
         `SELECT j.*, l.name AS library_name, l.slug AS library_slug, s.title AS source_title, s.filename AS source_filename
            FROM ingest_jobs j LEFT JOIN libraries l ON l.id = j.library_id LEFT JOIN sources s ON s.id = j.source_id
-          WHERE ${conditions.join(' AND ')} ORDER BY j.created_at DESC LIMIT ?`,
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY CASE j.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,
+                   CASE WHEN j.status IN ('running','queued') THEN j.created_at END ASC,
+                   j.created_at DESC
+          LIMIT ?`,
       )
       .all(...params, limit) as unknown as Record<string, unknown>[];
     rc.json({
