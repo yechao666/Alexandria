@@ -8,7 +8,7 @@ import { audit } from '../domain/audit.ts';
 import { securityEvent, requestIp, grantRecipients } from '../domain/security.ts';
 import { notifyPerson } from '../domain/notifications.ts';
 import { errors } from '../http/respond.ts';
-import { newId, nowIso, parseJson } from '../lib/ids.ts';
+import { newId, nowIso, parseJson, sha256 } from '../lib/ids.ts';
 import { extOf } from '../extract/index.ts';
 import { ingestBuffer, reprocessSource, sourceDownloadName } from '../ingest/pipeline.ts';
 import { enqueueJob, queueSnapshot } from '../ingest/queue.ts';
@@ -292,6 +292,24 @@ export function registerSourceRoutes(router: Router): void {
     audit(rc.app.db, { actor, action: 'source.update', targetType: 'source', targetId: source.id, libraryId: library.id, detail: { title, nodeId } });
     const updated = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as SourceRow;
     rc.json({ source: sourceView(rc, updated, actor) });
+  });
+
+  router.post('/api/sources/:id/fulltext', async (rc) => {
+    const { actor, source, library, role } = sourceAccess(rc, rc.params.id!, 'editor');
+    if (source.status === 'processing' || source.status === 'queued') throw errors.conflict('该文献正在处理中');
+    const buffer = await rc.rawBody(rc.app.env.maxUploadBytes);
+    if (!buffer.length) throw errors.badRequest('全文 PDF 为空');
+    if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') throw errors.badRequest('全文必须是 PDF');
+    const target = join(dirname(source.storage_path), 'standard-fulltext.pdf');
+    writeFileSync(target, buffer);
+    rc.app.db.prepare(
+      `UPDATE sources SET filename = ?, ext = 'pdf', mime = 'application/pdf', size = ?, sha256 = ?, storage_path = ?, kind = 'pdf', status = 'ready', error = NULL, updated_at = ? WHERE id = ?`,
+    ).run('standard-fulltext.pdf', buffer.length, sha256(buffer), target, nowIso(), source.id);
+    const reprocess = rc.query('reprocess') === '1';
+    const jobId = reprocess ? reprocessSource(rc.app.db, rc.app.env, source.id, rc.query('compiler') === 'dsh' ? 'dsh' : 'rule') : null;
+    audit(rc.app.db, { actor, action: 'source.fulltext.upload', targetType: 'source', targetId: source.id, libraryId: library.id, detail: { bytes: buffer.length, reprocess } });
+    const updated = rc.app.db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id) as unknown as SourceRow;
+    rc.json({ source: sourceView(rc, updated, actor), jobId }, jobId ? 202 : 200);
   });
 
   router.post('/api/sources/:id/reprocess', (rc) => {

@@ -148,7 +148,7 @@ function bindFileInspector() {
     try {
       const data = await api(`/api/sources/${encodeURIComponent(card.dataset.fileId)}`);
       const source = data.source;
-      const pages = (source.compiledPages ?? []).filter((page, index, all) => all.findIndex((item) => item.title === page.title) === index);
+      const pages = (source.compiledPages ?? []).filter((page) => page.status !== 'archived').filter((page, index, all) => all.findIndex((item) => item.title === page.title) === index);
       const pageRows = pages.slice(0, 8).map((page) => `<a class="inspector-page" href="#/page/${encodeURIComponent(page.id)}"><span class="dot" style="background:${libraryColor(page.classColor)}"></span><span>${esc(page.title)}</span></a>`).join('');
       inspector.innerHTML = `<div class="inspector-head"><span class="file-kind">${icon(source.kind === 'image' ? 'image' : 'file', 18)}<b>${esc(kindLabel(source))}</b></span><div><b>${esc(source.title)}</b><span>${esc(source.filename)}</span></div></div>
         <div class="inspector-section"><div class="inspector-label">文件</div><dl class="inspector-kv"><dt>部门</dt><dd>${esc(source.library?.name ?? '—')}</dd><dt>目录</dt><dd>${esc(source.node?.name ?? '未分类')}</dd><dt>大小</dt><dd>${fmtBytes(source.size)}</dd><dt>上传</dt><dd>${timeAgo(source.createdAt)}</dd></dl></div>
@@ -260,7 +260,7 @@ export async function renderSource(ref) {
   if (!state.bootstrap) await loadBootstrap();
   const data = await api(`/api/sources/${encodeURIComponent(ref)}`);
   const source = data.source;
-  const pages = source.compiledPages ?? [];
+  const pages = (source.compiledPages ?? []).filter((page) => page.status !== 'archived');
   const classes = [...new Set(pages.map((page) => page.className || page.classKey || '知识页'))];
   const groups = classes.map((name) => ({ name, pages: pages.filter((page) => (page.className || page.classKey || '知识页') === name) }));
   const log = (source.job?.log ?? []).slice(-20).map((line) => `<div class="timeline-item"><span class="pip"></span><div class="text mono">${esc(line)}</div></div>`).join('');

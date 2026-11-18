@@ -83,7 +83,7 @@ pnpm typecheck     # 需要 TypeScript（当前工作区可从 aiwo/node_modules
 | **实体质量** | 已知机构/设备白名单 + 严格片段过滤；错误实体归档 |
 | **目录层级** | 部门 → 知识库 → 分类 → 子分类，任意深度可折叠 |
 | **电力行业资料** | 已导入 206 篇中国能源新闻网公开资料；含 617 个实体、15 个决策、57 个矛盾对象 |
-| **电力行业标准** | 已导入 510 条 DL/T、NB/T 标准条目与适用范围；覆盖 9 个分类 |
+| **电力行业标准** | 510 条标准条目；部分已替换为真实全文 PDF，知识页含概念/决策/实体/方法/文献 |
 | **Agent 互操作** | POST /mcp（JSON-RPC）：search/read/graph/write_page/lint；Markdown + git 导出 |
 | **分类组织** | 文档按部门/知识库/目录归档；知识页按本体类型筛选；库内目录树组织主题 |
 | **知识编译** | 本机 DSH 抽取概念、实体、事实、主张与上下位关联；生成文献页/概念页/实体页 |
@@ -284,6 +284,7 @@ cd ../alexandria && node server/src/main.ts
 - [Wiki 知识工作台](docs/WIKI_UI.md)：类型导航、双向链接、局部图谱与开发版校对策略。
 - [实体质量修复](docs/ENTITY_QUALITY.md)：坏实体过滤、机构归一与清理脚本。
 - [多级目录](docs/MULTILEVEL_TREE.md)：任意深度文档树、折叠、筛选与父级聚合。
+- [标准全文入库](docs/STANDARD_FULLTEXT.md)：真实标准 PDF 下载、替换与 OCR 重编译。
 - [单节点部署参考](docs/DEPLOY.md)：systemd、Nginx、上线检查。
 - **安全审计与导出**：登录/限流/API Key/授权/ACL 事件；安全与审计 CSV 导出。
 - [AGENTS.md](AGENTS.md)：仓库协作约定。

@@ -250,6 +250,7 @@ export function compileSource(db: Db, source: SourceRow, extracted: ExtractResul
   const candidates = collectCandidates(extracted);
   const chosen = candidates
     .filter((candidate) => candidate.score >= 3.0 && (candidate.definitions.length > 0 || candidate.points.length >= 2))
+    .filter((candidate) => !/^第\s*\d+\s*页/.test(candidate.title) && !/^(?:GB|DL|NB|JB|YD|IEC|IEEE)\s*\/?\s*T?\s*[\d.]/i.test(candidate.title))
     .slice(0, maxConcepts);
   log.push(`抽取候选概念 ${candidates.length} 个，选择 ${chosen.length} 个编译`);
 
@@ -321,6 +322,42 @@ export function compileSource(db: Db, source: SourceRow, extracted: ExtractResul
     log.push(`创建文献页《${sourcePage.title}》`);
   }
   saveClaims(db, sourcePage.id, sourceClaims, source.id);
+
+  // 标准全文：除“文献”外，生成可阅读的“实施要点”和“核心要求”，让文档视图体现方法/决策类型。
+  const standardLibrary = (db.prepare("SELECT slug FROM libraries WHERE id = ?").get(source.library_id) as unknown as { slug: string } | undefined)?.slug === 'power-standards';
+  if (standardLibrary) {
+    const clauses = splitSentences(extracted.text)
+      .map((item) => item.replace(/\s+/g, ' ').trim())
+      .filter((item) => item.length >= 18 && item.length <= 240 && /(?:应|不应|宜|不宜|必须|不得)/.test(item))
+      .slice(0, 6);
+    const scopeText = extracted.sections.find((section) => /范围|适用/.test(section.title))?.text ?? extracted.text;
+    const standardTitle = source.title.replace(/^(?:GB|DL|NB|JB|YD|IEC|IEEE)\s*\/?\s*T?\s*[\d.\-—]+\s*/, '').trim() || source.title;
+    const makePage = (classKey: 'howto' | 'decision', suffix: string, body: string, summary: string, tags: string[]) => {
+      const title = `${standardTitle} · ${suffix}`.slice(0, 120);
+      const existing = db.prepare('SELECT * FROM pages WHERE library_id = ? AND class_key = ? AND lower(title) = lower(?)').get(source.library_id, classKey, title) as unknown as PageRow | undefined;
+      let page: PageRow;
+      if (existing) {
+        page = updatePage(db, existing, { body, summary: truncate(summary, 180), confidence: Math.max(existing.confidence, 0.55), metadata: { ...parseJson<Record<string, unknown>>(existing.metadata, {}), compiledBy: 'rule', compiledFrom: source.id }, note: `规则编译吸收《${source.title}》` }, actor);
+        pagesUpdated += 1;
+      } else {
+        page = createPage(db, { libraryId: source.library_id, nodeId: source.node_id, classKey, title, slug: `${classKey === 'howto' ? 'howtos' : 'decisions'}/${slugify(title, classKey)}`, summary: truncate(summary, 180), tldr: truncate(summary, 110), body, status: 'draft', confidence: 0.55, tags, aliases: [], metadata: { compiledBy: 'rule', compiledFrom: source.id, standard: true }, createdBy: actor?.person.id ?? null }, actor);
+        pagesCreated += 1;
+      }
+      attachSource(db, page.id, source.id, 'derived-from', '标准正文', clauses[0] ?? '');
+      addLink(db, source.library_id, page.id, sourcePage.id, 'derived-from', 'frontmatter', 1.1);
+      addLink(db, source.library_id, sourcePage.id, page.id, 'mentions', 'frontmatter', 0.9);
+      saveClaims(db, page.id, (clauses.length ? clauses : [summary]).slice(0, 4).map((text) => ({ text, subject: standardTitle, predicate: classKey === 'decision' ? '要求' : '方法', object: truncate(text, 200), confidence: 0.55, section: '标准正文' })), source.id);
+      return page;
+    };
+    if (clauses.length) {
+      makePage('howto', '实施要点', `## 适用范围\n${truncate(scopeText, 700)}\n\n## 实施与检查要点\n${clauses.map((item) => `- ${item}`).join('\n')}\n\n## 来源\n- [[${sourcePage.slug}|《${source.title}》]]`, `从《${source.title}》整理的适用范围与实施检查要点。`, ['标准', '实施']);
+      makePage('decision', '核心要求', `## 核心要求\n${clauses.map((item) => `- ${item}`).join('\n')}\n\n## 依据\n标准正文中的“应/不应/宜/不宜/必须/不得”条款。\n\n## 来源\n- [[${sourcePage.slug}|《${source.title}》]]`, `《${source.title}》的核心规范性要求。`, ['标准', '要求']);
+      log.push(`标准知识：${clauses.length} 条实施/要求`);
+    } else if (scopeText.trim().length >= 20) {
+      makePage('howto', '适用范围', `## 适用范围\n${truncate(scopeText, 900)}\n\n## 来源\n- [[${sourcePage.slug}|《${source.title}》]]`, `《${source.title}》的适用范围；全文入库后可进一步抽取条款级要求。`, ['标准', '范围']);
+      log.push('标准知识：适用范围');
+    }
+  }
 
   const conceptIds: string[] = [];
   const conceptLinks: string[] = [];
